@@ -255,8 +255,10 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
                 m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
             }
         }
-        // 属于本tp的这一轮wqe segment都发完了，继续向TA要
-        if (m_psnSndNxt == m_tpPsnCnt) {
+        // 浅流水只限制仍可继续发送的活跃 segment。
+        // 当前 segment 最后一个 data packet 发出后，就尝试补一个新的 segment，
+        // 但已发完未 ACK 的 segment 仍保留在账本中供 ACK/重传使用。
+        if (currentSegment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
             ApplyNextWqeSegment();
         }
         if (!IsEmpty()) {
@@ -533,8 +535,8 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                     m_wqeSegmentVector[i]->GetTaSsn());
             }
             m_wqeSegmentVector.erase(m_wqeSegmentVector.begin() + i);
-            // 当前vector中的segment数量小于2时申请调度Segment
-            if (m_wqeSegmentVector.size() < 2) {
+            // 浅流水只按仍可继续发送的活跃 segment 计数。
+            if (GetActiveSendSegmentCount() < 2) {
                 ApplyNextWqeSegment();
             }
         } else {
@@ -820,6 +822,17 @@ void UbTransportChannel::ReTxTimeout()
 uint32_t UbTransportChannel::GetCurrentSqSize() const
 {
     return m_wqeSegmentVector.size();
+}
+
+uint32_t UbTransportChannel::GetActiveSendSegmentCount() const
+{
+    uint32_t activeCount = 0;
+    for (const Ptr<UbWqeSegment>& segment : m_wqeSegmentVector) {
+        if (segment != nullptr && !segment->IsSentCompleted()) {
+            ++activeCount;
+        }
+    }
+    return activeCount;
 }
 
 bool UbTransportChannel::IsWqeSegmentLimited() const

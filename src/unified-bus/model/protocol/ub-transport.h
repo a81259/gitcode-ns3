@@ -244,6 +244,7 @@ public:
     }
 
     uint32_t GetWqeSegmentVecSize() { return m_wqeSegmentVector.size(); }
+    uint32_t GetActiveSendSegmentCount() const;
 private:
     struct InboundTaUnitState
     {

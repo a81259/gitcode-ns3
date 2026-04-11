@@ -248,9 +248,9 @@ void UbTransaction::ScheduleWqeSegment(Ptr<UbTransportChannel> tp)
         return;
     }
 
-    // tp的wqesegment队列长度大于2，不进行调度，状态重置
-    if (tp->GetWqeSegmentVecSize() > 1) {
-        NS_LOG_DEBUG("tp wqe segment vector size > 1");
+    // 浅流水限制的是仍可继续发送的活跃 segment，避免单个 jetty 预取过深。
+    if (tp->GetActiveSendSegmentCount() > 1) {
+        NS_LOG_DEBUG("tp active send segment count > 1");
         m_tpSchedulingStatus[tpn] = false;
         return;
     }
