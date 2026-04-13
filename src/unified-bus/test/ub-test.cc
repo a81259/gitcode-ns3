@@ -38,6 +38,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <thread>
 #include <vector>
@@ -2184,6 +2185,155 @@ class UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest : public TestCase
     }
 };
 
+class UbBusyPortArrivalPrefetchesNextPacketTest : public TestCase
+{
+  public:
+    UbBusyPortArrivalPrefetchesNextPacketTest()
+        : TestCase("UnifiedBus - busy port arrival still prefetches next packet into egress queue")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        auto fixture = CreateSinglePortPfcFixture(FcType::NONE,
+                                                  1024,
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0,
+                                                  0);
+        fixture.sw->SetCongestionCtrl(CreateObject<UbCongestionControl>());
+
+        fixture.port->NotifyLinkUp();
+        fixture.port->SetSendState(SendState::BUSY);
+        NS_TEST_ASSERT_MSG_EQ(fixture.port->GetUbQueue()->IsEmpty(),
+                              true,
+                              "Fixture should start with an empty egress queue");
+
+        fixture.sw->SendPacket(Create<Packet>(128), 0, 0, 1);
+        NS_TEST_ASSERT_MSG_EQ(fixture.port->GetUbQueue()->IsEmpty(),
+                              true,
+                              "Busy ports should not dequeue immediately before allocator latency elapses");
+
+        Simulator::Stop(NanoSeconds(11));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(fixture.port->GetUbQueue()->IsEmpty(),
+                              false,
+                              "A packet arriving while the out port is busy should still be prefetched "
+                              "into the egress queue after AllocationTime elapses");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest : public TestCase
+{
+  public:
+    UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest()
+        : TestCase("UnifiedBus - packet spray evenly round-robins across equal-cost ports")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<UbRoutingProcess> routing = CreateObject<UbRoutingProcess>();
+        const std::vector<uint16_t> equalPorts = {10, 11, 12};
+        routing->AddShortestRoute(NodeIdToIp(42).Get(), equalPorts);
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = NodeIdToIp(42).Get();
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::map<uint16_t, uint32_t> counts;
+        for (uint16_t port : equalPorts)
+        {
+            counts[port] = 0;
+        }
+
+        for (uint32_t spraySalt = 1; spraySalt <= 977; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = routing->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the equal shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ((counts.count(static_cast<uint16_t>(outPort)) == 1),
+                                  true,
+                                  "Packet spray must select one of the configured equal-cost ports");
+            counts[static_cast<uint16_t>(outPort)]++;
+        }
+
+        uint32_t minCount = std::numeric_limits<uint32_t>::max();
+        uint32_t maxCount = 0;
+        for (uint16_t port : equalPorts)
+        {
+            minCount = std::min(minCount, counts[port]);
+            maxCount = std::max(maxCount, counts[port]);
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(((maxCount - minCount) <= 1),
+                              true,
+                              "Packet spray should differ by at most one packet across equal-cost ports");
+    }
+};
+
+class UbRoundRobinAllocatorSeedsDifferentInitialPhasesPerOutPortTest : public TestCase
+{
+  public:
+    UbRoundRobinAllocatorSeedsDifferentInitialPhasesPerOutPortTest()
+        : TestCase("UnifiedBus - round robin allocator seeds different initial queue phases per out port")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> node = CreateObject<Node>(0);
+        InitNode(node, UB_SWITCH, 4);
+
+        Ptr<UbSwitch> sw = node->GetObject<UbSwitch>();
+        Ptr<UbRoundRobinAllocator> allocator = DynamicCast<UbRoundRobinAllocator>(sw->GetAllocator());
+        NS_TEST_ASSERT_MSG_NE(allocator, nullptr, "Default switch allocator should be round robin");
+
+        constexpr uint32_t kPriority = 1;
+        for (uint32_t outPort = 0; outPort < 4; ++outPort)
+        {
+            for (uint32_t inPort = 0; inPort < 4; ++inPort)
+            {
+                sw->PushPacketToVoq(Create<Packet>(64), outPort, kPriority, inPort);
+            }
+        }
+
+        std::vector<uint32_t> firstInPorts;
+        for (uint32_t outPort = 0; outPort < 4; ++outPort)
+        {
+            Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(outPort));
+            Ptr<UbIngressQueue> selected = allocator->SelectNextIngressQueue(port);
+            NS_TEST_ASSERT_MSG_NE(selected, nullptr, "Symmetric non-empty VOQs should yield a selected queue");
+            firstInPorts.push_back(selected->GetInPortId());
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(firstInPorts[0], 0u, "Port 0 should keep the baseline initial phase");
+        NS_TEST_ASSERT_MSG_EQ(firstInPorts[1], 1u, "Port 1 should not start from the same ingress queue as port 0");
+        NS_TEST_ASSERT_MSG_EQ(firstInPorts[2], 2u, "Port 2 should get its own initial queue phase");
+        NS_TEST_ASSERT_MSG_EQ(firstInPorts[3], 3u, "Port 3 should get its own initial queue phase");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 /**
  * @brief Unified-bus test suite
  */
@@ -2219,6 +2369,11 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSlidingBitmapWindowAdvancesWithoutLosingOutOfOrderMarksTest(),
                 TestCase::Duration::QUICK);
     AddTestCase(new UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBusyPortArrivalPrefetchesNextPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRoundRobinAllocatorSeedsDifferentInitialPhasesPerOutPortTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest(),
                 TestCase::Duration::QUICK);
 #ifndef _WIN32
     AddTestCase(new UbDataPacketHeaderRejectsPriorityZeroTest(), TestCase::Duration::QUICK);

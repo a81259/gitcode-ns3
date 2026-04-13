@@ -8,6 +8,19 @@
 
 namespace ns3 {
 
+namespace {
+
+uint32_t
+ComputeInitialIngressPhase(uint32_t nodeId, uint32_t outPortId, size_t qSize)
+{
+    if (qSize == 0) {
+        return 0;
+    }
+    return static_cast<uint32_t>((nodeId + outPortId) % qSize);
+}
+
+} // namespace
+
 NS_OBJECT_ENSURE_REGISTERED(UbSwitchAllocator);
 NS_OBJECT_ENSURE_REGISTERED(UbDwrrAllocator);
 NS_LOG_COMPONENT_DEFINE("UbSwitchAllocator");
@@ -154,8 +167,12 @@ void UbRoundRobinAllocator::Init()
     uint32_t portsNum = node->GetNDevices();
     auto vlNum = node->GetObject<UbSwitch>()->GetVLNum();
     m_rrIdx.resize(portsNum);
+    m_rrPhaseSeeded.resize(portsNum);
     for (auto &v: m_rrIdx) {
         v.resize(vlNum, 0);
+    }
+    for (auto &v: m_rrPhaseSeeded) {
+        v.resize(vlNum, false);
     }
     m_ingressSources.resize(portsNum);
     m_isRunning.assign(portsNum, false);
@@ -209,6 +226,12 @@ Ptr<UbIngressQueue> UbRoundRobinAllocator::SelectNextIngressQueue(Ptr<UbPort> ou
     auto vlNum = node->GetObject<UbSwitch>()->GetVLNum();
     for (pi = 0 ; pi < vlNum; pi++) {
         size_t qSize = m_ingressSources[outPortId][pi].size();
+        if (qSize > 0 && !m_rrPhaseSeeded[outPortId][pi]) {
+            m_rrIdx[outPortId][pi] = ComputeInitialIngressPhase(m_nodeId, outPortId, qSize);
+            m_rrPhaseSeeded[outPortId][pi] = true;
+        } else if (qSize > 0 && m_rrIdx[outPortId][pi] >= qSize) {
+            m_rrIdx[outPortId][pi] %= qSize;
+        }
         for (idx = 0; idx < qSize; idx++) {
             auto qidx = (idx + m_rrIdx[outPortId][pi]) % qSize;
             if (!m_ingressSources[outPortId][pi][qidx]->IsEmpty() &&
@@ -253,6 +276,7 @@ void UbDwrrAllocator::Init()
     auto vlNum = node->GetObject<UbSwitch>()->GetVLNum();
 
     m_rrIdx.assign(portsNum, std::vector<uint32_t>(vlNum, 0));
+    m_rrPhaseSeeded.assign(portsNum, std::vector<bool>(vlNum, false));
     m_quantum.assign(portsNum, std::vector<uint32_t>(vlNum, 0));
     m_deficit.assign(portsNum, std::vector<uint32_t>(vlNum, 0));
     m_lastSelectedQIdx.assign(portsNum, std::vector<uint32_t>(vlNum, 0));
@@ -310,6 +334,13 @@ Ptr<UbIngressQueue> UbDwrrAllocator::SelectNextIngressQueue(Ptr<UbPort> outPort)
         if (qSize == 0) {
             m_deficit[outPortId][pi] = 0;
             continue;
+        }
+
+        if (!m_rrPhaseSeeded[outPortId][pi]) {
+            m_rrIdx[outPortId][pi] = ComputeInitialIngressPhase(m_nodeId, outPortId, qSize);
+            m_rrPhaseSeeded[outPortId][pi] = true;
+        } else if (m_rrIdx[outPortId][pi] >= qSize) {
+            m_rrIdx[outPortId][pi] %= qSize;
         }
 
         bool hasNonEmpty = false;

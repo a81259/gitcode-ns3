@@ -524,6 +524,15 @@ void UbPort::TriggerTransmit()
         return;
     } // if link is down, return
     if (IsBusy()) {
+        if (m_ubEQ->IsEmpty()) {
+            Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
+            if (ubSwitch != nullptr && ubSwitch->GetAllocator() != nullptr) {
+                // Keep allocator prefetch alive while the current packet is still sending.
+                // This lets a late-arriving next packet hide AllocationTime behind the
+                // current serialization delay instead of always bubbling after tx-complete.
+                Simulator::ScheduleNow(&UbSwitchAllocator::TriggerAllocator, ubSwitch->GetAllocator(), this);
+            }
+        }
         NS_LOG_DEBUG("[UbPort TriggerTransmit] SendState::BUSY");
         return; // Quit if channel busy
     }

@@ -270,7 +270,10 @@ int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey, const std::vector<uint16_
 
     uint64_t hash64 = 0;
     if (usePacketSpray) {
-        hash64 = CalcHash(sip, dip, sport, dport, priority);
+        // Packet spray should stay exactly even over time for each flow while still
+        // randomizing the starting port across different flows.
+        const uint64_t flowBase = CalcHash(sip, dip, 0, dport, priority);
+        hash64 = flowBase + sport;
     } else {
         // usePacketSpray == LB_MODE_PER_FLOW
         hash64 = CalcHash(sip, dip, 0, 0, priority);
