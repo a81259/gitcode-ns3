@@ -606,7 +606,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
 @media(max-width:768px){
     .skill-hero { grid-template-columns: 1fr; }
     .feat-grid { grid-template-columns: 1fr; }
-    .scene-grid { grid-template-columns: 1fr 1fr; }
+    .scene-grid { grid-template-columns: 1fr; }
     .eco-grid { grid-template-columns: 1fr; }
     .pipeline { flex-direction: column; align-items: center; }
     .pipe-arrow { transform: rotate(90deg); padding-top: 0; margin: 8px 0; }
@@ -627,8 +627,10 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
     .nums .nv { font-size: 32px; }
     .stack-split { grid-template-columns: 1fr; }
     .stack-right { padding: 24px 20px; }
+    .sd-grid { grid-template-columns: 1fr !important; }
     .ai-split { grid-template-columns: 1fr; }
     .ai-right { padding: 24px 20px; }
+    .ai-detail > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
 }
 </style>
 </head>
