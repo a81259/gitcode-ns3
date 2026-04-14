@@ -62,6 +62,7 @@ testpy-output/
 **/output/
 .openusim/
 scratch/openusim-generated/
+scratch/debug*/
 
 # Temporary and backup files
 *.tmp
@@ -72,6 +73,8 @@ scratch/openusim-generated/
 # OS specific files
 .DS_Store
 Thumbs.db
+._*
+__MACOSX/
 
 # IDE files
 .vscode/
@@ -79,3 +82,9 @@ Thumbs.db
 
 # Project-local git worktrees
 .worktrees/
+
+# Local Codex-generated docs/pages
+.codex/docs/
+
+# Local docs workspace
+docs/
