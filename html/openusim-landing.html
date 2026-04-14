@@ -686,7 +686,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
             <div class="hero-left">
                 <div class="pill"><i></i>v1.3.0 · 基于 ns-3.44</div>
                 <h1>高性能互连协议研究的<br><b>开源仿真平台</b></h1>
-                <p>基于 ns-3.44，仿真灵衢协议栈的核心能力。模块化架构让协议各层独立替换，适用于算法研究、性能对比等多类高性能互连实验场景。</p>
+                <p>基于 ns-3.44，面向灵衢协议栈建模、参数对比和实验验证的开源仿真平台。既能先跑现成 case，也能继续改拓扑、负载和策略。</p>
                 <div class="btns">
                     <a href="#start" class="btn btn-p">快速开始</a>
                     <a href="#arch" class="btn btn-o">查看协议栈架构</a>
@@ -1912,7 +1912,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
         <div style="text-align:center;margin-bottom:44px;">
             <div class="stag">完整工具链</div>
             <h2 class="sh">拓扑定义 → 流量生成 → 仿真执行 → 结果解析</h2>
-            <p class="sp" style="margin:0 auto 0;">仓库内置工具链将上述四步串成可复用的实验路径，减少手工拼接配置文件的工作。</p>
+            <p class="sp" style="margin:0 auto 0;">仓库内置工具链把这四步接起来，少手工改文件，实验也更容易复现和对比。</p>
         </div>
 
         <div class="pipeline">
@@ -1993,7 +1993,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
                 </div>
                 <div class="pipe-label">
                     <h4>解析结果</h4>
-                    <p>输出 task_statistics.csv<br>与逐端口 throughput.csv</p>
+                    <p>输出任务统计结果<br>与逐端口吞吐结果</p>
                 </div>
             </div>
         </div>
@@ -2012,7 +2012,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
             <div class="feat">
                 <div class="fi"><svg class="ico"><use href="#i-trend"/></svg></div>
                 <h3>Trace 结果解析</h3>
-                <p>原始 trace 自动收敛为任务统计和端口吞吐摘要，直接用于跨实验对比。</p>
+                <p>把原始 trace 整理成任务统计和端口吞吐摘要，方便直接做跨实验对比。</p>
             </div>
         </div>
     </div>
@@ -2035,7 +2035,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
 <span class="pr">$</span> git submodule update --init --recursive
 
 <span class="cm"># 安装 Python 工具依赖</span>
-<span class="pr">$</span> pip install -r scratch/ns-3-ub-tools/requirements.txt
+<span class="pr">$</span> python3 -m pip install --user -r scratch/ns-3-ub-tools/requirements.txt
 
 <span class="cm"># 配置并构建</span>
 <span class="pr">$</span> ./ns3 configure
@@ -2053,7 +2053,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
         </div>
         <p style="text-align:center;margin-top:24px;font-size:14px;color:var(--text-third);">
             更完整的命令说明见 <a href="https://gitcode.com/open-usim/ns-3-ub/blob/main/QUICK_START.md" style="color:var(--blue);text-decoration:none;font-weight:600;">QUICK_START.md</a>
-            · 支持 Linux 与 Windows WSL · 需要 g++≥10 / clang++≥11 · Python≥3.8 · CMake≥3.13
+            · 支持 Linux 与 Windows WSL。建议环境：g++≥10 / clang++≥11 / Python≥3.8 / CMake≥3.13
         </p>
     </div>
 </section>
@@ -2070,19 +2070,19 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
             <div class="eco">
                 <div class="ei"><svg class="ico"><use href="#i-scroll"/></svg></div>
                 <h3>灵衢基础规范</h3>
-                <p>OpenUSim 首先提供灵衢协议的开源参考实现，为协议语义和实现细节建立可验证的仿真基础。</p>
+                <p>OpenUSim 按灵衢基础规范对齐协议含义，方便把参数设置、代码行为和实验结果放在一起分析。</p>
                 <a href="https://www.unifiedbus.com/zh" target="_blank">访问官网 →</a>
             </div>
             <div class="eco">
                 <div class="ei"><svg class="ico"><use href="#i-gear"/></svg></div>
                 <h3>ns-3.44</h3>
-                <p>平台建立在成熟的离散事件仿真底座上，但真正的价值在于其上层的分层互连建模与实验工具链。</p>
+                <p>OpenUSim 运行在 ns-3.44 之上，复用其离散事件仿真能力，并在其上补齐 UB 协议栈与实验工具链。</p>
                 <a href="https://www.nsnam.org/" target="_blank">了解 ns-3 →</a>
             </div>
             <div class="eco">
                 <div class="ei"><svg class="ico"><use href="#i-rocket"/></svg></div>
                 <h3>Unison 并行仿真</h3>
-                <p>多线程并行能力让平台不仅适合做小规模机制验证，也能把研究逐步推进到更大规模的拓扑实验。</p>
+                <p>Unison 提供更大规模场景所需的并行仿真能力，适合从小规模机制验证逐步扩到更复杂拓扑。</p>
                 <a href="https://dl.acm.org/doi/10.1145/3627703.3629574" target="_blank">阅读论文 →</a>
             </div>
         </div>
@@ -2096,7 +2096,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
     <div class="w">
         <div class="stag">Agent Skills 辅助</div>
         <h2 class="sh">专为网络仿真定制的 Agent Skills</h2>
-        <p class="sp">Agent Skills 覆盖环境检查、实验规格设计、脚本生成执行到结果解读的完整流程，让 Cursor、Claude Code、Codex 等工具在这个项目里更准确地执行每一步。</p>
+        <p class="sp">Agent Skills 把仓库规则、实验入口、参数语义和结果文件接进 AI 工具，适合做环境检查、实验规划、执行辅助和结果解读。</p>
 
         <div class="ai-split">
             <!-- 左侧可点击列表 -->
@@ -2130,7 +2130,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
                 <div class="ai-detail active" data-ai-detail="0">
                     <!-- 示意图：文件检查清单 -->
                     <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:16px;padding:12px 14px;background:var(--bg-alt);border-radius:10px;">
-                        <div style="font-size:11px;font-weight:700;color:var(--text-third);letter-spacing:.5px;margin-bottom:4px;">仓库就绪检查</div>
+                        <div style="font-size:11px;font-weight:700;color:var(--text-third);letter-spacing:.5px;margin-bottom:4px;">仓库就绪检查 · 示例流程</div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span style="color:var(--teal);font-weight:700;width:14px;flex-shrink:0;">✓</span>
                             <span style="font-family:var(--mono);font-size:11.5px;color:var(--text);">./ns3 &amp; scratch/ns-3-ub-tools/</span>
@@ -2140,13 +2140,13 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
                             <span style="font-family:var(--mono);font-size:11.5px;color:var(--text-sec);">build/ &amp; cmake-cache/ — 缺失</span>
                         </div>
                         <div style="margin-top:6px;padding:7px 10px;background:var(--amber-bg);border:1px solid var(--amber);border-radius:6px;font-size:11.5px;color:var(--amber);">
-                            → 需执行 <code style="font-family:var(--mono);">./ns3 configure &amp;&amp; ./ns3 build</code>，确认执行吗？
+                            → 需先执行 <code style="font-family:var(--mono);">./ns3 configure</code>，再执行 <code style="font-family:var(--mono);">./ns3 build</code>。确认执行吗？
                         </div>
                     </div>
                     <!-- 对话 -->
                     <div class="skill-demo" style="padding:0;border:none;box-shadow:none;background:transparent;">
                         <div class="msg"><div class="av u"><svg class="ico"><use href="#i-user"/></svg></div><div class="bbl ut">我想跑一个仿真实验</div></div>
-                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">好，先检查仓库就绪情况…<br><code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">build/</code> 和 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">cmake-cache/</code> 不存在，需要先构建（需要几分钟）。是否执行 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">./ns3 configure &amp;&amp; ./ns3 build</code>？</div></div>
+                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">先检查仓库就绪情况。若 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">build/</code> 或 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">cmake-cache/</code> 不存在，需要先配置并构建，可能花几分钟。是否继续？</div></div>
                         <div class="msg"><div class="av u"><svg class="ico"><use href="#i-user"/></svg></div><div class="bbl ut">确认执行</div></div>
                         <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">构建完成，仓库就绪。你想做什么样的仿真？</div></div>
                     </div>
@@ -2198,9 +2198,9 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
                     </div>
                     <!-- 对话 -->
                     <div class="skill-demo" style="padding:0;border:none;box-shadow:none;background:transparent;">
-                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">读取 experiment-spec.md，生成拓扑 CSV。写入 network_attribute.txt：FlowControl=CBFC（规范基线），CbfcFlitsPerCell=8，CbfcInitCreditCell=6553（Spec §4 默认值），Trace 默认开启。</div></div>
+                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">读取 experiment-spec.md，生成拓扑 CSV。写入 network_attribute.txt：FlowControl=CBFC（示例基线），CbfcFlitsPerCell=8，CbfcInitCreditCell=6553。实际值应以源码和运行时查询结果为准，Trace 默认开启。</div></div>
                         <div class="msg"><div class="av u"><svg class="ico"><use href="#i-user"/></svg></div><div class="bbl ut">这些参数是你自己定的还是规范里的？</div></div>
-                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">来自代码（ub-port.cc）和 UB Base Spec 2.0 §4，有据可查。执行 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">./ns3 run</code> 中…</div></div>
+                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">来自项目当前参数基线。若需要严格确认，应回到源码和运行时参数查询结果继续核对。执行 <code style="font-size:11px;background:var(--bg-alt);padding:1px 5px;border-radius:3px;">./ns3 run</code> 中…</div></div>
                         <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">仿真完成，输出 task_statistics.csv 和 throughput.csv。</div></div>
                     </div>
                 </div>
@@ -2258,7 +2258,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
                     <!-- 对话 -->
                     <div class="skill-demo" style="padding:0;border:none;box-shadow:none;background:transparent;">
                         <div class="msg"><div class="av u"><svg class="ico"><use href="#i-user"/></svg></div><div class="bbl ut">CBFC 跑完了，P99 时延比预期高</div></div>
-                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">对比实验目标与输出：task_statistics.csv 显示 TP Channel 4 队列积压，是高 P99 来源。结合 network_attribute.txt 与基线 2nodes_pfc 对比，差异在 FlowControl 模式和 cc_alpha。建议单变量：只改 FlowControl=PFC_Fixed 重跑。</div></div>
+                        <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">先对比实验目标与输出。当前结果里，TP Channel 4 队列积压最可疑；再结合 network_attribute.txt 与基线 2nodes_pfc 对比，差异主要落在 FlowControl 模式和 cc_alpha。建议先单变量重跑：只改 FlowControl=PFC_Fixed。</div></div>
                         <div class="msg"><div class="av u"><svg class="ico"><use href="#i-user"/></svg></div><div class="bbl ut">好，调整后重新规划实验</div></div>
                         <div class="msg"><div class="av a"><svg class="ico"><use href="#i-bot"/></svg></div><div class="bbl at">记录本次发现到 experiment-spec.md，移交规格设计阶段。</div></div>
                     </div>
@@ -2266,7 +2266,7 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
 
             </div>
         </div>
-        <p style="margin-top:14px;font-size:13px;color:var(--text-third);">4 个 skill 串联成闭环流程，从环境检查到结果分析全程有据可查；规范参数对齐之后，工具的建议也更贴合实验场景。<a href="agent-skills-landing.html" style="color:var(--blue);text-decoration:none;font-weight:600;">查看 Agent Skills 专题页 →</a></p>
+        <p style="margin-top:14px;font-size:13px;color:var(--text-third);">4 个阶段把环境检查、实验执行和结果解读串起来。更多细节见 <a href="agent-skills-landing.html" style="color:var(--blue);text-decoration:none;font-weight:600;">Agent Skills 专题页 →</a></p>
     </div>
 </section>
 
@@ -2303,8 +2303,8 @@ svg.ico { display: block; fill: none; stroke: currentColor; stroke-width: 2; str
 <!-- ═══ CTA ═══ -->
 <section class="cta-section">
     <div class="w">
-        <h2 class="sh" style="margin-bottom:12px;">从这里开始你的仿真研究</h2>
-        <p class="sp" style="max-width:460px;margin:0 auto 32px;">先跑通预置场景确认环境，再按需深入协议细节或扩展至其他研究方向。</p>
+        <h2 class="sh" style="margin-bottom:12px;">先跑通，再深入协议细节</h2>
+        <p class="sp" style="max-width:460px;margin:0 auto 32px;">从默认 case 开始，先确认环境和输出，再扩到更复杂的拓扑、策略和研究问题。</p>
         <div class="btns">
             <a href="https://gitcode.com/open-usim/ns-3-ub" class="btn btn-p">获取源码</a>
             <a href="agent-skills-landing.html" class="btn btn-o">查看 Agent Skills 专题</a>
