@@ -40,6 +40,7 @@ build_lib(
 	model/ub-ldst-instance.cc
 	model/protocol/ub-congestion-control.cc
 	model/protocol/ub-caqm.cc
+	model/protocol/ub-dcqcn.cc
 	model/protocol/ub-flow-control.cc
 	model/ub-queue-manager.cc
 	model/ub-fault.cc
@@ -70,6 +71,7 @@ build_lib(
 	model/ub-ldst-instance.h
 	model/protocol/ub-congestion-control.h
 	model/protocol/ub-caqm.h
+	model/protocol/ub-dcqcn.h
 	model/protocol/ub-flow-control.h
 	model/ub-queue-manager.h
 	model/ub-tag.h

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <mutex>
 #include <tuple>
+#include <vector>
 #include "ns3/core-module.h"
 #include "ns3/singleton.h"
 #include "ns3/ub-transaction.h"
@@ -52,6 +53,8 @@ public:
 
     static std::string PrepareTraceDir(const std::string &configPath);
 
+    static void SetTracePathForTest(const std::string& tracePath);
+
     // MPI locality helpers used by config-driven builder/tests.
     static uint32_t ExtractMpiRank(uint32_t systemId);
 
@@ -80,11 +83,99 @@ public:
 
     void ClientTraceConnect(int srcNode);
 
+    static void PfcStateNotify(uint32_t nodeId,
+                               uint32_t portId,
+                               const std::string& action,
+                               uint32_t priority,
+                               uint64_t ingressBytes);
+
+    static void PfcDynamicStateNotify(uint32_t nodeId,
+                                      uint32_t portId,
+                                      uint32_t priority,
+                                      uint64_t ingressTotalBytes,
+                                      uint64_t sharedUsedBytes,
+                                      uint64_t headroomUsedBytes,
+                                      uint64_t xoffBytes,
+                                      uint64_t xonBytes,
+                                      bool pause);
+
+    static void CbfcStateNotify(uint32_t nodeId,
+                                uint32_t portId,
+                                const std::string& action,
+                                uint32_t priority,
+                                int32_t availableCredits,
+                                uint32_t nextPacketBytes);
+
+    static void CbfcCreditRestoreTraceNotify(uint32_t nodeId,
+                                             uint32_t portId,
+                                             const std::vector<uint8_t>& credits);
+
+    static void CbfcCreditLevelNotify(uint32_t nodeId,
+                                      uint32_t portId,
+                                      const std::string& reason,
+                                      uint32_t priority,
+                                      int32_t availableCredits,
+                                      int32_t deltaCredits);
+
+    static void DcqcnMarkNotify(uint32_t nodeId,
+                                uint32_t outPort,
+                                uint64_t totalQueueBytes,
+                                double markProbability);
+
+    static void DcqcnCnpNotify(uint32_t nodeId,
+                               uint32_t tpn,
+                               const std::string& action,
+                               uint8_t ecn,
+                               bool location);
+
+    static void DcqcnSenderStateNotify(uint32_t nodeId,
+                                       uint32_t tpn,
+                                       const std::string& reason,
+                                       double alpha,
+                                       uint64_t currentRateBps,
+                                       uint64_t targetRateBps,
+                                       uint64_t bytesSinceLastIncrease,
+                                       uint32_t timeRecoveryEvents,
+                                       uint32_t byteRecoveryEvents);
+
+    static bool IsTraceEnabled();
+
+    static bool IsFlowControlTraceEnabled();
+
+    static bool IsCongestionControlTraceEnabled();
+
+    static bool IsTpDebugEnabledFor(uint32_t nodeId, uint32_t tpn);
+
+    static void TpDebugStateNotify(uint32_t nodeId,
+                                   uint32_t tpn,
+                                   const std::string& reason,
+                                   uint64_t psnSndNxt,
+                                   uint64_t psnSndUna,
+                                   uint64_t inflightPackets,
+                                   uint64_t maxInflightPackets,
+                                   bool inflightLimited,
+                                   bool ccLimited,
+                                   bool sendWindowLimited,
+                                   uint32_t activeSegments,
+                                   uint32_t totalSegments,
+                                   uint32_t ackQueueLen,
+                                   uint32_t cnpQueueLen);
+
+    void StartQueueSampler();
+
     bool QueryAttributeInfo(int argc, char *argv[]);
 
     bool IsFaultEnabled() const;
 
     void InitFaultMoudle(const std::string &FaultConfigFile);
+
+    static void ResetRuntimeDropDiagnostics();
+
+    static void RecordRuntimePacketDrop(const std::string& reason);
+
+    static uint64_t GetRuntimePacketDropCount();
+
+    static std::string GetRuntimePacketDropReason();
 
 private:
     friend class ::utils::UbTraceFileConcurrencyTest;
@@ -103,6 +194,11 @@ private:
 
     inline static std::map<std::string, TraceFileState> files;  // 存储文件名和对应的文件句柄/缓冲
     inline static std::mutex files_mutex;
+    inline static std::mutex runtime_drop_mutex;
+    inline static uint64_t runtime_packet_drop_count = 0;
+    inline static std::string runtime_packet_drop_reason;
+    inline static bool queue_sampler_started = false;
+    inline static std::vector<ns3::EventId> queue_sampler_events;
 
     ns3::GlobalValue g_fault_enable =
     ns3::GlobalValue("UB_FAULT_ENABLE", "Enable the fault injection module.", ns3::BooleanValue(false), ns3::MakeBooleanChecker());
@@ -173,11 +269,59 @@ private:
                                                                   ns3::BooleanValue(false),
                                                                   ns3::MakeBooleanChecker());
 
+    ns3::GlobalValue g_flow_control_trace_enable =
+    ns3::GlobalValue("UB_FLOW_CONTROL_TRACE_ENABLE",
+                     "Enable algorithm-emitted flow-control traces such as PFC/CBFC trace files.",
+                     ns3::BooleanValue(false),
+                     ns3::MakeBooleanChecker());
+
+    ns3::GlobalValue g_congestion_control_trace_enable =
+    ns3::GlobalValue("UB_CONGESTION_CONTROL_TRACE_ENABLE",
+                     "Enable algorithm-emitted congestion-control traces such as DCQCN/CAQM trace files.",
+                     ns3::BooleanValue(false),
+                     ns3::MakeBooleanChecker());
+
     ns3::GlobalValue g_python_script_path =
     ns3::GlobalValue("UB_PYTHON_SCRIPT_PATH",
                      "Path to parse_trace.py script (REQUIRED - must be set by user)",
                      ns3::StringValue("/path/to/ns-3-ub-tools/trace_analysis/parse_trace.py"),
                      ns3::MakeStringChecker());
+
+    ns3::GlobalValue g_queue_sample_interval =
+    ns3::GlobalValue("UB_QUEUE_SAMPLE_INTERVAL_NS",
+                     "Periodic queue sampling interval in ns. 0 disables periodic queue samples.",
+                     ns3::UintegerValue(0),
+                     ns3::MakeUintegerChecker<uint32_t>());
+
+    ns3::GlobalValue g_tp_debug_enable =
+    ns3::GlobalValue("UB_TP_DEBUG_ENABLE",
+                     "Enable focused TP sender-state debug trace.",
+                     ns3::BooleanValue(false),
+                     ns3::MakeBooleanChecker());
+
+    ns3::GlobalValue g_tp_debug_node_id =
+    ns3::GlobalValue("UB_TP_DEBUG_NODE_ID",
+                     "Focused TP debug trace source node id. UINT32_MAX matches none.",
+                     ns3::UintegerValue(std::numeric_limits<uint32_t>::max()),
+                     ns3::MakeUintegerChecker<uint32_t>());
+
+    ns3::GlobalValue g_tp_debug_tpn =
+    ns3::GlobalValue("UB_TP_DEBUG_TPN",
+                     "Focused TP debug trace TP number. UINT32_MAX matches none.",
+                     ns3::UintegerValue(std::numeric_limits<uint32_t>::max()),
+                     ns3::MakeUintegerChecker<uint32_t>());
+
+    ns3::GlobalValue g_tp_debug_start_ns =
+    ns3::GlobalValue("UB_TP_DEBUG_START_NS",
+                     "Focused TP debug trace start time in ns.",
+                     ns3::UintegerValue(0),
+                     ns3::MakeUintegerChecker<uint32_t>());
+
+    ns3::GlobalValue g_tp_debug_end_ns =
+    ns3::GlobalValue("UB_TP_DEBUG_END_NS",
+                     "Focused TP debug trace end time in ns. 0 means no upper bound.",
+                     ns3::UintegerValue(0),
+                     ns3::MakeUintegerChecker<uint32_t>());
 
     static std::string Among(std::string s, std::string ts);
 
@@ -190,6 +334,9 @@ private:
     static TraceFileState& GetTraceFile(const std::string& fileName);
 
     static void FlushTraceFile(TraceFileState& fileState);
+
+    static void QueueSampleNotify(uint32_t nodeId, uint32_t portId);
+    static void QueueSampleTick(uint32_t nodeId, uint32_t portId, uint32_t intervalNs);
 
     static void TpFirstPacketSendsNotify(uint32_t nodeId, uint32_t taskId, uint32_t tpn, uint32_t dstTpn,
                                          uint32_t tpMsn, uint32_t psnSndNxt, uint32_t sPort);
@@ -232,6 +379,18 @@ private:
     static void PortTxNotify(uint32_t nodeId, uint32_t portId, uint32_t size);
 
     static void PortRxNotify(uint32_t nodeId, uint32_t portId, uint32_t size);
+
+    static void QueueVoqNotify(uint32_t nodeId, uint32_t portId, uint64_t voqBytes);
+
+    static void QueueEgressEnqueueNotify(uint32_t nodeId,
+                                         uint32_t portId,
+                                         ns3::Ptr<const ns3::Packet> packet,
+                                         uint32_t egressBytes);
+
+    static void QueueEgressDequeueNotify(uint32_t nodeId,
+                                         uint32_t portId,
+                                         ns3::Ptr<const ns3::Packet> packet,
+                                         uint32_t egressBytes);
 
     static void LdstThreadMemTaskStartsNotify(uint32_t nodeId, uint32_t memTaskId);
 

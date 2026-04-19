@@ -15,7 +15,7 @@
 #include "ns3/random-variable-stream.h"
 namespace ns3 {
 class UbCongestionExtTph;
-class UbNetworkHeader;
+class UbIpBasedNetworkHeader;
 class UbSwitch;
 class UbTransportChannel;
 
@@ -53,25 +53,31 @@ public:
     static TypeId GetTypeId(void);
 
     // 初始化
-    void TpInit(Ptr<UbTransportChannel> tp) override;
+    void OnTpAttached(Ptr<UbTransportChannel> tp) override;
 
     // 获取剩余窗口
     uint32_t GetRestCwnd() override;
+    bool IsCcLimited(uint32_t bytes) override;
 
-    // 发送端生成拥塞控制算法需要的header
-    UbNetworkHeader SenderGenNetworkHeader() override;
+    // 发送端生成拥塞控制算法需要的header字段
+    void OnSenderPrepareIpBasedNetworkHeader(UbIpBasedNetworkHeader& header) override;
 
     // 发送端发包，更新数据
-    void SenderUpdateCongestionCtrlData(uint32_t psn, uint32_t size) override;
+    void OnSenderDataPacketSent(uint32_t psn, uint32_t size) override;
 
     // 接收端接到数据包后记录数据
-    void RecverRecordPacketData(uint32_t psn, uint32_t size, UbNetworkHeader header) override;
+    void OnReceiverDataPacketReceived(uint32_t psn,
+                                      uint32_t size,
+                                      UbIpBasedNetworkHeader header) override;
 
     // 接收端生成拥塞控制算法需要的ack header
-    UbCongestionExtTph RecverGenAckCeTphHeader(uint32_t psnStart, uint32_t psnEnd) override;
+    UbCongestionExtTph OnReceiverPrepareAckCongestionHeader(uint32_t psnStart,
+                                                            uint32_t psnEnd) override;
 
-    // 发送端收到ack，调整窗口、速率等数据
-    void SenderRecvAck(uint32_t psn, UbCongestionExtTph header) override;
+    // 发送端收到拥塞通知，调整窗口、速率等数据
+    void OnSenderCongestionNotification(TpOpcode opcode,
+                                        uint32_t psn,
+                                        UbCongestionExtTph header) override;
 
 private:
     void StateReset();
@@ -120,13 +126,10 @@ public:
     UbSwitchCaqm();
     ~UbSwitchCaqm() override;
     // 初始化
-    void SwitchInit(Ptr<UbSwitch> sw) override;
-
-    // 设置每个端口的带宽
-    void SetDataRate(uint32_t portId, DataRate bps);
+    void OnSwitchAttached(Ptr<UbSwitch> sw) override;
 
     // 交换机收到包进行转发，对其进行处理
-    void SwitchForwardPacket(uint32_t inPort, uint32_t outPort, Ptr<Packet> p) override;
+    void OnSwitchPostDequeue(uint32_t inPort, uint32_t outPort, Ptr<Packet> p) override;
 
     // switch自动更新cc
     void ResetLocalCc();
@@ -140,7 +143,6 @@ private:
     std::vector<uint64_t> m_txSize ;            // 实际吞吐量
     std::vector<int64_t> m_DC;                  // Deficit Counter，赤字计数器
     std::vector<int64_t> m_creditAllocated;     // 上一次循环中分配除去的信用证
-    std::vector<DataRate> m_bps;                // port带宽
 
     uint32_t m_nodeId;                          // 绑定的switch节点号
 

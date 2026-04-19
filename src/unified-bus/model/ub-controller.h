@@ -158,6 +158,16 @@ public:
      * @brief 判断TP实例是否存在
      */
     bool IsTPExists(uint32_t tpn);
+
+    uint32_t GetActiveSenderFlowCount() const { return m_activeSenderFlowCount; }
+    void IncrementActiveSenderFlowCount() { ++m_activeSenderFlowCount; }
+    void DecrementActiveSenderFlowCount()
+    {
+        if (m_activeSenderFlowCount > 0)
+        {
+            --m_activeSenderFlowCount;
+        }
+    }
 private:
     Ptr<UbFunction> m_function; // 功能层
     Ptr<UbTransaction> m_transaction; // 事务层
@@ -177,6 +187,7 @@ private:
     std::vector<std::vector<uint8_t>> m_dstPriToTpRrIndex{}; // level_0 dst_node, level_1 priority, level_2 iteration
 
     Ptr<TpConnectionManager> m_tpnConn; // 当前节点维护的tpnConn
+    uint32_t m_activeSenderFlowCount{0};
 
 };
 

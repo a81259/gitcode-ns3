@@ -90,6 +90,9 @@ public:
                               uint32_t wireLengthBytes,
                               uint32_t progressBytes);
 
+    void EnqueueDcqcnCnp(uint8_t ecn, bool location);
+    Ptr<Packet> BuildDcqcnCnpForTest(uint8_t ecn, bool location) const;
+
     /**
      * @brief Process Transport Acknowledgment message
      * @param tpack Transport acknowledgment message to process
@@ -217,6 +220,7 @@ public:
      */
     bool IsRepeatPacket(uint64_t psn);
     std::queue<Ptr<Packet>> m_ackQ; // ack queue high pg
+    std::queue<Ptr<Packet>> m_cnpQ; // higher-priority control queue for standalone CNP
 
     virtual IngressQueueType GetIngressQueueType() override;
 
@@ -237,7 +241,7 @@ public:
 
     void UpdatePsnCnt(uint32_t num) { m_tpPsnCnt += num; }
     void PushWqeSegment(Ptr<UbWqeSegment> segment) {
-        if (m_wqeSegmentVector.empty() && m_ackQ.empty()) {
+        if (m_wqeSegmentVector.empty() && m_ackQ.empty() && m_cnpQ.empty()) {
             m_headArrivalTime = Simulator::Now();
         }
         m_wqeSegmentVector.push_back(segment);
@@ -245,6 +249,13 @@ public:
 
     uint32_t GetWqeSegmentVecSize() { return m_wqeSegmentVector.size(); }
     uint32_t GetActiveSendSegmentCount() const;
+
+    Ptr<UbCongestionControl> GetCongestionCtrlForTest() const { return m_congestionCtrl; }
+    void EnqueueAckForTest(Ptr<Packet> p) { m_ackQ.push(p); }
+    void EnqueueCnpForTest(Ptr<Packet> p) { m_cnpQ.push(p); }
+    Ptr<Packet> GetNextPacketForTest() { return GetNextPacket(); }
+    uint32_t GetPendingCnpCountForTest() const { return static_cast<uint32_t>(m_cnpQ.size()); }
+    uint32_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
 private:
     struct InboundTaUnitState
     {

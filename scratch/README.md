@@ -379,7 +379,7 @@ In `ub-quick-example`, `UbUtils::ParseTrace()` runs after the simulator. If `UB_
 - IFG: `ns3::UbPort::UbInterframeGap` (set to `0ns` to disable spacing).
 - Queue/buffer: `ns3::UbQueueManager::BufferSize` bounds ingress/egress accounting used by the switch.
 - Path choice: `UseShortestPaths` influences which outport sets are considered; `UsePacketSpray` toggles per-packet load-balance usage in headers and routing.
-- Congestion control: `UB_CC_ALGO` and `UB_CC_ENABLED` pick and enable the algorithm (CAQM classes are implemented).
+- Congestion control: `UB_CC_ALGO` and `UB_CC_ENABLED` pick and enable the algorithm. `CAQM` and RTP-only `DCQCN` are implemented.
 
 ---
 
@@ -415,6 +415,17 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
 - Congestion control
   - `global UB_CC_ALGO "CAQM"`
   - `global UB_CC_ENABLED "false"`
+  - RTP-only DCQCN defaults
+  - `global UB_CC_ALGO "DCQCN"`
+  - `default ns3::UbHostDcqcn::CnpInterval "50us"`
+  - `default ns3::UbHostDcqcn::InitialRate "50Gbps"`
+  - `default ns3::UbHostDcqcn::RateIncreaseTimer "55us"`
+  - `default ns3::UbHostDcqcn::ByteCounterThreshold "10485760"`
+  - `default ns3::UbHostDcqcn::RateAi "40Mbps"`
+  - `default ns3::UbHostDcqcn::HyperAiRate "100Mbps"`
+  - `default ns3::UbSwitchDcqcn::KminBytes "5120"`
+  - `default ns3::UbSwitchDcqcn::KmaxBytes "204800"`
+  - `default ns3::UbSwitchDcqcn::Pmax "0.01"`
 - Trace and parsing
   - `global UB_TRACE_ENABLE "true"`
   - `global UB_PARSE_TRACE_ENABLE "true"`

@@ -5,6 +5,7 @@
 #include "ns3/ub-network-address.h"
 #include "ns3/ub-caqm.h"
 #include "ns3/ub-tag.h"
+#include "ns3/ub-utils.h"
 #ifdef NS3_MPI
 #include "ns3/mpi-receiver.h"
 #endif
@@ -59,6 +60,7 @@ bool UbEgressQueue::DoEnqueue(PacketEntry packetEntry)
 
     // Check byte limit
     if (m_currentBytes + pktSize > m_maxEgressBytes) {
+        UbUtils::RecordRuntimePacketDrop("egress queue buffer full");
         NS_LOG_WARN ("Buffer full, packet dropped: " 
                      << (m_currentBytes + pktSize) << " bytes > limit " << m_maxEgressBytes 
                      << " bytes. Packet dropped (inPort=" << inPortId 
@@ -68,11 +70,17 @@ bool UbEgressQueue::DoEnqueue(PacketEntry packetEntry)
     
     m_egressQ.push(packetEntry);
     m_currentBytes += pktSize;  // 更新字节统计
+    m_traceUbEnqueue(pkt, static_cast<uint32_t>(m_currentBytes));
 
     NS_LOG_LOGIC ("[UbEgressQueue DoEnqueue] Egress Queue size: " << m_egressQ.size () 
                   << " bytes: " << m_currentBytes << " (+" << pktSize << ")");
 
     return true;
+}
+
+bool UbEgressQueue::CanEnqueue(uint32_t packetBytes) const
+{
+    return m_currentBytes + packetBytes <= m_maxEgressBytes;
 }
 
 PacketEntry UbEgressQueue::Peekqueue()
@@ -101,6 +109,7 @@ PacketEntry UbEgressQueue::DoDequeue()
     auto [inPortId, priority, pkt] = packetEntry;
     uint32_t pktSize = pkt->GetSize();
     m_currentBytes -= pktSize;  // 更新字节统计
+    m_traceUbDequeue(pkt, static_cast<uint32_t>(m_currentBytes));
 
     NS_LOG_LOGIC ("[UbEgressQueue DoDequeue] Egress Queue size: " << m_egressQ.size ()
                   << " bytes: " << m_currentBytes << " (-" << pktSize << ")");
@@ -299,6 +308,7 @@ void UbPort::CreateAndInitFc(FcType type)
             break;
         case FcType::PFC_FIXED:
         case FcType::PFC_DYNAMIC:
+        case FcType::PFC_DYNAMIC_PAPER:
             m_flowControl = CreateObject<UbPfc>();
             if (m_flowControl == nullptr) {
                 NS_FATAL_ERROR("Failed to create UbPfc object for port " << m_portId);
@@ -501,7 +511,7 @@ void UbPort::AddIpv4Header(Ptr<Packet> p, Ipv4Address sIp, Ipv4Address dIp)
 
 void UbPort::AddNetHeader(Ptr<Packet> p)
 {
-    UbNetworkHeader netHeader;
+    UbIpBasedNetworkHeader netHeader;
     p->AddHeader(netHeader);
 }
 
@@ -625,11 +635,6 @@ void UbPort::SetDataRate(DataRate bps)
 {
     NS_LOG_DEBUG("port set data rate");
     m_bps = bps;
-    Ptr<UbCongestionControl> congestionCtrl = GetNode()->GetObject<UbSwitch>()->GetCongestionCtrl();
-    if (congestionCtrl->GetCongestionAlgo() == CAQM) {
-        Ptr<UbSwitchCaqm> caqmSw = DynamicCast<UbSwitchCaqm>(congestionCtrl);
-        caqmSw->SetDataRate(m_portId, bps);
-    }
 }
 
 void UbPort::IncreaseRcvQueueSize(Ptr<Packet> p, Ptr<UbPort> port)

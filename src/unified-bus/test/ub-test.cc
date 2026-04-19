@@ -18,6 +18,8 @@
 #include "ns3/ub-utils.h"
 #include "ns3/ub-controller.h"
 #include "ns3/ub-congestion-control.h"
+#include "ns3/data-rate.h"
+#include "ns3/ub-dcqcn.h"
 #include "ns3/ub-flow-control.h"
 #include "ns3/ub-function.h"
 #include "ns3/ub-link.h"
@@ -107,7 +109,7 @@ InitNode(Ptr<Node> node, UbNodeType_t nodeType, uint32_t portCount)
 
     sw->Init();
     Ptr<UbCongestionControl> congestionCtrl = UbCongestionControl::Create(UB_SWITCH);
-    congestionCtrl->SwitchInit(sw);
+    congestionCtrl->OnSwitchAttached(sw);
 }
 
 void
@@ -285,6 +287,980 @@ void UbFunctionalityTest::DoRun()
     
     NS_LOG_INFO("All basic tests completed successfully");
 }
+
+class UbDcqcnFactoryCreatesHostAndSwitchTest : public TestCase
+{
+public:
+    UbDcqcnFactoryCreatesHostAndSwitchTest()
+        : TestCase("UnifiedBus - DCQCN factory creates host and switch implementations")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        Ptr<UbCongestionControl> host = UbCongestionControl::Create(UB_DEVICE);
+        Ptr<UbCongestionControl> sw = UbCongestionControl::Create(UB_SWITCH);
+
+        NS_TEST_ASSERT_MSG_NE(host, nullptr, "Host DCQCN factory should return an object");
+        NS_TEST_ASSERT_MSG_NE(sw, nullptr, "Switch DCQCN factory should return an object");
+        NS_TEST_ASSERT_MSG_EQ(host->GetCongestionAlgo(),
+                              DCQCN,
+                              "Host object should report DCQCN");
+        NS_TEST_ASSERT_MSG_EQ(sw->GetCongestionAlgo(),
+                              DCQCN,
+                              "Switch object should report DCQCN");
+    }
+};
+
+class UbDcqcnHostAckCeTphDefaultTest : public TestCase
+{
+public:
+    UbDcqcnHostAckCeTphDefaultTest()
+        : TestCase("UnifiedBus - DCQCN host default ACK CETPH generation does not throw")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        Ptr<UbCongestionControl> host = UbCongestionControl::Create(UB_DEVICE);
+        NS_TEST_ASSERT_MSG_NE(host, nullptr, "Host DCQCN factory should return an object");
+
+        bool exceptionThrown = false;
+        UbCongestionExtTph cetph;
+        try
+        {
+            cetph = host->OnReceiverPrepareAckCongestionHeader(10, 12);
+        }
+        catch (const std::runtime_error&)
+        {
+            exceptionThrown = true;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(exceptionThrown,
+                              false,
+                              "DCQCN host should not throw when generating a default ACK CETPH");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetAckSequence(), 0u, "Default ACK sequence should be zero");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetC(), 0u, "Default C field should be zero");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetI(), false, "Default I field should be false");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetHint(), 0u, "Default hint should be zero");
+    }
+};
+
+class UbCongestionControlDisabledFactoryStillReturnsObjectTest : public TestCase
+{
+public:
+    UbCongestionControlDisabledFactoryStillReturnsObjectTest()
+        : TestCase("UnifiedBus - disabled congestion control factory still returns usable objects")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        Ptr<UbCongestionControl> host = UbCongestionControl::Create(UB_DEVICE);
+        Ptr<UbCongestionControl> sw = UbCongestionControl::Create(UB_SWITCH);
+
+        NS_TEST_ASSERT_MSG_NE(host, nullptr, "Disabled host congestion control should still return an object");
+        NS_TEST_ASSERT_MSG_NE(sw, nullptr, "Disabled switch congestion control should still return an object");
+        NS_TEST_ASSERT_MSG_EQ(static_cast<uint32_t>(host->GetAckOpcode()),
+                              static_cast<uint32_t>(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH),
+                              "Disabled congestion control should use ACK without CETPH");
+        NS_TEST_ASSERT_MSG_EQ(host->IsCcLimited(4096),
+                              false,
+                              "Disabled congestion control should never block transport progress");
+
+        bool exceptionThrown = false;
+        UbCongestionExtTph cetph;
+        try
+        {
+            cetph = host->OnReceiverPrepareAckCongestionHeader(1, 2);
+        }
+        catch (const std::runtime_error&)
+        {
+            exceptionThrown = true;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(exceptionThrown,
+                              false,
+                              "Disabled congestion control should still provide a no-op ACK congestion header");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetAckSequence(), 0u, "No-op ACK sequence should stay zero");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetC(), 0u, "No-op ACK C field should stay zero");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetI(), false, "No-op ACK I field should stay zero");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetHint(), 0u, "No-op ACK hint should stay zero");
+    }
+};
+
+class UbSwitchAttachDisabledCongestionControlTest : public TestCase
+{
+public:
+    UbSwitchAttachDisabledCongestionControlTest()
+        : TestCase("UnifiedBus - disabled switch congestion control still attaches uniformly")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        node->AddDevice(CreateObject<UbPort>());
+        sw->Init();
+
+        Ptr<UbCongestionControl> congestionCtrl = UbCongestionControl::Create(UB_SWITCH);
+        NS_TEST_ASSERT_MSG_NE(congestionCtrl,
+                              nullptr,
+                              "Disabled switch congestion control factory should still return an object");
+
+        congestionCtrl->OnSwitchAttached(sw);
+
+        NS_TEST_ASSERT_MSG_EQ(sw->GetCongestionCtrl(),
+                              congestionCtrl,
+                              "Switch should always keep a congestion-control object after attach");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSwitchAttachEnabledCongestionControlTest : public TestCase
+{
+public:
+    UbSwitchAttachEnabledCongestionControlTest()
+        : TestCase("UnifiedBus - enabled switch congestion control attaches via shared base semantics")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        node->AddDevice(CreateObject<UbPort>());
+        sw->Init();
+
+        Ptr<UbCongestionControl> congestionCtrl = UbCongestionControl::Create(UB_SWITCH);
+        NS_TEST_ASSERT_MSG_NE(congestionCtrl,
+                              nullptr,
+                              "Enabled switch congestion control factory should return an object");
+
+        congestionCtrl->OnSwitchAttached(sw);
+
+        NS_TEST_ASSERT_MSG_EQ(sw->GetCongestionCtrl(),
+                              congestionCtrl,
+                              "Shared base attach semantics should bind the switch to the concrete congestion-control object");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnCnpRawRoundTripTest : public TestCase
+{
+public:
+    UbDcqcnCnpRawRoundTripTest()
+        : TestCase("UnifiedBus - DCQCN CNP raw packing round-trips ECN and location")
+    {
+    }
+
+    void DoRun() override
+    {
+        const uint32_t packedRaw = PackDcqcnCnpRaw(0x3, true);
+        const uint32_t expectedRaw = 0xE0000000u;
+
+        NS_TEST_ASSERT_MSG_EQ(packedRaw,
+                              expectedRaw,
+                              "DCQCN CNP raw encoding should place ECN in bits 31:30 and location in bit 29");
+
+        UbCongestionExtTph cetphOut;
+        cetphOut.SetAckSequence(0x12345678);
+        cetphOut.SetRawBytes4to7(packedRaw);
+
+        Ptr<Packet> packet = Create<Packet>();
+        packet->AddHeader(cetphOut);
+
+        UbCongestionExtTph cetphIn;
+        packet->RemoveHeader(cetphIn);
+
+        NS_TEST_ASSERT_MSG_EQ(cetphIn.GetAckSequence(),
+                              0x12345678u,
+                              "Serialization should preserve the common ACK sequence field");
+        NS_TEST_ASSERT_MSG_EQ(cetphIn.GetRawBytes4to7(),
+                              expectedRaw,
+                              "Serialization should preserve the DCQCN CNP raw high-bit layout");
+        const UbDcqcnCnpFields fields = UnpackDcqcnCnpRaw(cetphIn.GetRawBytes4to7());
+        NS_TEST_ASSERT_MSG_EQ(fields.ecn, 0x3u, "ECN bits should survive raw packing");
+        NS_TEST_ASSERT_MSG_EQ(fields.location, true, "Location bit should survive raw packing");
+    }
+};
+
+class UbDcqcnSwitchMarksFecnTest : public TestCase
+{
+public:
+    UbDcqcnSwitchMarksFecnTest()
+        : TestCase("UnifiedBus - DCQCN switch marks FECN when packet enters congested outport backlog")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(1024));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(2048));
+        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(1.0));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbSwitch> sw = topo.switch0->GetObject<UbSwitch>();
+        Ptr<Packet> packet = Create<Packet>(4096);
+        UbIpBasedNetworkHeader nth;
+        nth.SetMode(0);
+        nth.SetC(0);
+        nth.SetI(0);
+        nth.SetHint(0);
+        packet->AddHeader(nth);
+
+        UbDatalinkPacketHeader dl;
+        dl.SetConfig(static_cast<uint8_t>(UbDatalinkHeaderConfig::PACKET_IPV4));
+        dl.SetPacketVL(1);
+        packet->AddHeader(dl);
+
+        sw->SendPacket(packet,
+                       topo.switch0DevicePort->GetIfIndex(),
+                       topo.switch0CorePort->GetIfIndex(),
+                       1);
+
+        packet->RemoveHeader(dl);
+        packet->RemoveHeader(nth);
+        NS_TEST_ASSERT_MSG_EQ(nth.GetMode(), 0b100, "DCQCN should switch NTH to FECN mode");
+        NS_TEST_ASSERT_MSG_NE(nth.GetFecn(),
+                              0u,
+                              "DCQCN should mark packet as soon as it enters congested outport backlog");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnReceiverSuppressesBurstCnpTest : public TestCase
+{
+public:
+    UbDcqcnReceiverSuppressesBurstCnpTest()
+        : TestCase("UnifiedBus - DCQCN receiver emits at most one CNP per suppression window")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::CnpInterval", TimeValue(MicroSeconds(50)));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> rxTp =
+            topo.receiver->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionReceiverTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(rxTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Receiver TP should bind a host DCQCN instance");
+
+        UbIpBasedNetworkHeader marked;
+        marked.SetMode(0b100);
+        marked.SetFecn(0x1);
+        marked.SetLocation(false);
+
+        cc->OnReceiverDataPacketReceived(1, 256, marked);
+        cc->OnReceiverDataPacketReceived(2, 256, marked);
+
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingCnpCountForTest(),
+                              1u,
+                              "Receiver should queue only one immediate CNP inside suppression window");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnControlPriorityPrefersCnpTest : public TestCase
+{
+public:
+    UbDcqcnControlPriorityPrefersCnpTest()
+        : TestCase("UnifiedBus - transport dequeues CNP before ACK")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> tp =
+            topo.receiver->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionReceiverTpn);
+
+        Ptr<Packet> ackPacket = Create<Packet>(0);
+        UbTransportHeader ackHeader;
+        ackHeader.SetTPOpcode(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH);
+        ackPacket->AddHeader(ackHeader);
+        tp->EnqueueAckForTest(ackPacket);
+
+        Ptr<Packet> cnpPacket = Create<Packet>(0);
+        UbTransportHeader cnpHeader;
+        cnpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_CNP);
+        cnpPacket->AddHeader(cnpHeader);
+        tp->EnqueueCnpForTest(cnpPacket);
+
+        Ptr<Packet> first = tp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(first, nullptr, "Transport should return queued control work");
+
+        UbTransportHeader tph;
+        first->RemoveHeader(tph);
+        NS_TEST_ASSERT_MSG_EQ(tph.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP),
+                              "CNP should be sent before ACK");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnSenderCutsRateOnCnpTest : public TestCase
+{
+public:
+    UbDcqcnSenderCutsRateOnCnpTest()
+        : TestCase("UnifiedBus - DCQCN sender cuts rate and blocks send after CNP")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        UbCongestionExtTph cnp;
+        cnp.SetAckSequence(0);
+        cnp.SetRawBytes4to7(PackDcqcnCnpRaw(0x1, false));
+
+        NS_TEST_ASSERT_MSG_EQ(cc->IsCcLimited(256), false, "Fresh sender should not be blocked");
+        cc->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP, 0, cnp);
+        cc->OnSenderDataPacketSent(1, 4096);
+        NS_TEST_ASSERT_MSG_EQ(cc->IsCcLimited(4096),
+                              true,
+                              "Sender should become pacing-limited immediately after a CNP cut");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnCnpDoesNotAdvanceAckStateTest : public TestCase
+{
+public:
+    UbDcqcnCnpDoesNotAdvanceAckStateTest()
+        : TestCase("UnifiedBus - DCQCN CNP does not advance reliable ACK state")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        uint32_t before = txTp->GetPsnSndUnaForTest();
+
+        Ptr<Packet> cnpPacket = txTp->BuildDcqcnCnpForTest(0x1, false);
+        txTp->RecvTpAck(cnpPacket);
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              before,
+                              "CNP must not advance ACK tracking");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnRecoveryTimerIncreasesRateTest : public TestCase
+{
+public:
+    UbDcqcnRecoveryTimerIncreasesRateTest()
+        : TestCase("UnifiedBus - DCQCN recovery timer raises sender rate after CNP cut")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::RateIncreaseTimer", TimeValue(MicroSeconds(55)));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        const uint64_t before = cc->GetCurrentRateForTest().GetBitRate();
+        cc->ApplySyntheticCnpForTest();
+
+        Simulator::Schedule(MicroSeconds(60), [this, cc, before]() {
+            NS_TEST_ASSERT_MSG_GT(cc->GetCurrentRateForTest().GetBitRate(),
+                                  before / 2,
+                                  "Recovery timer should begin increasing sender rate");
+        });
+
+        Simulator::Stop(MicroSeconds(61));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnByteCounterIncreasesRateBeforeTimerTest : public TestCase
+{
+public:
+    UbDcqcnByteCounterIncreasesRateBeforeTimerTest()
+        : TestCase("UnifiedBus - DCQCN byte counter increases rate before timer expiry")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::RateIncreaseTimer", TimeValue(MilliSeconds(1)));
+        Config::SetDefault("ns3::UbHostDcqcn::ByteCounterThreshold", UintegerValue(1024));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        cc->ApplySyntheticCnpForTest();
+        const uint64_t cutRate = cc->GetCurrentRateForTest().GetBitRate();
+        cc->OnSenderDataPacketSent(1, 2048);
+
+        Simulator::Schedule(MicroSeconds(5), [this, cc, cutRate]() {
+            NS_TEST_ASSERT_MSG_GT(cc->GetCurrentRateForTest().GetBitRate(),
+                                  cutRate,
+                                  "Byte counter should increase rate before timer expiry");
+        });
+
+        Simulator::Stop(MicroSeconds(6));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnHyperIncreaseUsesHaiRateTest : public TestCase
+{
+public:
+    UbDcqcnHyperIncreaseUsesHaiRateTest()
+        : TestCase("UnifiedBus - DCQCN hyper increase uses the configured HAI step")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("1000Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("250Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::RateIncreaseTimer", TimeValue(MicroSeconds(1)));
+        Config::SetDefault("ns3::UbHostDcqcn::ByteCounterThreshold", UintegerValue(1));
+        Config::SetDefault("ns3::UbHostDcqcn::RateAi", DataRateValue(DataRate("1Mbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::HyperAiRate", DataRateValue(DataRate("100Mbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::FastRecoveryLimit", UintegerValue(2));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbController> senderCtrl = topo.sender->GetObject<UbController>();
+        Ptr<UbController> receiverCtrl = topo.receiver->GetObject<UbController>();
+        Ptr<UbTransportChannel> firstTp = senderCtrl->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> firstCc = DynamicCast<UbHostDcqcn>(firstTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(firstCc, nullptr, "First sender TP should bind host DCQCN");
+        (void)firstCc->IsCcLimited(1);
+
+        Ptr<UbCongestionControl> senderCc2 = UbCongestionControl::Create(UB_DEVICE);
+        senderCtrl->CreateTp(topo.sender->GetId(),
+                             topo.receiver->GetId(),
+                             topo.senderPort->GetIfIndex(),
+                             topo.receiverPort->GetIfIndex(),
+                             kUrmaWriteRegressionPriority,
+                             303,
+                             404,
+                             senderCc2);
+        Ptr<UbCongestionControl> receiverCc2 = UbCongestionControl::Create(UB_DEVICE);
+        receiverCtrl->CreateTp(topo.receiver->GetId(),
+                               topo.sender->GetId(),
+                               topo.receiverPort->GetIfIndex(),
+                               topo.senderPort->GetIfIndex(),
+                               kUrmaWriteRegressionPriority,
+                               404,
+                               303,
+                               receiverCc2);
+
+        Ptr<UbTransportChannel> txTp = senderCtrl->GetTpByTpn(303);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+        (void)cc->IsCcLimited(1);
+
+        DataRate beforeHyper;
+        cc->ApplySyntheticCnpForTest();
+        cc->OnSenderDataPacketSent(1, 1);
+        Simulator::Schedule(MicroSeconds(2), [cc]() { cc->OnSenderDataPacketSent(2, 1); });
+        Simulator::Schedule(MicroSeconds(3), [&beforeHyper, cc]() {
+            beforeHyper = cc->GetTargetRateForTest();
+        });
+        Simulator::Schedule(MicroSeconds(4), [cc]() { cc->OnSenderDataPacketSent(3, 1); });
+        Simulator::Schedule(MicroSeconds(6), [this, cc, &beforeHyper]() {
+            NS_TEST_ASSERT_MSG_GT(cc->GetTargetRateForTest().GetBitRate() - beforeHyper.GetBitRate(),
+                                  DataRate("50Mbps").GetBitRate(),
+                                  "Hyper increase should use a larger HAI step than additive increase");
+        });
+
+        Simulator::Stop(MicroSeconds(7));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnRateNeverExceedsLineRateTest : public TestCase
+{
+public:
+    UbDcqcnRateNeverExceedsLineRateTest()
+        : TestCase("UnifiedBus - DCQCN sender rate never exceeds configured line rate")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::RateIncreaseTimer", TimeValue(MicroSeconds(1)));
+        Config::SetDefault("ns3::UbHostDcqcn::ByteCounterThreshold", UintegerValue(1));
+        Config::SetDefault("ns3::UbHostDcqcn::RateAi", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::HyperAiRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::FastRecoveryLimit", UintegerValue(1));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        cc->ApplySyntheticCnpForTest();
+        for (uint32_t index = 0; index < 8; ++index)
+        {
+            Simulator::Schedule(MicroSeconds(index + 1),
+                                [cc, index]() { cc->OnSenderDataPacketSent(index + 1, 1); });
+        }
+
+        Simulator::Schedule(MicroSeconds(12), [this, cc]() {
+            NS_TEST_ASSERT_MSG_LT_OR_EQ(cc->GetCurrentRateForTest().GetBitRate(),
+                                        DataRate("100Gbps").GetBitRate(),
+                                        "Recovery logic must clamp sender rate to line rate");
+        });
+
+        Simulator::Stop(MicroSeconds(13));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnBusyHostStartsSecondFlowAtInitialRateTest : public TestCase
+{
+public:
+    UbDcqcnBusyHostStartsSecondFlowAtInitialRateTest()
+        : TestCase("UnifiedBus - DCQCN busy host starts second flow below line rate")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("25Gbps")));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbController> senderCtrl = topo.sender->GetObject<UbController>();
+        Ptr<UbController> receiverCtrl = topo.receiver->GetObject<UbController>();
+        Ptr<UbTransportChannel> firstTp = senderCtrl->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> firstCc = DynamicCast<UbHostDcqcn>(firstTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(firstCc, nullptr, "First sender TP should bind host DCQCN");
+
+        (void)firstCc->IsCcLimited(1);
+
+        Ptr<UbCongestionControl> senderCc2 = UbCongestionControl::Create(UB_DEVICE);
+        senderCtrl->CreateTp(topo.sender->GetId(),
+                             topo.receiver->GetId(),
+                             topo.senderPort->GetIfIndex(),
+                             topo.receiverPort->GetIfIndex(),
+                             kUrmaWriteRegressionPriority,
+                             303,
+                             404,
+                             senderCc2);
+
+        Ptr<UbCongestionControl> receiverCc2 = UbCongestionControl::Create(UB_DEVICE);
+        receiverCtrl->CreateTp(topo.receiver->GetId(),
+                               topo.sender->GetId(),
+                               topo.receiverPort->GetIfIndex(),
+                               topo.senderPort->GetIfIndex(),
+                               kUrmaWriteRegressionPriority,
+                               404,
+                               303,
+                               receiverCc2);
+
+        Ptr<UbTransportChannel> secondTp = senderCtrl->GetTpByTpn(303);
+        Ptr<UbHostDcqcn> secondCc = DynamicCast<UbHostDcqcn>(secondTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(secondCc, nullptr, "Second sender TP should bind host DCQCN");
+
+        (void)secondCc->IsCcLimited(1);
+
+        NS_TEST_ASSERT_MSG_EQ(firstCc->GetCurrentRateForTest().GetBitRate(),
+                              DataRate("100Gbps").GetBitRate(),
+                              "First active flow should start at line rate");
+        NS_TEST_ASSERT_MSG_EQ(secondCc->GetCurrentRateForTest().GetBitRate(),
+                              DataRate("25Gbps").GetBitRate(),
+                              "Busy-host second flow should start at configured initial rate");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnPacingWakeupResumesQueuedSendTest : public TestCase
+{
+public:
+    UbDcqcnPacingWakeupResumesQueuedSendTest()
+        : TestCase("UnifiedBus - DCQCN pacing wakeup resumes queued sends without external events")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("100Gbps")));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbController> senderCtrl = topo.sender->GetObject<UbController>();
+        Ptr<UbFunction> senderFunction = senderCtrl->GetUbFunction();
+        Ptr<UbTransaction> senderTransaction = senderCtrl->GetUbTransaction();
+        senderFunction->CreateJetty(topo.sender->GetId(),
+                                    topo.receiver->GetId(),
+                                    kUrmaWriteRegressionJettyNum);
+        const std::vector<uint32_t> tpns = {kUrmaWriteRegressionSenderTpn};
+        const bool bindOk = senderTransaction->JettyBindTp(topo.sender->GetId(),
+                                                           topo.receiver->GetId(),
+                                                           kUrmaWriteRegressionJettyNum,
+                                                           false,
+                                                           tpns);
+        NS_TEST_ASSERT_MSG_EQ(bindOk, true, "Sender Jetty should bind to static TP pair");
+
+        Ptr<UbTransportChannel> senderTp = senderCtrl->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(senderTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+        Ptr<UbJetty> jetty = senderFunction->GetJetty(kUrmaWriteRegressionJettyNum);
+        NS_TEST_ASSERT_MSG_NE(jetty, nullptr, "Sender Jetty should exist");
+        jetty->SetClientCallback(MakeCallback(&UbDcqcnPacingWakeupResumesQueuedSendTest::OnTaskCompleted,
+                                              this));
+
+        Ptr<UbWqe> wqe = senderFunction->CreateWqe(topo.sender->GetId(),
+                                                   topo.receiver->GetId(),
+                                                   64 * 1024,
+                                                   kUrmaWriteRegressionTaskId,
+                                                   TaOpcode::TA_OPCODE_WRITE);
+        Simulator::ScheduleNow(&UbFunction::PushWqeToJetty,
+                               senderFunction,
+                               wqe,
+                               kUrmaWriteRegressionJettyNum);
+
+        Simulator::Schedule(MicroSeconds(2), [cc]() { cc->ApplySyntheticCnpForTest(); });
+
+        uint64_t txBytesAtCut = 0;
+        Simulator::Schedule(MicroSeconds(3), [&txBytesAtCut, &topo]() {
+            txBytesAtCut = topo.senderPort->GetTxBytes();
+        });
+
+        Simulator::Schedule(MicroSeconds(80), [this, &topo, &txBytesAtCut]() {
+            NS_TEST_ASSERT_MSG_GT(topo.senderPort->GetTxBytes(),
+                                  txBytesAtCut,
+                                  "Pacing wakeup should resume sending after a DCQCN cut even without ACK/CNP/PFC follow-up events");
+        });
+
+        Simulator::Stop(MicroSeconds(81));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+
+private:
+    void OnTaskCompleted(uint32_t, uint32_t) {}
+};
+
+class UbDcqcnCnpCutRescalesOutstandingPacingDebtTest : public TestCase
+{
+public:
+    UbDcqcnCnpCutRescalesOutstandingPacingDebtTest()
+        : TestCase("UnifiedBus - DCQCN CNP rescales outstanding pacing debt to the reduced rate")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("100Gbps")));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        (void)cc->IsCcLimited(1);
+        cc->OnSenderDataPacketSent(1, 4096);
+
+        Simulator::Schedule(NanoSeconds(100), [cc]() { cc->ApplySyntheticCnpForTest(); });
+        Simulator::Schedule(NanoSeconds(400), [this, cc]() {
+            NS_TEST_ASSERT_MSG_EQ(cc->IsCcLimited(4096),
+                                  true,
+                                  "CNP cut should stretch outstanding pacing debt to the reduced rate");
+        });
+        Simulator::Schedule(NanoSeconds(600), [this, cc]() {
+            NS_TEST_ASSERT_MSG_EQ(cc->IsCcLimited(4096),
+                                  false,
+                                  "Sender should become sendable again after the rescaled pacing deadline");
+        });
+
+        Simulator::Stop(NanoSeconds(601));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnCompletedFlowReleasesHostActiveSlotTest : public TestCase
+{
+public:
+    UbDcqcnCompletedFlowReleasesHostActiveSlotTest()
+        : TestCase("UnifiedBus - completed DCQCN flow releases host active-flow slot")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("25Gbps")));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbController> senderCtrl = topo.sender->GetObject<UbController>();
+        Ptr<UbController> receiverCtrl = topo.receiver->GetObject<UbController>();
+        Ptr<UbFunction> senderFunction = senderCtrl->GetUbFunction();
+        Ptr<UbTransaction> senderTransaction = senderCtrl->GetUbTransaction();
+        senderFunction->CreateJetty(topo.sender->GetId(),
+                                    topo.receiver->GetId(),
+                                    kUrmaWriteRegressionJettyNum);
+        const std::vector<uint32_t> tpns = {kUrmaWriteRegressionSenderTpn};
+        const bool bindOk = senderTransaction->JettyBindTp(topo.sender->GetId(),
+                                                           topo.receiver->GetId(),
+                                                           kUrmaWriteRegressionJettyNum,
+                                                           false,
+                                                           tpns);
+        NS_TEST_ASSERT_MSG_EQ(bindOk, true, "Sender Jetty should bind to static TP pair");
+
+        Ptr<UbJetty> jetty = senderFunction->GetJetty(kUrmaWriteRegressionJettyNum);
+        NS_TEST_ASSERT_MSG_NE(jetty, nullptr, "Sender Jetty should exist");
+        jetty->SetClientCallback(MakeCallback(&UbDcqcnCompletedFlowReleasesHostActiveSlotTest::OnTaskCompleted,
+                                              this));
+
+        Ptr<UbWqe> wqe = senderFunction->CreateWqe(topo.sender->GetId(),
+                                                   topo.receiver->GetId(),
+                                                   4 * 1024,
+                                                   kUrmaWriteRegressionTaskId,
+                                                   TaOpcode::TA_OPCODE_WRITE);
+        Simulator::ScheduleNow(&UbFunction::PushWqeToJetty,
+                               senderFunction,
+                               wqe,
+                               kUrmaWriteRegressionJettyNum);
+
+        Simulator::Stop(MicroSeconds(200));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(m_taskCompleted,
+                              true,
+                              "Baseline write should complete before checking host active-flow accounting");
+        NS_TEST_ASSERT_MSG_EQ(senderCtrl->GetActiveSenderFlowCount(),
+                              0u,
+                              "Completed flow should release the host active-flow slot");
+
+        Ptr<UbCongestionControl> senderCc2 = UbCongestionControl::Create(UB_DEVICE);
+        senderCtrl->CreateTp(topo.sender->GetId(),
+                             topo.receiver->GetId(),
+                             topo.senderPort->GetIfIndex(),
+                             topo.receiverPort->GetIfIndex(),
+                             kUrmaWriteRegressionPriority,
+                             303,
+                             404,
+                             senderCc2);
+        Ptr<UbCongestionControl> receiverCc2 = UbCongestionControl::Create(UB_DEVICE);
+        receiverCtrl->CreateTp(topo.receiver->GetId(),
+                               topo.sender->GetId(),
+                               topo.receiverPort->GetIfIndex(),
+                               topo.senderPort->GetIfIndex(),
+                               kUrmaWriteRegressionPriority,
+                               404,
+                               303,
+                               receiverCc2);
+
+        Ptr<UbTransportChannel> secondTp = senderCtrl->GetTpByTpn(303);
+        Ptr<UbHostDcqcn> secondCc = DynamicCast<UbHostDcqcn>(secondTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(secondCc, nullptr, "Second sender TP should bind a host DCQCN instance");
+        (void)secondCc->IsCcLimited(1);
+
+        NS_TEST_ASSERT_MSG_EQ(secondCc->GetCurrentRateForTest().GetBitRate(),
+                              DataRate("100Gbps").GetBitRate(),
+                              "A host with no active flows should restart new flows at line rate");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+
+private:
+    void OnTaskCompleted(uint32_t, uint32_t)
+    {
+        m_taskCompleted = true;
+    }
+
+    bool m_taskCompleted{false};
+};
+
+class UbDcqcnIdleFlowCancelsRecoveryStateTest : public TestCase
+{
+public:
+    UbDcqcnIdleFlowCancelsRecoveryStateTest()
+        : TestCase("UnifiedBus - idle DCQCN sender cancels recovery timers and stays inactive")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbHostDcqcn::LineRate", DataRateValue(DataRate("100Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::InitialRate", DataRateValue(DataRate("25Gbps")));
+        Config::SetDefault("ns3::UbHostDcqcn::RateIncreaseTimer", TimeValue(MicroSeconds(55)));
+        Config::SetDefault("ns3::UbHostDcqcn::AlphaUpdateInterval", TimeValue(MicroSeconds(55)));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbController> senderCtrl = topo.sender->GetObject<UbController>();
+        Ptr<UbTransportChannel> txTp = senderCtrl->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        (void)cc->IsCcLimited(1);
+        NS_TEST_ASSERT_MSG_EQ(senderCtrl->GetActiveSenderFlowCount(),
+                              1u,
+                              "Starting sender should register one active host flow");
+
+        cc->ApplySyntheticCnpForTest();
+        cc->OnSenderTransportIdle();
+
+        NS_TEST_ASSERT_MSG_EQ(senderCtrl->GetActiveSenderFlowCount(),
+                              0u,
+                              "Idle sender should release host active-flow slot immediately");
+
+        Simulator::Schedule(MicroSeconds(120), [this, senderCtrl, cc]() {
+            NS_TEST_ASSERT_MSG_EQ(senderCtrl->GetActiveSenderFlowCount(),
+                                  0u,
+                                  "Idle sender must stay inactive after old DCQCN recovery timers would have fired");
+            NS_TEST_ASSERT_MSG_EQ(cc->GetCurrentRateForTest().GetBitRate(),
+                                  DataRate("25Gbps").GetBitRate(),
+                                  "Idle sender should keep fresh baseline rate until a new flow starts");
+        });
+
+        Simulator::Stop(MicroSeconds(121));
+        Simulator::Run();
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
 
 class UbUrmaReadWqeMetadataPropagationTest : public TestCase
 {
@@ -1082,15 +2058,167 @@ class UbSwitchFlowControlModeAttributeTest : public TestCase
     {
         Config::Reset();
         Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
-        sw->SetAttribute("FlowControl", EnumValue(FcType::PFC_DYNAMIC));
+        sw->SetAttribute("FlowControl", EnumValue(FcType::PFC_DYNAMIC_PAPER));
 
         EnumValue<FcType> modeValue;
         sw->GetAttribute("FlowControl", modeValue);
 
         NS_TEST_ASSERT_MSG_EQ(static_cast<int>(modeValue.Get()),
-                              static_cast<int>(FcType::PFC_DYNAMIC),
+                              static_cast<int>(FcType::PFC_DYNAMIC_PAPER),
                               "UbSwitch flow-control mode attribute should round-trip through the Config system");
         Config::Reset();
+    }
+};
+
+class UbSwitchLocalRuntimeConfigTest : public TestCase
+{
+  public:
+    UbSwitchLocalRuntimeConfigTest()
+        : TestCase("UnifiedBus - UbSwitch local runtime config overrides global buffer and PFC defaults")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::PFC_FIXED));
+        Config::SetDefault("ns3::UbQueueManager::ReservePerQueueBytes", UintegerValue(8192));
+        Config::SetDefault("ns3::UbQueueManager::SharedPoolBytes", UintegerValue(16384));
+        Config::SetDefault("ns3::UbQueueManager::HeadroomPerPortBytes", UintegerValue(2048));
+        Config::SetDefault("ns3::UbPort::PfcUpThld", IntegerValue(1000));
+        Config::SetDefault("ns3::UbPort::PfcLowThld", IntegerValue(900));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        sw->SetReservePerQueueBytes(100);
+        sw->SetSharedPoolBytes(200);
+        sw->SetHeadroomPerPortBytes(300);
+        sw->SetPfcThresholds(120, 60);
+
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbQueueManager> queueManager = sw->GetQueueManager();
+        auto profile = queueManager->GetBufferProfileView();
+        NS_TEST_ASSERT_MSG_EQ(profile.reserve_per_queue_bytes,
+                              100u,
+                              "UbSwitch reserve config should override QueueManager global default");
+        NS_TEST_ASSERT_MSG_EQ(profile.shared_pool_bytes,
+                              200u,
+                              "UbSwitch shared-pool config should override QueueManager global default");
+        NS_TEST_ASSERT_MSG_EQ(profile.headroom_per_port_bytes,
+                              300u,
+                              "UbSwitch headroom config should override QueueManager global default");
+
+        Ptr<UbPfc> pfc = DynamicCast<UbPfc>(port->GetFlowControl());
+        constexpr uint32_t kPriority = 1;
+        queueManager->PushToVoq(0, 0, kPriority, 130);
+
+        Ptr<Packet> pfcPacket = pfc->CheckPfcThreshold(Create<Packet>(1), 0);
+        NS_TEST_ASSERT_MSG_NE(pfcPacket,
+                              nullptr,
+                              "UbSwitch local PFC thresholds should override port global defaults");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(kPriority),
+                              0u,
+                              "Switch-provided PFC xoff threshold should pause the queue");
+
+        queueManager->PopFromVoq(0, 0, kPriority, 130);
+        pfcPacket = pfc->CheckPfcThreshold(Create<Packet>(1), 0);
+        NS_TEST_ASSERT_MSG_NE(pfcPacket,
+                              nullptr,
+                              "Queue draining below switch-provided xon should emit resume");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(kPriority),
+                              UB_CREDIT_MAX_VALUE,
+                              "Switch-provided PFC xon threshold should resume the queue");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPortSetDataRateWithoutCongestionControlTest : public TestCase
+{
+  public:
+    UbPortSetDataRateWithoutCongestionControlTest()
+        : TestCase("UnifiedBus - UbPort SetDataRate works without attached congestion control")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        const DataRate updatedRate("200Gbps");
+        port->SetDataRate(updatedRate);
+
+        NS_TEST_ASSERT_MSG_EQ(port->GetDataRate().GetBitRate(),
+                              updatedRate.GetBitRate(),
+                              "UbPort::SetDataRate should update the port even when no congestion control is attached");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+#ifndef _WIN32
+namespace
+{
+
+int RunInChildProcess(const std::function<void()>& fn);
+
+} // namespace
+#endif
+
+class UbSwitchNotifySwitchDequeueWithoutCongestionControlTest : public TestCase
+{
+  public:
+    UbSwitchNotifySwitchDequeueWithoutCongestionControlTest()
+        : TestCase("UnifiedBus - UbSwitch NotifySwitchDequeue works without attached congestion control")
+    {
+    }
+
+    void DoRun() override
+    {
+#ifndef _WIN32
+        const int status = RunInChildProcess([]() {
+            Config::Reset();
+
+            Ptr<Node> node = CreateObject<Node>();
+            Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+            node->AggregateObject(sw);
+
+            Ptr<UbPort> port = CreateObject<UbPort>();
+            node->AddDevice(port);
+            sw->Init();
+
+            const uint32_t kInPort = 0;
+            const uint32_t kOutPort = 0;
+            const uint32_t kPriority = 1;
+            Ptr<Packet> packet = Create<Packet>(64);
+
+            sw->GetQueueManager()->PushToVoq(kInPort, kOutPort, kPriority, packet->GetSize());
+            sw->NotifySwitchDequeue(kInPort, kOutPort, kPriority, packet);
+
+            Simulator::Destroy();
+            Config::Reset();
+        });
+
+        NS_TEST_ASSERT_MSG_NE(status, -1, "fork/waitpid should succeed for dequeue null-cc guard test");
+        NS_TEST_ASSERT_MSG_EQ(WIFEXITED(status), true, "Child process should exit normally");
+        NS_TEST_ASSERT_MSG_EQ(WEXITSTATUS(status), 0, "NotifySwitchDequeue should not crash without congestion control");
+#else
+        NS_TEST_SKIP("fork-based crash guard test is not supported on Windows");
+#endif
     }
 };
 
@@ -1114,12 +2242,57 @@ struct UbMultiPortSwitchFixture
     Ptr<UbQueueManager> queueManager;
 };
 
+class UbObservingFlowControl : public UbFlowControl
+{
+  public:
+    static TypeId GetTypeId(void)
+    {
+        static TypeId tid = TypeId("ns3::UbObservingFlowControl")
+            .SetParent<UbFlowControl>()
+            .AddConstructor<UbObservingFlowControl>();
+        return tid;
+    }
+
+    void Configure(Ptr<UbQueueManager> queueManager, uint32_t observedInPort, uint32_t observedPriority)
+    {
+        m_queueManager = queueManager;
+        m_observedInPort = observedInPort;
+        m_observedPriority = observedPriority;
+    }
+
+    bool IsFcLimited(Ptr<UbIngressQueue> ingressQ) override
+    {
+        return false;
+    }
+
+    void OnIngressReleased(const UbFlowControlEventContext& context) override
+    {
+        m_called = true;
+        m_observedIngressBytes =
+            m_queueManager->GetQueueIngressTotalBytes(m_observedInPort, m_observedPriority);
+        m_contextInPortId = context.inPortId;
+        m_contextOutPortId = context.outPortId;
+        m_contextPriority = context.priority;
+    }
+
+    bool m_called {false};
+    uint64_t m_observedIngressBytes {0};
+    uint32_t m_contextInPortId {std::numeric_limits<uint32_t>::max()};
+    uint32_t m_contextOutPortId {std::numeric_limits<uint32_t>::max()};
+    uint32_t m_contextPriority {std::numeric_limits<uint32_t>::max()};
+
+  private:
+    Ptr<UbQueueManager> m_queueManager;
+    uint32_t m_observedInPort {0};
+    uint32_t m_observedPriority {0};
+};
+
 UbSinglePortPfcFixture
 CreateSinglePortPfcFixture(FcType mode,
                            uint32_t reserveBytes,
                            uint64_t sharedPoolBytes,
                            uint32_t headroomPerPortBytes,
-                           uint32_t resumeOffsetBytes,
+                           uint32_t resumeGapBytes,
                            uint32_t alphaShift,
                            int32_t hiThresh,
                            int32_t loThresh)
@@ -1130,7 +2303,8 @@ CreateSinglePortPfcFixture(FcType mode,
     Config::SetDefault("ns3::UbQueueManager::ReservePerQueueBytes", UintegerValue(reserveBytes));
     Config::SetDefault("ns3::UbQueueManager::SharedPoolBytes", UintegerValue(sharedPoolBytes));
     Config::SetDefault("ns3::UbQueueManager::HeadroomPerPortBytes", UintegerValue(headroomPerPortBytes));
-    Config::SetDefault("ns3::UbQueueManager::ResumeOffset", UintegerValue(resumeOffsetBytes));
+    Config::SetDefault("ns3::UbQueueManager::DynamicPfcResumeGapBytes",
+                       UintegerValue(resumeGapBytes));
     Config::SetDefault("ns3::UbQueueManager::AlphaShift", UintegerValue(alphaShift));
 
     UbSinglePortPfcFixture fixture;
@@ -1151,7 +2325,7 @@ CreateMultiPortSwitchFixture(FcType mode,
                              uint32_t reserveBytes,
                              uint64_t sharedPoolBytes,
                              uint32_t headroomPerPortBytes,
-                             uint32_t resumeOffsetBytes,
+                             uint32_t resumeGapBytes,
                              uint32_t alphaShift,
                              const std::vector<std::pair<int32_t, int32_t>>& pfcThresholds)
 {
@@ -1159,7 +2333,8 @@ CreateMultiPortSwitchFixture(FcType mode,
     Config::SetDefault("ns3::UbQueueManager::ReservePerQueueBytes", UintegerValue(reserveBytes));
     Config::SetDefault("ns3::UbQueueManager::SharedPoolBytes", UintegerValue(sharedPoolBytes));
     Config::SetDefault("ns3::UbQueueManager::HeadroomPerPortBytes", UintegerValue(headroomPerPortBytes));
-    Config::SetDefault("ns3::UbQueueManager::ResumeOffset", UintegerValue(resumeOffsetBytes));
+    Config::SetDefault("ns3::UbQueueManager::DynamicPfcResumeGapBytes",
+                       UintegerValue(resumeGapBytes));
     Config::SetDefault("ns3::UbQueueManager::AlphaShift", UintegerValue(alphaShift));
 
     UbMultiPortSwitchFixture fixture;
@@ -1191,13 +2366,14 @@ CreateQueueManagerFixture(uint32_t ports,
                           uint32_t reserveBytes,
                           uint64_t sharedPoolBytes,
                           uint32_t headroomPerPortBytes,
-                          uint32_t resumeOffsetBytes,
+                          uint32_t resumeGapBytes,
                           uint32_t alphaShift)
 {
     Config::SetDefault("ns3::UbQueueManager::ReservePerQueueBytes", UintegerValue(reserveBytes));
     Config::SetDefault("ns3::UbQueueManager::SharedPoolBytes", UintegerValue(sharedPoolBytes));
     Config::SetDefault("ns3::UbQueueManager::HeadroomPerPortBytes", UintegerValue(headroomPerPortBytes));
-    Config::SetDefault("ns3::UbQueueManager::ResumeOffset", UintegerValue(resumeOffsetBytes));
+    Config::SetDefault("ns3::UbQueueManager::DynamicPfcResumeGapBytes",
+                       UintegerValue(resumeGapBytes));
     Config::SetDefault("ns3::UbQueueManager::AlphaShift", UintegerValue(alphaShift));
 
     Ptr<UbQueueManager> queueManager = CreateObject<UbQueueManager>();
@@ -1338,6 +2514,103 @@ class UbPfcDynamicModePauseResumeTest : public TestCase
     }
 };
 
+class UbQueueManagerDynamicPfcDecisionApiTest : public TestCase
+{
+  public:
+    UbQueueManagerDynamicPfcDecisionApiTest()
+        : TestCase("UnifiedBus - queue manager exposes unified dynamic PFC pause/resume decisions")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kPriority = 1;
+        Ptr<UbQueueManager> queueManager = CreateQueueManagerFixture(/*ports*/ 1,
+                                                                    /*vlNum*/ 4,
+                                                                    /*reserveBytes*/ 100,
+                                                                    /*sharedPoolBytes*/ 100,
+                                                                    /*headroomPerPortBytes*/ 64,
+                                                                    /*resumeGapBytes*/ 10,
+                                                                    /*alphaShift*/ 0);
+
+        queueManager->PushToVoq(0, 0, kPriority, 120);
+        queueManager->PushToVoq(0, 0, kPriority, 60);
+
+        auto queueOcc = queueManager->GetIngressQueueOccupancy(0, kPriority);
+        Ptr<UbPfcDynamicDecisionHook> hook = CreateObject<UbPfcDynamicDecisionHook>();
+        UbPfcDecision decision = hook->Evaluate(queueManager, 0, kPriority);
+
+        NS_TEST_ASSERT_MSG_EQ(queueOcc.shared_bytes,
+                              80u,
+                              "test should build shared occupancy before asking for dynamic PFC decision");
+        NS_TEST_ASSERT_MSG_EQ(decision.pause,
+                              true,
+                              "dynamic PFC pause decision should come from queue-manager state");
+        NS_TEST_ASSERT_MSG_EQ(decision.resume,
+                              false,
+                              "queue above xoff should not be resumable");
+
+        queueManager->PopFromVoq(0, 0, kPriority, 60);
+        decision = hook->Evaluate(queueManager, 0, kPriority);
+        NS_TEST_ASSERT_MSG_EQ(decision.pause,
+                              false,
+                              "after draining below xoff, pause decision should clear");
+        NS_TEST_ASSERT_MSG_EQ(decision.resume,
+                              true,
+                              "after draining below xon, resume decision should come from queue-manager state");
+        Config::Reset();
+    }
+};
+
+class UbQueueManagerPaperPfcDecisionApiTest : public TestCase
+{
+  public:
+    UbQueueManagerPaperPfcDecisionApiTest()
+        : TestCase("UnifiedBus - queue manager exposes unified paper PFC pause/resume decisions")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kSharedPoolBytes = 10000;
+        Config::SetDefault("ns3::UbQueueManager::PaperDynamicPfcBeta", UintegerValue(8));
+        auto fixture = CreateSinglePortPfcFixture(FcType::PFC_DYNAMIC_PAPER,
+                                                  /*reserveBytes*/ 0,
+                                                  /*sharedPoolBytes*/ kSharedPoolBytes,
+                                                  /*headroomPerPortBytes*/ 4096,
+                                                  /*resumeGapBytes*/ 64,
+                                                  /*alphaShift*/ 0,
+                                                  /*hiThresh*/ 1000,
+                                                  /*loThresh*/ 900);
+
+        constexpr uint32_t kPriority = 1;
+        Ptr<UbPfcPaperDynamicDecisionHook> hook = CreateObject<UbPfcPaperDynamicDecisionHook>();
+        const uint64_t xoff = hook->Evaluate(fixture.queueManager, 0, kPriority).xoff_threshold_bytes;
+        fixture.queueManager->PushToVoq(0, 0, kPriority, static_cast<uint32_t>(xoff + 100));
+
+        UbPfcDecision decision = hook->Evaluate(fixture.queueManager, 0, kPriority);
+        NS_TEST_ASSERT_MSG_EQ(decision.pause,
+                              true,
+                              "paper PFC pause decision should come from queue-manager state");
+        NS_TEST_ASSERT_MSG_EQ(decision.resume,
+                              false,
+                              "paused paper-PFC queue should not immediately report resume");
+
+        fixture.queueManager->PopFromVoq(0, 0, kPriority, static_cast<uint32_t>(xoff + 100));
+        decision = hook->Evaluate(fixture.queueManager, 0, kPriority);
+        NS_TEST_ASSERT_MSG_EQ(decision.pause,
+                              false,
+                              "after draining, paper PFC pause decision should clear");
+        NS_TEST_ASSERT_MSG_EQ(decision.resume,
+                              true,
+                              "after draining, paper PFC resume decision should come from queue-manager state");
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbControlFrameUsesDedicatedAccountingTest : public TestCase
 {
   public:
@@ -1354,7 +2627,7 @@ class UbControlFrameUsesDedicatedAccountingTest : public TestCase
                                                     /*reserveBytes*/ 0,
                                                     /*sharedPoolBytes*/ 0,
                                                     /*headroomPerPortBytes*/ 0,
-                                                    /*resumeOffsetBytes*/ 16,
+                                                    /*resumeGapBytes*/ 16,
                                                     /*alphaShift*/ 1,
                                                     {});
 
@@ -1441,7 +2714,7 @@ class UbSendControlFrameRejectsDataPacketTest : public TestCase
                                                         /*reserveBytes*/ 0,
                                                         /*sharedPoolBytes*/ 0,
                                                         /*headroomPerPortBytes*/ 0,
-                                                        /*resumeOffsetBytes*/ 16,
+                                                        /*resumeGapBytes*/ 16,
                                                         /*alphaShift*/ 1,
                                                         {});
 
@@ -1483,7 +2756,7 @@ class UbQueueManagerStickyHeadroomAccountingTest : public TestCase
                                                                     /*reserveBytes*/ 100,
                                                                     /*sharedPoolBytes*/ 50,
                                                                     /*headroomPerPortBytes*/ 256,
-                                                                    /*resumeOffsetBytes*/ 16,
+                                                                    /*resumeGapBytes*/ 16,
                                                                     /*alphaShift*/ 0);
 
         queueManager->PushToVoq(0, 0, 1, 180);
@@ -1515,6 +2788,45 @@ class UbQueueManagerStickyHeadroomAccountingTest : public TestCase
     }
 };
 
+class UbQueueManagerIngressPortOccupancyViewTest : public TestCase
+{
+  public:
+    UbQueueManagerIngressPortOccupancyViewTest()
+        : TestCase("UnifiedBus - queue manager exposes structured ingress port occupancy view")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kPriorityA = 1;
+        constexpr uint32_t kPriorityB = 2;
+        Ptr<UbQueueManager> queueManager = CreateQueueManagerFixture(/*ports*/ 1,
+                                                                    /*vlNum*/ 4,
+                                                                    /*reserveBytes*/ 100,
+                                                                    /*sharedPoolBytes*/ 0,
+                                                                    /*headroomPerPortBytes*/ 256,
+                                                                    /*resumeGapBytes*/ 16,
+                                                                    /*alphaShift*/ 0);
+
+        queueManager->PushToVoq(0, 0, kPriorityA, 80);
+        queueManager->PushToVoq(0, 0, kPriorityB, 150);
+
+        auto portOcc = queueManager->GetIngressPortOccupancy(0);
+        NS_TEST_ASSERT_MSG_EQ(portOcc.non_headroom_bytes,
+                              80u,
+                              "port occupancy view should sum reserve/shared bytes across priorities");
+        NS_TEST_ASSERT_MSG_EQ(portOcc.headroom_bytes,
+                              150u,
+                              "port occupancy view should sum headroom bytes across priorities");
+        NS_TEST_ASSERT_MSG_EQ(portOcc.total_bytes,
+                              230u,
+                              "port occupancy total should match non-headroom plus headroom");
+
+        Config::Reset();
+    }
+};
+
 class UbPfcDynamicModeXoffZeroEmptyQueueTest : public TestCase
 {
   public:
@@ -1530,12 +2842,14 @@ class UbPfcDynamicModeXoffZeroEmptyQueueTest : public TestCase
                                                   /*reserveBytes*/ 100,
                                                   /*sharedPoolBytes*/ 1,
                                                   /*headroomPerPortBytes*/ 32,
-                                                  /*resumeOffsetBytes*/ 16,
+                                                  /*resumeGapBytes*/ 16,
                                                   /*alphaShift*/ 1,
                                                   /*hiThresh*/ 1000,
                                                   /*loThresh*/ 900);
 
-        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetXoffThreshold(),
+        Ptr<UbPfcDynamicDecisionHook> hook = CreateObject<UbPfcDynamicDecisionHook>();
+        UbPfcDecision emptyDecision = hook->Evaluate(fixture.queueManager, 0, 1);
+        NS_TEST_ASSERT_MSG_EQ(emptyDecision.xoff_threshold_bytes,
                               0u,
                               "This test requires xoff to collapse to zero");
         Ptr<Packet> pfcPacket = fixture.pfc->CheckPfcThreshold(Create<Packet>(1), 0);
@@ -1545,6 +2859,181 @@ class UbPfcDynamicModeXoffZeroEmptyQueueTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(fixture.port->GetCredits(1),
                               UB_CREDIT_MAX_VALUE,
                               "An empty queue must remain resumed when xoff is zero");
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPfcPaperDynamicModePauseResumeTest : public TestCase
+{
+  public:
+    UbPfcPaperDynamicModePauseResumeTest()
+        : TestCase("UnifiedBus - PFC_DYNAMIC_PAPER follows paper threshold and 2-MTU resume gap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kSharedPoolBytes = 10000;
+        constexpr uint32_t kPaperDynamicPfcBeta = 8;
+        Config::SetDefault("ns3::UbQueueManager::PaperDynamicPfcBeta",
+                           UintegerValue(kPaperDynamicPfcBeta));
+        auto fixture = CreateSinglePortPfcFixture(FcType::PFC_DYNAMIC_PAPER,
+                                                  /*reserveBytes*/ 0,
+                                                  /*sharedPoolBytes*/ kSharedPoolBytes,
+                                                  /*headroomPerPortBytes*/ 4096,
+                                                  /*resumeGapBytes*/ 64,
+                                                  /*alphaShift*/ 0,
+                                                  /*hiThresh*/ 1000,
+                                                  /*loThresh*/ 900);
+
+        constexpr uint32_t kPaperPriorityCount = DEFAULT_PAPER_DYNAMIC_PFC_PRIORITY_COUNT;
+        constexpr uint32_t kGlobalOccupancyBytes = 1000;
+        Ptr<UbPfcPaperDynamicDecisionHook> hook = CreateObject<UbPfcPaperDynamicDecisionHook>();
+        fixture.queueManager->PushToVoq(0, 0, 1, kGlobalOccupancyBytes);
+        UbPfcDecision decision = hook->Evaluate(fixture.queueManager, 0, 1);
+        fixture.queueManager->PopFromVoq(0, 0, 1, kGlobalOccupancyBytes);
+        uint64_t xoff = decision.xoff_threshold_bytes;
+        uint64_t xon = decision.xon_threshold_bytes;
+
+        NS_TEST_ASSERT_MSG_EQ(xoff,
+                              static_cast<uint64_t>(kPaperDynamicPfcBeta) *
+                                  (kSharedPoolBytes - kGlobalOccupancyBytes) / kPaperPriorityCount,
+                              "PFC_DYNAMIC_PAPER xoff should follow beta * remaining / priorities");
+        uint64_t expectedXon = xoff > 2u * UB_MTU_BYTE ? xoff - 2u * UB_MTU_BYTE : 0u;
+        NS_TEST_ASSERT_MSG_EQ(xon,
+                              expectedXon,
+                              "PFC_DYNAMIC_PAPER xon should be xoff minus two MTUs");
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPfcPaperDynamicModeIgnoresAlphaShiftForAdmissionTest : public TestCase
+{
+  public:
+    UbPfcPaperDynamicModeIgnoresAlphaShiftForAdmissionTest()
+        : TestCase("UnifiedBus - PFC_DYNAMIC_PAPER admission should not be limited by old dynamic alpha shift")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kSharedPoolBytes = 20971520;
+        constexpr uint32_t kHeadroomPerPortBytes = 65536;
+        constexpr uint32_t kPriority = 7;
+        constexpr uint32_t kPaperDynamicPfcBeta = 8;
+        constexpr uint32_t kAlphaShift = 7;
+        constexpr uint32_t kInPort = 0;
+        constexpr uint32_t kOutPort = 1;
+        Config::SetDefault("ns3::UbQueueManager::PaperDynamicPfcBeta",
+                           UintegerValue(kPaperDynamicPfcBeta));
+        auto fixture = CreateMultiPortSwitchFixture(FcType::PFC_DYNAMIC_PAPER,
+                                                    /*portsNum*/ 3,
+                                                    /*reserveBytes*/ 0,
+                                                    /*sharedPoolBytes*/ kSharedPoolBytes,
+                                                    /*headroomPerPortBytes*/ kHeadroomPerPortBytes,
+                                                    /*resumeGapBytes*/ 64,
+                                                    /*alphaShift*/ kAlphaShift,
+                                                    {{1000, 900}, {1000, 900}, {1000, 900}});
+
+        Ptr<UbPfcDynamicDecisionHook> dynamicHook = CreateObject<UbPfcDynamicDecisionHook>();
+        Ptr<UbPfcPaperDynamicDecisionHook> paperHook = CreateObject<UbPfcPaperDynamicDecisionHook>();
+        const uint64_t oldDynamicXoff = dynamicHook->Evaluate(fixture.queueManager, kInPort, kPriority).xoff_threshold_bytes;
+        const uint64_t paperXoff = paperHook->Evaluate(fixture.queueManager, kInPort, kPriority).xoff_threshold_bytes;
+        const uint32_t packetBytes = static_cast<uint32_t>(oldDynamicXoff) + 100;
+
+        NS_TEST_ASSERT_MSG_LT(packetBytes,
+                              paperXoff,
+                              "test packet should stay below the paper pause threshold");
+
+        fixture.queueManager->PushToVoq(kInPort, kOutPort, kPriority, packetBytes);
+
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetQueueIngressHeadroomBytes(kInPort, kPriority),
+                              0u,
+                              "PFC_DYNAMIC_PAPER admission should not enter headroom just because old dynamic xoff is small");
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetQueueIngressTotalBytes(kInPort, kPriority),
+                              static_cast<uint64_t>(packetBytes),
+                              "PFC_DYNAMIC_PAPER admission should keep the packet in ingress occupancy");
+
+        auto pfc = DynamicCast<UbPfc>(fixture.ports[kInPort]->GetFlowControl());
+        Ptr<Packet> pfcPacket = pfc->CheckPfcThreshold(Create<Packet>(1), kInPort);
+        NS_TEST_ASSERT_MSG_EQ(pfcPacket,
+                              nullptr,
+                              "PFC_DYNAMIC_PAPER should not pause before reaching the paper threshold");
+        NS_TEST_ASSERT_MSG_EQ(fixture.ports[kInPort]->GetCredits(kPriority),
+                              UB_CREDIT_MAX_VALUE,
+                              "PFC_DYNAMIC_PAPER should keep credits when still below the paper threshold");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest : public TestCase
+{
+  public:
+    UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest()
+        : TestCase("UnifiedBus - PFC_DYNAMIC_PAPER threshold tracks real switch global occupancy")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        constexpr uint32_t kSharedPoolBytes = 12000;
+        constexpr uint32_t kHeadroomPerPortBytes = 4096;
+        constexpr uint32_t kPaperDynamicPfcBeta = 8;
+        constexpr uint32_t kPriority = 7;
+        constexpr uint32_t kObservedPort = 0;
+        constexpr uint32_t kOtherInPort = 1;
+        constexpr uint32_t kOtherOutPort = 2;
+        Config::SetDefault("ns3::UbQueueManager::PaperDynamicPfcBeta",
+                           UintegerValue(kPaperDynamicPfcBeta));
+        auto fixture = CreateMultiPortSwitchFixture(FcType::PFC_DYNAMIC_PAPER,
+                                                    /*portsNum*/ 3,
+                                                    /*reserveBytes*/ 0,
+                                                    /*sharedPoolBytes*/ kSharedPoolBytes,
+                                                    /*headroomPerPortBytes*/ kHeadroomPerPortBytes,
+                                                    /*resumeGapBytes*/ 64,
+                                                    /*alphaShift*/ 0,
+                                                    {{1000, 900}, {1000, 900}, {1000, 900}});
+
+        Ptr<UbPfcPaperDynamicDecisionHook> paperHook = CreateObject<UbPfcPaperDynamicDecisionHook>();
+        const uint64_t thresholdWithoutLoad =
+            paperHook->Evaluate(fixture.queueManager, kObservedPort, kPriority).xoff_threshold_bytes;
+        fixture.queueManager->PushToVoq(kOtherInPort, kOtherOutPort, kPriority, 3000);
+        const uint64_t measuredGlobalOccupancy =
+            fixture.queueManager->GetSwitchBufferOccupancy().total_buffered_bytes;
+        const uint64_t thresholdWithLoad =
+            paperHook->Evaluate(fixture.queueManager, kObservedPort, kPriority).xoff_threshold_bytes;
+
+        NS_TEST_ASSERT_MSG_EQ(measuredGlobalOccupancy,
+                              3000u,
+                              "paper dynamic occupancy should include bytes queued on other ports");
+        NS_TEST_ASSERT_MSG_LT(thresholdWithLoad,
+                              thresholdWithoutLoad,
+                              "paper dynamic threshold should shrink when global occupancy increases");
+
+        auto pfc = DynamicCast<UbPfc>(fixture.ports[kObservedPort]->GetFlowControl());
+        constexpr uint32_t kObservedBytesBelowPause = 4000;
+        fixture.queueManager->PushToVoq(kObservedPort,
+                                        kObservedPort,
+                                        kPriority,
+                                        kObservedBytesBelowPause);
+        Ptr<Packet> pfcPacket = pfc->CheckPfcThreshold(Create<Packet>(1), kObservedPort);
+        NS_TEST_ASSERT_MSG_EQ(pfcPacket,
+                              nullptr,
+                              "queue below the self-consistent paper dynamic boundary should stay resumed");
+
+        fixture.queueManager->PushToVoq(kObservedPort, kObservedPort, kPriority, 600);
+        pfcPacket = pfc->CheckPfcThreshold(Create<Packet>(1), kObservedPort);
+        NS_TEST_ASSERT_MSG_NE(pfcPacket,
+                              nullptr,
+                              "queue crossing the self-consistent paper dynamic boundary should emit PFC");
+
         Simulator::Destroy();
         Config::Reset();
     }
@@ -1566,7 +3055,7 @@ class UbPfcForwardingUsesIngressPortConfigTest : public TestCase
                                                     /*reserveBytes*/ 256,
                                                     /*sharedPoolBytes*/ 0,
                                                     /*headroomPerPortBytes*/ 256,
-                                                    /*resumeOffsetBytes*/ 16,
+                                                    /*resumeGapBytes*/ 16,
                                                     /*alphaShift*/ 0,
                                                     {{100, 40}, {1000, 900}});
 
@@ -1576,11 +3065,121 @@ class UbPfcForwardingUsesIngressPortConfigTest : public TestCase
         fixture.queueManager->PushToVoq(kIngressPort, kEgressPort, kPriority, 120);
 
         Ptr<UbPfc> egressFlowControl = DynamicCast<UbPfc>(fixture.ports[kEgressPort]->GetFlowControl());
-        egressFlowControl->HandleReleaseOccupiedFlowControl(Create<Packet>(120), kIngressPort, kEgressPort);
+        egressFlowControl->OnIngressReleased({
+            .packet = Create<Packet>(120),
+            .ingressQueue = nullptr,
+            .inPortId = kIngressPort,
+            .outPortId = kEgressPort,
+            .priority = kPriority,
+        });
 
         NS_TEST_ASSERT_MSG_EQ(fixture.ports[kIngressPort]->GetCredits(kPriority),
                               0u,
                               "Forwarding-triggered PFC checks must use the congested ingress port's thresholds");
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbFlowControlReleaseHookRunsAfterIngressDequeueTest : public TestCase
+{
+  public:
+    UbFlowControlReleaseHookRunsAfterIngressDequeueTest()
+        : TestCase("UnifiedBus - flow-control release hook observes post-dequeue ingress occupancy")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        auto fixture = CreateMultiPortSwitchFixture(FcType::NONE,
+                                                    /*portsNum*/ 2,
+                                                    /*reserveBytes*/ 256,
+                                                    /*sharedPoolBytes*/ 0,
+                                                    /*headroomPerPortBytes*/ 0,
+                                                    /*resumeGapBytes*/ 16,
+                                                    /*alphaShift*/ 0,
+                                                    {});
+
+        constexpr uint32_t kIngressPort = 0;
+        constexpr uint32_t kEgressPort = 1;
+        constexpr uint32_t kPriority = 1;
+        constexpr uint32_t kPacketBytes = 120;
+
+        Ptr<UbObservingFlowControl> observingFc = CreateObject<UbObservingFlowControl>();
+        observingFc->Configure(fixture.queueManager, kIngressPort, kPriority);
+        fixture.ports[kEgressPort]->m_flowControl = observingFc;
+
+        // Keep the port busy so SendPacket/AllocateNextPacket won't try to hit a null channel.
+        fixture.ports[kEgressPort]->SetSendState(SendState::BUSY);
+
+        fixture.sw->SendPacket(Create<Packet>(kPacketBytes), kIngressPort, kEgressPort, kPriority);
+        fixture.sw->GetAllocator()->AllocateNextPacket(fixture.ports[kEgressPort]);
+
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_called,
+                              true,
+                              "allocator path should trigger flow-control release hook for forwarded packets");
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_observedIngressBytes,
+                              0u,
+                              "release hook should observe ingress occupancy after queue-manager dequeue");
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_contextInPortId,
+                              kIngressPort,
+                              "release hook should receive ingress port through event context");
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_contextOutPortId,
+                              kEgressPort,
+                              "release hook should receive egress port through event context");
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_contextPriority,
+                              kPriority,
+                              "release hook should receive priority through event context");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest : public TestCase
+{
+  public:
+    UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest()
+        : TestCase("UnifiedBus - allocator keeps ingress packet when egress queue is full")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        auto fixture = CreateMultiPortSwitchFixture(FcType::NONE,
+                                                    /*portsNum*/ 2,
+                                                    /*reserveBytes*/ 256,
+                                                    /*sharedPoolBytes*/ 0,
+                                                    /*headroomPerPortBytes*/ 0,
+                                                    /*resumeGapBytes*/ 16,
+                                                    /*alphaShift*/ 0,
+                                                    {});
+
+        constexpr uint32_t kIngressPort = 0;
+        constexpr uint32_t kEgressPort = 1;
+        constexpr uint32_t kPriority = 1;
+        constexpr uint32_t kPacketBytes = 120;
+
+        Ptr<UbObservingFlowControl> observingFc = CreateObject<UbObservingFlowControl>();
+        observingFc->Configure(fixture.queueManager, kIngressPort, kPriority);
+        fixture.ports[kEgressPort]->m_flowControl = observingFc;
+        fixture.ports[kEgressPort]->GetUbQueue()->SetAttribute("MaxEgressBytes", UintegerValue(0));
+
+        fixture.sw->SendPacket(Create<Packet>(kPacketBytes), kIngressPort, kEgressPort, kPriority);
+        fixture.sw->GetAllocator()->AllocateNextPacket(fixture.ports[kEgressPort]);
+
+        NS_TEST_ASSERT_MSG_EQ(observingFc->m_called,
+                              false,
+                              "release hook must not run when the packet never entered the egress queue");
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetQueueIngressTotalBytes(kIngressPort, kPriority),
+                              static_cast<uint64_t>(kPacketBytes),
+                              "allocator must keep ingress accounting when egress queue rejects the packet");
+        NS_TEST_ASSERT_MSG_EQ(fixture.ports[kEgressPort]->GetUbQueue()->GetCurrentBytes(),
+                              0u,
+                              "egress queue occupancy should remain unchanged after a rejected enqueue");
+
         Simulator::Destroy();
         Config::Reset();
     }
@@ -1648,6 +3247,54 @@ class UbPfcFixedRejectsNegativeThresholdTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(WTERMSIG(status),
                               SIGABRT,
                               "Negative PFC_FIXED thresholds should fail with SIGABRT");
+        Config::Reset();
+    }
+};
+
+class UbSwitchLocalCbfcConfigTest : public TestCase
+{
+  public:
+    UbSwitchLocalCbfcConfigTest()
+        : TestCase("UnifiedBus - UbSwitch local CBFC config overrides global defaults")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(1000));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        sw->SetCbfcCellGeometry(/*flitLenBytes*/ 10, /*flitsPerCell*/ 2);
+        sw->SetCbfcReturnCellGrain(/*dataPacketCells*/ 3, /*controlPacketCells*/ 2);
+        sw->SetCbfcCredits(/*initCreditCells*/ 5, /*sharedInitCreditCells*/ 0);
+        node->AggregateObject(sw);
+
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfc> cbfc = DynamicCast<UbCbfc>(port->GetFlowControl());
+        NS_TEST_ASSERT_MSG_NE(cbfc, nullptr, "port should initialize CBFC flow control");
+
+        constexpr uint32_t kPriority = 1;
+        Ptr<UbPacketQueue> ingressQ = CreateObject<UbPacketQueue>();
+        ingressQ->SetIngressPriority(kPriority);
+        ingressQ->SetOutPortId(0);
+        ingressQ->SetInPortId(0);
+        ingressQ->Push(Create<Packet>(101));
+
+        NS_TEST_ASSERT_MSG_EQ(cbfc->IsFcLimited(ingressQ),
+                              true,
+                              "Switch-local CBFC cell geometry and credits should override global defaults");
+
+        Simulator::Destroy();
         Config::Reset();
     }
 };
@@ -1871,6 +3518,116 @@ class UbTraceDirSetupTest : public TestCase
     }
 };
 
+class UbAlgorithmTraceGateDefaultOffTest : public TestCase
+{
+  public:
+    UbAlgorithmTraceGateDefaultOffTest()
+        : TestCase("UnifiedBus - algorithm trace files stay off by default even when trace path exists")
+    {
+    }
+
+    void DoRun() override
+    {
+        namespace fs = std::filesystem;
+
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const fs::path caseDir =
+            fs::temp_directory_path() / ("ub-algo-trace-default-off-" + uniqueSuffix);
+        const fs::path runlogDir = caseDir / "runlog";
+        std::error_code ec;
+        fs::remove_all(caseDir, ec);
+        ec.clear();
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory creation should succeed");
+
+        utils::UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_FLOW_CONTROL_TRACE_ENABLE", BooleanValue(false));
+        GlobalValue::Bind("UB_CONGESTION_CONTROL_TRACE_ENABLE", BooleanValue(false));
+
+        utils::UbUtils::SetTracePathForTest(caseDir.string());
+
+        utils::UbUtils::PfcStateNotify(3, 1, "PAUSE", 7, 12345);
+        utils::UbUtils::DcqcnMarkNotify(3, 2, 67890, 0.5);
+        utils::UbUtils::Get()->Destroy();
+
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "PfcTrace_node_3_port_1.tr"),
+                              false,
+                              "Flow-control trace should stay off by default");
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "DcqcnMarkTrace_node_3_port_2.tr"),
+                              false,
+                              "Congestion-control trace should stay off by default");
+
+        fs::remove_all(caseDir, ec);
+    }
+};
+
+class UbAlgorithmTraceCategoryGateTest : public TestCase
+{
+  public:
+    UbAlgorithmTraceCategoryGateTest()
+        : TestCase("UnifiedBus - algorithm trace category gates independently control flow and congestion traces")
+    {
+    }
+
+    void DoRun() override
+    {
+        namespace fs = std::filesystem;
+
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const fs::path caseDir =
+            fs::temp_directory_path() / ("ub-algo-trace-category-gate-" + uniqueSuffix);
+        const fs::path runlogDir = caseDir / "runlog";
+        std::error_code ec;
+        fs::remove_all(caseDir, ec);
+        ec.clear();
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory creation should succeed");
+
+        utils::UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_FLOW_CONTROL_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_CONGESTION_CONTROL_TRACE_ENABLE", BooleanValue(false));
+        utils::UbUtils::SetTracePathForTest(caseDir.string());
+
+        utils::UbUtils::PfcStateNotify(5, 0, "PAUSE", 7, 222);
+        utils::UbUtils::DcqcnMarkNotify(5, 0, 333, 0.25);
+        utils::UbUtils::Get()->Destroy();
+
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "PfcTrace_node_5_port_0.tr"),
+                              true,
+                              "Flow-control trace file should be emitted when flow-control gate is on");
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "DcqcnMarkTrace_node_5_port_0.tr"),
+                              false,
+                              "Congestion-control trace file should stay off when its gate is off");
+
+        ec.clear();
+        fs::remove_all(runlogDir, ec);
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory reset should succeed");
+
+        utils::UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_FLOW_CONTROL_TRACE_ENABLE", BooleanValue(false));
+        GlobalValue::Bind("UB_CONGESTION_CONTROL_TRACE_ENABLE", BooleanValue(true));
+        utils::UbUtils::SetTracePathForTest(caseDir.string());
+
+        utils::UbUtils::PfcStateNotify(6, 1, "PAUSE", 7, 444);
+        utils::UbUtils::DcqcnMarkNotify(6, 1, 555, 0.75);
+        utils::UbUtils::Get()->Destroy();
+
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "PfcTrace_node_6_port_1.tr"),
+                              false,
+                              "Flow-control trace file should stay off when flow-control gate is off");
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "DcqcnMarkTrace_node_6_port_1.tr"),
+                              true,
+                              "Congestion-control trace file should be emitted when its gate is on");
+        fs::remove_all(caseDir, ec);
+    }
+};
+
 namespace utils
 {
 
@@ -2081,7 +3838,7 @@ class UbQueueManagerReserveOnlyAdmissionTest : public TestCase
                                                                     kReserveBytes,
                                                                     /*sharedPoolBytes*/ 0,
                                                                     /*headroomPerPortBytes*/ 0,
-                                                                    /*resumeOffsetBytes*/ 16,
+                                                                    /*resumeGapBytes*/ 16,
                                                                     /*alphaShift*/ 1);
 
         NS_TEST_ASSERT_MSG_EQ(queueManager->CheckInPortSpace(0, kPriority, kReserveBytes),
@@ -2108,7 +3865,7 @@ class UbQueueManagerReserveOnlyAdmissionTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(queueManager->GetQueueIngressNonHeadroomBytes(0, kPriority),
                               0u,
                               "PopFromVoq should release reserve-only ingress accounting");
-        NS_TEST_ASSERT_MSG_EQ(queueManager->GetGlobalSharedUsedBytes(),
+        NS_TEST_ASSERT_MSG_EQ(queueManager->GetSwitchBufferOccupancy().shared_pool_used_bytes,
                               0u,
                               "Reserve-only admission should keep shared-pool accounting at zero after drain");
         Config::Reset();
@@ -2347,25 +4104,60 @@ UbTestSuite::UbTestSuite()
     : TestSuite("unified-bus", Type::UNIT)
 {
     AddTestCase(new UbFunctionalityTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnFactoryCreatesHostAndSwitchTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnHostAckCeTphDefaultTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCongestionControlDisabledFactoryStillReturnsObjectTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchAttachDisabledCongestionControlTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchAttachEnabledCongestionControlTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpRawRoundTripTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchMarksFecnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSenderCutsRateOnCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpDoesNotAdvanceAckStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnRecoveryTimerIncreasesRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnByteCounterIncreasesRateBeforeTimerTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnHyperIncreaseUsesHaiRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnRateNeverExceedsLineRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnBusyHostStartsSecondFlowAtInitialRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnPacingWakeupResumesQueuedSendTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpCutRescalesOutstandingPacingDebtTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCompletedFlowReleasesHostActiveSlotTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnIdleFlowCancelsRecoveryStateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadWqeMetadataPropagationTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaWriteCompletionNeedsTransactionResponseTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadCompletionNeedsReadResponseTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadMultiPacketResponseCountTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadMultiSliceRequestPacketSemanticsTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbTraceDirSetupTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAlgorithmTraceGateDefaultOffTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAlgorithmTraceCategoryGateTest(), TestCase::Duration::QUICK);
     AddTestCase(new utils::UbTraceFileConcurrencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbMpiRankExtractionHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSameMpiRankHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSystemOwnedByRankHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCreateNodeSystemIdTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchFlowControlModeAttributeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPortSetDataRateWithoutCongestionControlTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchNotifySwitchDequeueWithoutCongestionControlTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbControlFrameUsesDedicatedAccountingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedModeCountsHeadroomTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerDynamicPfcDecisionApiTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcDynamicModeXoffZeroEmptyQueueTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerPaperPfcDecisionApiTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModeIgnoresAlphaShiftForAdmissionTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcForwardingUsesIngressPortConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbFlowControlReleaseHookRunsAfterIngressDequeueTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbQueueManagerReserveOnlyAdmissionTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbQueueManagerStickyHeadroomAccountingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerIngressPortOccupancyViewTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSlidingBitmapWindowAdvancesWithoutLosingOutOfOrderMarksTest(),
                 TestCase::Duration::QUICK);
     AddTestCase(new UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest(),
@@ -2380,6 +4172,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSendControlFrameRejectsDataPacketTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcRejectsZeroCellGeometryTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedRejectsNegativeThresholdTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchLocalCbfcConfigTest(), TestCase::Duration::QUICK);
 #endif
 #ifdef NS3_MPI
     AddTestCase(new UbCreateTopoRemoteLinkTest(), TestCase::Duration::QUICK);
@@ -2678,6 +4471,33 @@ CopyCaseDirWithTrafficFile(const std::string& sourceCasePathRelative, const std:
     return tempCaseDir;
 }
 
+void
+ReplaceInFile(const std::filesystem::path& filePath,
+              const std::string& needle,
+              const std::string& replacement)
+{
+    std::ifstream input(filePath);
+    if (!input.is_open())
+    {
+        throw std::runtime_error("failed to open file for rewrite helper: " + filePath.string());
+    }
+    std::stringstream buffer;
+    buffer << input.rdbuf();
+    std::string content = buffer.str();
+    const auto pos = content.find(needle);
+    if (pos == std::string::npos)
+    {
+        throw std::runtime_error("expected text not found in file rewrite helper: " + needle);
+    }
+    content.replace(pos, needle.size(), replacement);
+    std::ofstream output(filePath, std::ios::trunc);
+    if (!output.is_open())
+    {
+        throw std::runtime_error("failed to open file for write helper: " + filePath.string());
+    }
+    output << content;
+}
+
 // The old ub-local-hybrid-minimal fixture was removed as a non-core sample, so
 // local single-thread quick-example tests reuse the maintained 2-node case.
 constexpr const char* kLocalSingleThreadQuickExampleCase = "scratch/2nodes_single-tp";
@@ -2962,6 +4782,92 @@ class UbQuickExampleOptionalTransportChannelSystemTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(status,
                               0,
                               "ub-quick-example should accept case directories without transport_channel.csv");
+    }
+};
+
+class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
+{
+  public:
+    UbQuickExampleDropWithoutRetransFailsFastSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example stops when packet drops with retransmission disabled")
+    {
+    }
+
+    void DoRun() override
+    {
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const std::string trafficCsv =
+            "taskId,sourceNode,destNode,dataSize(Byte),opType,priority,delay,phaseId,dependOnPhases\n"
+            "0,0,1,131072,URMA_WRITE,7,10ns,10,\n";
+        const std::filesystem::path caseDir =
+            CopyCaseDirWithTrafficFile(kLocalSingleThreadQuickExampleCase, trafficCsv);
+
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbSwitch::FlowControl \"CBFC\"",
+                      "default ns3::UbSwitch::FlowControl \"NONE\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
+
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--mtp-threads=1 --stop-ms=5",
+                                               "",
+                                               caseDir);
+
+        std::error_code ec;
+        std::filesystem::remove_all(caseDir, ec);
+
+        NS_TEST_ASSERT_MSG_NE(status, 0, "run should fail-fast after packet drop without retransmission");
+        NS_TEST_ASSERT_MSG_NE(output.find("Packet dropped while retransmission is disabled"),
+                              std::string::npos,
+                              "run should explain why it stopped early");
+    }
+};
+
+class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
+{
+  public:
+    UbQuickExampleDropWithRetransCanContinueSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example does not fail-fast on packet drop when retransmission is enabled")
+    {
+    }
+
+    void DoRun() override
+    {
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const std::string trafficCsv =
+            "taskId,sourceNode,destNode,dataSize(Byte),opType,priority,delay,phaseId,dependOnPhases\n"
+            "0,0,1,131072,URMA_WRITE,7,10ns,10,\n";
+        const std::filesystem::path caseDir =
+            CopyCaseDirWithTrafficFile(kLocalSingleThreadQuickExampleCase, trafficCsv);
+
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbSwitch::FlowControl \"CBFC\"",
+                      "default ns3::UbSwitch::FlowControl \"NONE\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
+                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
+
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--mtp-threads=1 --stop-ms=5",
+                                               "",
+                                               caseDir);
+
+        std::error_code ec;
+        std::filesystem::remove_all(caseDir, ec);
+
+        NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
+                              std::string::npos,
+                              "retrans-enabled run should not print the fail-fast diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "retrans-enabled run should not fail-fast");
     }
 };
 
@@ -3259,6 +5165,10 @@ class UbQuickExampleSystemTestSuite : public TestSuite
         AddTestCase(new UbQuickExampleSameCasePathSystemTest(), TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleConflictingCasePathSystemTest(), TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleOptionalTransportChannelSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleDropWithoutRetransFailsFastSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleDropWithRetransCanContinueSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLocalSingleUrmaWriteSystemTest(),
                     TestCase::Duration::QUICK);

@@ -55,6 +55,7 @@ public:
     explicit UbEgressQueue();
 
     bool DoEnqueue(PacketEntry packetEntry);  // 向端口eq塞入包
+    bool CanEnqueue(uint32_t packetBytes) const;
     PacketEntry Peekqueue(void);
     PacketEntry DoDequeue(void);
     // 为报文添加UDP、IPV4、DL packet头

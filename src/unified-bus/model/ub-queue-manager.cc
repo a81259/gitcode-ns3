@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ub-queue-manager.h"
+#include "ub-port.h"
 #include "protocol/ub-header.h"
+#include "ns3/node.h"
 #include "ns3/uinteger.h"
 #include <algorithm>
 
@@ -121,6 +123,10 @@ TypeId UbQueueManager::GetTypeId(void)
         .SetParent<Object>()
         .SetGroupName("UnifiedBus")
         .AddConstructor<UbQueueManager>()
+        .AddTraceSource("OutPortBufferBytes",
+        "Current total out-port VOQ occupancy in bytes after an update.",
+        MakeTraceSourceAccessor(&UbQueueManager::m_traceOutPortBufferBytes),
+        "ns3::UbQueueManager::OutPortBufferBytes")
         .AddAttribute("ReservePerQueueBytes",
         "Per-queue reserve in bytes. Queue means one ingress (port, VL) queue.",
         UintegerValue(DEFAULT_RESERVE_PER_QUEUE_BYTES),
@@ -142,10 +148,18 @@ TypeId UbQueueManager::GetTypeId(void)
         UintegerValue(DEFAULT_HEADROOM_PER_PORT_BYTES),
         MakeUintegerAccessor(&UbQueueManager::m_headroomPerPortBytes),
         MakeUintegerChecker<uint32_t>())
-        .AddAttribute("ResumeOffset",
-        "PFC resume anti-oscillation offset in bytes. Must be >= 1 MTU (4KB for UB).",
-        UintegerValue(DEFAULT_RESUME_OFFSET),
-        MakeUintegerAccessor(&UbQueueManager::m_resumeOffset),
+        // TODO: expose dynamic-PFC config from UbPfc (or another flow-control config owner)
+        // instead of QueueManager. QueueManager keeps these knobs for now because it owns the
+        // shared-pool/headroom accounting and computes dynamic xon/xoff thresholds.
+        .AddAttribute("DynamicPfcResumeGapBytes",
+        "Dynamic PFC resume gap in bytes. xon = max(xoff - gap, 0). Larger gaps delay resume and reduce pause/resume oscillation.",
+        UintegerValue(DEFAULT_DYNAMIC_PFC_RESUME_GAP_BYTES),
+        MakeUintegerAccessor(&UbQueueManager::m_dynamicPfcResumeGapBytes),
+        MakeUintegerChecker<uint32_t>())
+        .AddAttribute("PaperDynamicPfcBeta",
+        "Paper-style dynamic PFC beta. Threshold = beta * max(SharedPoolBytes - globalOccupancy, 0) / priorities.",
+        UintegerValue(DEFAULT_PAPER_DYNAMIC_PFC_BETA),
+        MakeUintegerAccessor(&UbQueueManager::m_paperDynamicPfcBeta),
         MakeUintegerChecker<uint32_t>());
     return tid;
 }
@@ -172,14 +186,14 @@ void UbQueueManager::Init()
         NS_LOG_DEBUG("HeadroomPerPortBytes is 0; packets beyond reserve/shared limits will be dropped immediately");
     }
 
-    uint64_t maxXoffThresh = GetXoffThreshold();
+    uint64_t maxXoffThresh = GetDynamicPauseThresholdBytes();
 
-    if (m_sharedPoolBytes > 0 && m_resumeOffset > maxXoffThresh) {
-        NS_LOG_WARN("ResumeOffset (" << m_resumeOffset
+    if (m_sharedPoolBytes > 0 && m_dynamicPfcResumeGapBytes > maxXoffThresh) {
+        NS_LOG_WARN("DynamicPfcResumeGapBytes (" << m_dynamicPfcResumeGapBytes
                     << ") > max xoff threshold (" << maxXoffThresh
                     << " = sharedPool " << m_sharedPoolBytes << " >> " << m_alphaShift
                     << "), PFC xon watermark is below zero — PFC will only resume when "
-                    "sharedUsed drops to 0. Consider reducing ResumeOffset or AlphaShift.");
+                    "sharedUsed drops to 0. Consider reducing DynamicPfcResumeGapBytes or AlphaShift.");
     }
 
     NS_LOG_DEBUG("UbQueueManager Init: reservePerQueue=" << m_reservePerQueueBytes
@@ -189,7 +203,7 @@ void UbQueueManager::Init()
                  << " totalHeadroom=" << m_totalHeadroomBytes
                  << " totalIngressBudget=" << (m_totalReservedBytes + m_totalHeadroomBytes + m_sharedPoolBytes)
                  << " alphaShift=" << m_alphaShift
-                 << " resumeOffset=" << m_resumeOffset);
+                 << " dynamicPfcResumeGapBytes=" << m_dynamicPfcResumeGapBytes);
 }
 
 // ========== VOQ Dual-View Operations ==========
@@ -244,6 +258,7 @@ void UbQueueManager::PushToVoq(uint32_t inPort, uint32_t outPort,
 
     UpdateIngressAdmission(inPort, priority, pSize);
     m_outPortBuffer[outPort][priority] += pSize;
+    m_traceOutPortBufferBytes(outPort, GetTotalOutPortBufferUsed(outPort));
 
     NS_LOG_DEBUG("PushToVoq: inPort=" << inPort << " outPort=" << outPort
                  << " pri=" << priority << " size=" << pSize
@@ -269,6 +284,7 @@ void UbQueueManager::PopFromVoq(uint32_t inPort, uint32_t outPort,
 
     RemoveFromIngressAdmission(inPort, priority, pSize);
     m_outPortBuffer[outPort][priority] -= pSize;
+    m_traceOutPortBufferBytes(outPort, GetTotalOutPortBufferUsed(outPort));
 
     NS_LOG_DEBUG("PopFromVoq: inPort=" << inPort << " outPort=" << outPort
                  << " pri=" << priority << " size=" << pSize
@@ -299,7 +315,7 @@ uint64_t UbQueueManager::GetOutPortBufferUsed(uint32_t outPort, uint32_t priorit
     return m_outPortBuffer[outPort][priority];
 }
 
-uint64_t UbQueueManager::GetTotalOutPortBufferUsed(uint32_t outPort)
+uint64_t UbQueueManager::GetTotalOutPortBufferUsed(uint32_t outPort) const
 {
     uint64_t sum = 0;
     for (uint32_t i = 0; i < m_vlNum; i++) {
@@ -317,10 +333,8 @@ void UbQueueManager::SetReservePerQueueBytes(uint32_t size)
 
 bool UbQueueManager::CheckIngressAdmission(uint32_t inPort, uint32_t priority, uint32_t pSize)
 {
-    uint64_t portHdrmUsed = 0;
-    for (uint32_t i = 0; i < m_vlNum; i++) {
-        portHdrmUsed += m_hdrmBytes[inPort][i];
-    }
+    const auto portOcc = GetIngressPortOccupancy(inPort);
+    const uint64_t portHdrmUsed = portOcc.headroom_bytes;
 
     if (m_hdrmBytes[inPort][priority] > 0) {
         if (portHdrmUsed + pSize > m_headroomPerPortBytes) {
@@ -338,7 +352,7 @@ bool UbQueueManager::CheckIngressAdmission(uint32_t inPort, uint32_t priority, u
         return true;
     }
 
-    uint64_t xoffThresh = GetXoffThreshold();
+    uint64_t xoffThresh = GetIngressAdmissionThresholdBytes(inPort, priority);
     uint64_t sharedAfter = newBytes - m_reservePerQueueBytes;
     bool hdrmFull = (portHdrmUsed + pSize > m_headroomPerPortBytes);
     bool willUseHdrm = (sharedAfter > xoffThresh);
@@ -367,7 +381,7 @@ void UbQueueManager::UpdateIngressAdmission(uint32_t inPort, uint32_t priority, 
     if (newBytes <= m_reservePerQueueBytes) {
         m_inPortBuffer[inPort][priority] += pSize;
     } else {
-        uint64_t thresh = GetXoffThreshold();
+        uint64_t thresh = GetIngressAdmissionThresholdBytes(inPort, priority);
         uint64_t sharedAfter = newBytes - m_reservePerQueueBytes;
         if (sharedAfter > thresh) {
             NS_ASSERT_MSG(m_headroomPerPortBytes > 0,
@@ -397,16 +411,53 @@ void UbQueueManager::RemoveFromIngressAdmission(uint32_t inPort, uint32_t priori
 }
 
 
-uint64_t UbQueueManager::GetXoffThreshold() const
+uint64_t UbQueueManager::GetDynamicPauseThresholdBytes() const
 {
     uint64_t remaining = m_sharedPoolBytes > m_sharedUsedBytes ? m_sharedPoolBytes - m_sharedUsedBytes : 0;
     return remaining >> m_alphaShift;
 }
 
-uint64_t UbQueueManager::GetXonThreshold() const
+uint64_t UbQueueManager::GetDynamicResumeThresholdBytes() const
 {
-    uint64_t xoff = GetXoffThreshold();
-    return xoff > m_resumeOffset ? xoff - m_resumeOffset : 0;
+    uint64_t xoff = GetDynamicPauseThresholdBytes();
+    return xoff > m_dynamicPfcResumeGapBytes ? xoff - m_dynamicPfcResumeGapBytes : 0;
+}
+
+uint64_t UbQueueManager::GetPaperPauseThresholdBytes(uint64_t totalBufferedBytes) const
+{
+    uint64_t remaining = m_sharedPoolBytes > totalBufferedBytes ? m_sharedPoolBytes - totalBufferedBytes : 0;
+    uint32_t priorities = DEFAULT_PAPER_DYNAMIC_PFC_PRIORITY_COUNT;
+    return (static_cast<uint64_t>(m_paperDynamicPfcBeta) * remaining) / priorities;
+}
+
+uint64_t UbQueueManager::GetPaperResumeThresholdBytes(uint64_t totalBufferedBytes) const
+{
+    uint64_t xoff = GetPaperPauseThresholdBytes(totalBufferedBytes);
+    constexpr uint64_t kPaperResumeGapBytes = 2ull * UB_MTU_BYTE;
+    return xoff > kPaperResumeGapBytes ? xoff - kPaperResumeGapBytes : 0;
+}
+
+uint64_t UbQueueManager::GetSwitchTotalBufferedBytes() const
+{
+    uint64_t globalOccupancyBytes = 0;
+    Ptr<Node> node = m_ownerNode;
+    if (node == nullptr) {
+        return 0;
+    }
+    for (uint32_t outPort = 0; outPort < node->GetNDevices(); ++outPort) {
+        Ptr<UbPort> out = DynamicCast<UbPort>(node->GetDevice(outPort));
+        globalOccupancyBytes += GetTotalOutPortBufferUsed(outPort);
+        globalOccupancyBytes += out != nullptr ? out->GetUbQueue()->GetCurrentBytes() : 0;
+    }
+    return globalOccupancyBytes;
+}
+
+uint64_t UbQueueManager::GetIngressAdmissionThresholdBytes(uint32_t, uint32_t) const
+{
+    if (m_paperDynamicAdmissionEnabled) {
+        return GetPaperPauseThresholdBytes(GetSwitchTotalBufferedBytes());
+    }
+    return GetDynamicPauseThresholdBytes();
 }
 
 uint64_t UbQueueManager::GetQueueIngressSharedBytes(uint32_t inPort, uint32_t priority) const
@@ -423,6 +474,46 @@ uint64_t UbQueueManager::GetQueueIngressHeadroomBytes(uint32_t inPort, uint32_t 
 uint64_t UbQueueManager::GetQueueIngressTotalBytes(uint32_t inPort, uint32_t priority) const
 {
     return GetQueueIngressNonHeadroomBytes(inPort, priority) + GetQueueIngressHeadroomBytes(inPort, priority);
+}
+
+UbIngressQueueOccupancy UbQueueManager::GetIngressQueueOccupancy(uint32_t inPort, uint32_t priority) const
+{
+    return {
+        .total_bytes = GetQueueIngressTotalBytes(inPort, priority),
+        .shared_bytes = GetQueueIngressSharedBytes(inPort, priority),
+        .headroom_bytes = GetQueueIngressHeadroomBytes(inPort, priority),
+    };
+}
+
+UbIngressPortOccupancy UbQueueManager::GetIngressPortOccupancy(uint32_t inPort) const
+{
+    uint64_t nonHeadroomBytes = GetPortIngressNonHeadroomBytes(inPort);
+    uint64_t headroomBytes = 0;
+    for (uint32_t priority = 0; priority < m_vlNum; ++priority) {
+        headroomBytes += m_hdrmBytes[inPort][priority];
+    }
+    return {
+        .non_headroom_bytes = nonHeadroomBytes,
+        .headroom_bytes = headroomBytes,
+        .total_bytes = nonHeadroomBytes + headroomBytes,
+    };
+}
+
+UbSwitchBufferOccupancy UbQueueManager::GetSwitchBufferOccupancy() const
+{
+    return {
+        .shared_pool_used_bytes = m_sharedUsedBytes,
+        .total_buffered_bytes = GetSwitchTotalBufferedBytes(),
+    };
+}
+
+UbBufferProfileView UbQueueManager::GetBufferProfileView() const
+{
+    return {
+        .reserve_per_queue_bytes = m_reservePerQueueBytes,
+        .shared_pool_bytes = m_sharedPoolBytes,
+        .headroom_per_port_bytes = m_headroomPerPortBytes,
+    };
 }
 
 uint64_t UbQueueManager::GetIngressControlBytes(uint32_t inPort, uint32_t priority) const

@@ -4,6 +4,7 @@
 #include "ns3/ub-controller.h"
 #include "ns3/ub-transaction.h"
 #include "ns3/ub-caqm.h"
+#include "ns3/ub-dcqcn.h"
 #include "../ub-network-address.h"
 #include "ns3/node.h"
 #include "ns3/ub-switch.h"
@@ -50,6 +51,37 @@ uint32_t
 GetTotalProgressBytes(const Ptr<UbWqeSegment>& segment)
 {
     return segment->GetCarrierBytes() == 0 ? segment->GetSize() : segment->GetCarrierBytes();
+}
+
+void
+TraceTpDebugState(uint32_t nodeId,
+                  uint32_t tpn,
+                  const std::string& reason,
+                  uint64_t psnSndNxt,
+                  uint64_t psnSndUna,
+                  uint64_t maxInflightPackets,
+                  bool ccLimited,
+                  bool sendWindowLimited,
+                  uint32_t activeSegments,
+                  uint32_t totalSegments,
+                  uint32_t ackQueueLen,
+                  uint32_t cnpQueueLen)
+{
+    const uint64_t inflightPackets = psnSndNxt - psnSndUna;
+    utils::UbUtils::TpDebugStateNotify(nodeId,
+                                       tpn,
+                                       reason,
+                                       psnSndNxt,
+                                       psnSndUna,
+                                       inflightPackets,
+                                       maxInflightPackets,
+                                       inflightPackets >= maxInflightPackets,
+                                       ccLimited,
+                                       sendWindowLimited,
+                                       activeSegments,
+                                       totalSegments,
+                                       ackQueueLen,
+                                       cnpQueueLen);
 }
 
 } // namespace
@@ -162,6 +194,7 @@ void UbTransportChannel::DoDispose()
 {
     NS_LOG_FUNCTION(this);
     m_ackQ = queue<Ptr<Packet>>();
+    m_cnpQ = queue<Ptr<Packet>>();
     m_wqeSegmentVector.clear();
     m_inboundTaUnits.clear();
     m_bufferedInboundPackets.clear();
@@ -175,6 +208,15 @@ void UbTransportChannel::DoDispose()
  */
 Ptr<Packet> UbTransportChannel::GetNextPacket()
 {
+    if (!m_cnpQ.empty()) {
+        Ptr<Packet> p = m_cnpQ.front();
+        m_cnpQ.pop();
+        if (!IsEmpty()) {
+            m_headArrivalTime = Simulator::Now();
+        }
+        return p;
+    }
+
     // 如果有ack，先发ack
     if (!m_ackQ.empty()) {
         Ptr<Packet> p = m_ackQ.front();
@@ -187,12 +229,36 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
 
     if (m_wqeSegmentVector.empty()) {
         NS_LOG_DEBUG("No WQE segments available to send");
+        TraceTpDebugState(m_nodeId,
+                          m_tpn,
+                          "GET_NEXT_EMPTY_SEGMENTS",
+                          m_psnSndNxt,
+                          m_psnSndUna,
+                          m_maxInflightPacketSize,
+                          false,
+                          m_sendWindowLimited,
+                          GetActiveSendSegmentCount(),
+                          static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                          static_cast<uint32_t>(m_ackQ.size()),
+                          static_cast<uint32_t>(m_cnpQ.size()));
         return nullptr;
     }
 
     if (IsInflightLimited()) {
         m_sendWindowLimited = true;
         NS_LOG_DEBUG("Full Send Window");
+        TraceTpDebugState(m_nodeId,
+                          m_tpn,
+                          "GET_NEXT_INFLIGHT_LIMITED",
+                          m_psnSndNxt,
+                          m_psnSndUna,
+                          m_maxInflightPacketSize,
+                          false,
+                          m_sendWindowLimited,
+                          GetActiveSendSegmentCount(),
+                          static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                          static_cast<uint32_t>(m_ackQ.size()),
+                          static_cast<uint32_t>(m_cnpQ.size()));
         return nullptr;
     }
     for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
@@ -206,20 +272,26 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         const uint32_t wireLengthBytes = GetWireLengthBytes(currentSegment, payloadSize);
         const uint32_t totalProgressBytes = GetTotalProgressBytes(currentSegment);
 
-        // 计算剩余发送窗口，若不足以发送则返回nullptr。
-        // caqm 算法使能时返回实际剩余窗口，未开启返回uint32MAX
-        // 其余算法待拓展
-        if (m_congestionCtrl->GetCongestionAlgo() == CAQM) {
-            uint32_t rest = m_congestionCtrl->GetRestCwnd();
-            if (rest < progressBytes) {
-                return nullptr;
-            }
-            NS_LOG_DEBUG("[Caqm send][restCwnd] Rest cwnd:" << rest);
+        if (m_congestionCtrl->IsCcLimited(progressBytes)) {
+            m_sendWindowLimited = true;
+            TraceTpDebugState(m_nodeId,
+                              m_tpn,
+                              "GET_NEXT_CC_LIMITED",
+                              m_psnSndNxt,
+                              m_psnSndUna,
+                              m_maxInflightPacketSize,
+                              true,
+                              m_sendWindowLimited,
+                              GetActiveSendSegmentCount(),
+                              static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                              static_cast<uint32_t>(m_ackQ.size()),
+                              static_cast<uint32_t>(m_cnpQ.size()));
+            return nullptr;
         }
 
         Ptr<Packet> p = GenDataPacket(currentSegment, payloadSize, wireLengthBytes, progressBytes);
 
-        m_congestionCtrl->SenderUpdateCongestionCtrlData(m_psnSndNxt, progressBytes);
+        m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, progressBytes);
 
         if (currentSegment->GetBytesLeft() == totalProgressBytes) {
             // wqe segment first packet
@@ -244,6 +316,18 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
                   << " TaskId: " << currentSegment->GetTaskId());
         currentSegment->UpdateSentBytes(progressBytes);
         m_psnSndNxt++;
+        TraceTpDebugState(m_nodeId,
+                          m_tpn,
+                          "SEND_PACKET",
+                          m_psnSndNxt,
+                          m_psnSndUna,
+                          m_maxInflightPacketSize,
+                          false,
+                          m_sendWindowLimited,
+                          GetActiveSendSegmentCount(),
+                          static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                          static_cast<uint32_t>(m_ackQ.size()),
+                          static_cast<uint32_t>(m_cnpQ.size()));
         // 发送时，更新定时器时间
         if (m_isRetransEnable) {
             if (m_retransEvent.IsExpired()) {
@@ -269,6 +353,62 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
     return nullptr;
 }
 
+void
+UbTransportChannel::EnqueueDcqcnCnp(uint8_t ecn, bool location)
+{
+    Ptr<Packet> cnp = BuildDcqcnCnpForTest(ecn, location);
+
+    UbPort::AddUdpHeader(cnp, this);
+    UbPort::AddIpv4Header(cnp, this);
+
+    UbIpBasedNetworkHeader networkHeader;
+    cnp->AddHeader(networkHeader);
+
+    UbDataLink::GenPacketHeader(cnp,
+                                false,
+                                false,
+                                m_priority,
+                                m_priority,
+                                m_usePacketSpray,
+                                m_useShortestPaths,
+                                UbDatalinkHeaderConfig::PACKET_IPV4);
+
+    if (m_cnpQ.empty() && m_ackQ.empty() && m_wqeSegmentVector.empty()) {
+        m_headArrivalTime = Simulator::Now();
+    }
+    m_cnpQ.push(cnp);
+
+    Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+    if (port != nullptr) {
+        port->TriggerTransmit();
+    }
+}
+
+Ptr<Packet>
+UbTransportChannel::BuildDcqcnCnpForTest(uint8_t ecn, bool location) const
+{
+    Ptr<Packet> cnp = Create<Packet>(0);
+
+    UbCongestionExtTph cetph;
+    cetph.SetAckSequence(0);
+    cetph.SetRawBytes4to7(PackDcqcnCnpRaw(ecn, location));
+    cnp->AddHeader(cetph);
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetLastPacket(false);
+    tpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_CNP);
+    tpHeader.SetNLP(0x0);
+    tpHeader.SetSrcTpn(m_tpn);
+    tpHeader.SetDestTpn(m_dstTpn);
+    tpHeader.SetAckRequest(0);
+    tpHeader.SetErrorFlag(0);
+    tpHeader.SetPsn(0);
+    tpHeader.SetTpMsn(0);
+    cnp->AddHeader(tpHeader);
+
+    return cnp;
+}
+
 uint32_t UbTransportChannel::GetNextPacketSize()
 {
     uint32_t pktSize = 0;
@@ -289,6 +429,9 @@ uint32_t UbTransportChannel::GetNextPacketSize()
     uint32_t headerSize = MAExtTaHeaderSize + UbTransactionHeaderSize + UbTransportHeaderSize
                           + UdpHeaderSize + Ipv4HeaderSize + UbDataLinkPktSize;
 
+    if (!m_cnpQ.empty()) {
+        return m_cnpQ.front()->GetSize();
+    }
     if (!m_ackQ.empty()) {
         return m_ackQ.front()->GetSize();
     }
@@ -356,10 +499,8 @@ Ptr<Packet> UbTransportChannel::GenDataPacket(Ptr<UbWqeSegment> wqeSegment,
     // add ipv4 header
     UbPort::AddIpv4Header(p, this);
     // add network header
-    UbNetworkHeader networkHeader;
-    if (m_congestionCtrl->GetCongestionAlgo() == CAQM) {
-        networkHeader = m_congestionCtrl->SenderGenNetworkHeader();
-    }
+    UbIpBasedNetworkHeader networkHeader;
+    m_congestionCtrl->OnSenderPrepareIpBasedNetworkHeader(networkHeader);
     p->AddHeader(networkHeader);
     // add dl header
     UbDataLink::GenPacketHeader(p, false, false, m_priority, m_priority, m_usePacketSpray,
@@ -477,8 +618,17 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     UbCongestionExtTph CETPH;
     p->RemoveHeader(TpHeader); // 处理接收包信息
     p->RemoveHeader(CETPH);
+    if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP)) {
+        m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP,
+                                                         TpHeader.GetPsn(),
+                                                         CETPH);
+        NS_LOG_DEBUG("Recv TP CNP");
+        return;
+    }
     if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
-        m_congestionCtrl->SenderRecvAck(TpHeader.GetPsn(), CETPH);
+        m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
+                                                         TpHeader.GetPsn(),
+                                                         CETPH);
     }
     p->RemoveHeader(AckTaHeader); // 处理接收包信息
 
@@ -486,9 +636,12 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     if ((TpHeader.GetPsn() + 1) > m_psnSndUna) {
         m_psnSndUna = TpHeader.GetPsn() + 1;
         if (m_sendWindowLimited && IsInflightLimited() == false) {
-            m_sendWindowLimited = false;
-            Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-            port->TriggerTransmit(); // 触发发送
+            if (!m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
+                m_sendWindowLimited = false;
+                Ptr<UbPort> port =
+                    DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+                port->TriggerTransmit(); // 触发发送
+            }
         }
         NS_LOG_DEBUG("[Transport channel] Recv ack."
                   << " PacketUid: " << p->GetUid()
@@ -543,6 +696,18 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
             ++i;
         }
     }
+    TraceTpDebugState(m_nodeId,
+                      m_tpn,
+                      "RECV_ACK",
+                      m_psnSndNxt,
+                      m_psnSndUna,
+                      m_maxInflightPacketSize,
+                      m_congestionCtrl->IsCcLimited(UB_MTU_BYTE),
+                      m_sendWindowLimited,
+                      GetActiveSendSegmentCount(),
+                      static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                      static_cast<uint32_t>(m_ackQ.size()),
+                      static_cast<uint32_t>(m_cnpQ.size()));
     // tp从超过缓存限制的状态中恢复
     if (m_tpFullFlag && IsWqeSegmentLimited() == false) {
         m_tpFullFlag = false;
@@ -553,7 +718,11 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
             m_retransEvent.Cancel(); // 如果确认流都完成，取消定时器
         }
     }
-    if (m_congestionCtrl->GetCongestionAlgo() == CAQM && m_congestionCtrl->GetRestCwnd() >= UB_MTU_BYTE) {
+    const bool transportIdle = IsEmpty();
+    if (transportIdle) {
+        m_congestionCtrl->OnSenderTransportIdle();
+    }
+    if (!transportIdle && !m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
         Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
         port->TriggerTransmit(); // 触发发送
     }
@@ -586,7 +755,7 @@ void UbTransportChannel::SetUbTransport(uint32_t nodeId,
     m_sip = sip;
     m_dip = dip;
     m_congestionCtrl = congestionCtrl;
-    m_congestionCtrl->TpInit(this);
+    m_congestionCtrl->OnTpAttached(this);
     m_retransAttemptsLeft = m_maxRetransAttempts;
     m_maxQueueSize = m_defaultMaxWqeSegNum;
     m_maxInflightPacketSize = m_defaultMaxInflightPacketSize;
@@ -611,7 +780,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     UbAckTransactionHeader AckTaHeader;
     UbTransportHeader TpHeader;
     UbCongestionExtTph CETPH;
-    UbNetworkHeader NetworkHeader;
+    UbIpBasedNetworkHeader NetworkHeader;
     UdpHeader udpHeader;
     Ipv4Header ipv4Header;
     UbMAExtTah MAExtTaHeader;
@@ -696,7 +865,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             return;
         }
         // 记录包号和size
-        m_congestionCtrl->RecverRecordPacketData(psn, payloadBytes, NetworkHeader);
+        m_congestionCtrl->OnReceiverDataPacketReceived(psn, payloadBytes, NetworkHeader);
         m_bufferedInboundPackets[psn] = {TpHeader,
                                          TaHeader,
                                          logicalBytes,
@@ -745,8 +914,8 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         }
     }
     NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << (m_psnRecvNxt - 1) << " node: " << m_src);
-    TpHeader.SetTPOpcode(m_congestionCtrl->GetTpAckOpcode());
-    CETPH = m_congestionCtrl->RecverGenAckCeTphHeader(psnStart, psnEnd);
+    TpHeader.SetTPOpcode(m_congestionCtrl->GetAckOpcode());
+    CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
     TpHeader.SetPsn(m_psnRecvNxt - 1);
     TpHeader.SetSrcTpn(m_tpn);
     TpHeader.SetDestTpn(m_dstTpn);
@@ -835,7 +1004,8 @@ uint32_t UbTransportChannel::GetActiveSendSegmentCount() const
     return activeCount;
 }
 
-bool UbTransportChannel::IsWqeSegmentLimited() const
+bool
+UbTransportChannel::IsWqeSegmentLimited() const
 {
     if (GetCurrentSqSize() >= m_maxQueueSize) {
         return true;
@@ -905,6 +1075,9 @@ void UbTransportChannel::ApplyNextWqeSegment()
 
 bool UbTransportChannel::IsEmpty()
 {
+    if (!m_cnpQ.empty()) {
+        return false;
+    }
     if (!m_ackQ.empty()) {
         return false;
     }
@@ -916,6 +1089,9 @@ bool UbTransportChannel::IsEmpty()
 
 bool UbTransportChannel::IsLimited()
 {
+    if (!m_cnpQ.empty()) {
+        return false;
+    }
     if (!m_ackQ.empty()) {
         return false;
     }
@@ -924,10 +1100,9 @@ bool UbTransportChannel::IsLimited()
         NS_LOG_DEBUG("Full Send Window");
         return true;
     }
-    if (m_congestionCtrl->GetCongestionAlgo() == CAQM) {
-        if (m_congestionCtrl->GetRestCwnd() < UB_MTU_BYTE) {
-            return true;
-        }
+    if (m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
+        m_sendWindowLimited = true;
+        return true;
     }
     return false;
 }

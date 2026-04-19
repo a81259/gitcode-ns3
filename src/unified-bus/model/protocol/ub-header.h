@@ -221,10 +221,10 @@ private:
  *      字节3-5：
  *      [NPI:25] (Network Partition Identifier)
  */
-class UbNetworkHeader : public Header {
+class UbIpBasedNetworkHeader : public Header {
 public:
-    UbNetworkHeader();
-    virtual ~UbNetworkHeader();
+    UbIpBasedNetworkHeader();
+    virtual ~UbIpBasedNetworkHeader();
 
     static TypeId GetTypeId(void);
     TypeId GetInstanceTypeId(void) const override;
@@ -359,7 +359,7 @@ private:
     // Byte2-3
     uint16_t m_dcna = 0;
 
-    // Byte4-5: Congestion Control (与 UbNetworkHeader 复用结构思想)
+    // Byte4-5: Congestion Control (与 UbIpBasedNetworkHeader 复用结构思想)
     uint8_t m_mode = 0; // 3 bits
     union {
         struct {  // mode 000
@@ -463,7 +463,7 @@ private:
         // Byte3-5
         uint32_t m_dcna = 0;
     
-        // Byte6-7: Congestion Control (与 UbNetworkHeader 复用结构思想)
+        // Byte6-7: Congestion Control (与 UbIpBasedNetworkHeader 复用结构思想)
         uint8_t m_mode = 0; // 3 bits
         union {
             struct {  // mode 000

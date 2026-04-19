@@ -92,10 +92,19 @@ namespace utils {
 UbUtils::TraceFileState&
 UbUtils::GetTraceFile(const std::string& fileName)
 {
+    namespace fs = std::filesystem;
+
     std::lock_guard<std::mutex> filesGuard(files_mutex);
     auto [it, inserted] = files.try_emplace(fileName);
     if (inserted)
     {
+        std::error_code ec;
+        const fs::path parent = fs::path(fileName).parent_path();
+        if (!parent.empty())
+        {
+            fs::create_directories(parent, ec);
+            NS_ASSERT_MSG(!ec, "Failed to create trace parent dir: " << parent << " err=" << ec.message());
+        }
         it->second.stream.open(fileName.c_str(), std::ios::out | std::ios::app);
         NS_ASSERT_MSG(it->second.stream.is_open(), "Can not open File: " << fileName);
         it->second.pending.reserve(TRACE_FLUSH_THRESHOLD_BYTES);
@@ -114,6 +123,49 @@ UbUtils::FlushTraceFile(TraceFileState& fileState)
     fileState.stream.write(fileState.pending.data(),
                            static_cast<std::streamsize>(fileState.pending.size()));
     fileState.pending.clear();
+}
+
+bool
+UbUtils::IsTraceEnabled()
+{
+    BooleanValue enabled;
+    if (!GlobalValue::GetValueByNameFailSafe("UB_TRACE_ENABLE", enabled))
+    {
+        return false;
+    }
+    return enabled.Get();
+}
+
+bool
+UbUtils::IsFlowControlTraceEnabled()
+{
+    if (!IsTraceEnabled())
+    {
+        return false;
+    }
+
+    BooleanValue enabled;
+    if (!GlobalValue::GetValueByNameFailSafe("UB_FLOW_CONTROL_TRACE_ENABLE", enabled))
+    {
+        return false;
+    }
+    return enabled.Get();
+}
+
+bool
+UbUtils::IsCongestionControlTraceEnabled()
+{
+    if (!IsTraceEnabled())
+    {
+        return false;
+    }
+
+    BooleanValue enabled;
+    if (!GlobalValue::GetValueByNameFailSafe("UB_CONGESTION_CONTROL_TRACE_ENABLE", enabled))
+    {
+        return false;
+    }
+    return enabled.Get();
 }
 
 uint32_t
@@ -144,6 +196,39 @@ UbUtils::IsFaultEnabled() const
     BooleanValue faultEnabled;
     g_fault_enable.GetValue(faultEnabled);
     return faultEnabled.Get();
+}
+
+void
+UbUtils::ResetRuntimeDropDiagnostics()
+{
+    std::lock_guard<std::mutex> guard(runtime_drop_mutex);
+    runtime_packet_drop_count = 0;
+    runtime_packet_drop_reason.clear();
+}
+
+void
+UbUtils::RecordRuntimePacketDrop(const std::string& reason)
+{
+    std::lock_guard<std::mutex> guard(runtime_drop_mutex);
+    ++runtime_packet_drop_count;
+    if (runtime_packet_drop_reason.empty())
+    {
+        runtime_packet_drop_reason = reason;
+    }
+}
+
+uint64_t
+UbUtils::GetRuntimePacketDropCount()
+{
+    std::lock_guard<std::mutex> guard(runtime_drop_mutex);
+    return runtime_packet_drop_count;
+}
+
+std::string
+UbUtils::GetRuntimePacketDropReason()
+{
+    std::lock_guard<std::mutex> guard(runtime_drop_mutex);
+    return runtime_packet_drop_reason;
 }
 
 void UbUtils::PrintTimestamp(const std::string &message)
@@ -183,6 +268,13 @@ void UbUtils::ParseTrace(bool isTest)
 
 void UbUtils::Destroy()
 {
+    for (auto& event : queue_sampler_events)
+    {
+        event.Cancel();
+    }
+    queue_sampler_events.clear();
+    queue_sampler_started = false;
+
     std::lock_guard<std::mutex> filesGuard(files_mutex);
     for (auto& pair : files) {
         std::lock_guard<std::mutex> fileGuard(pair.second.mutex);
@@ -233,10 +325,119 @@ std::string UbUtils::PrepareTraceDir(const std::string &configPath)
     return dirPath;
 }
 
+void
+UbUtils::SetTracePathForTest(const std::string& tracePath)
+{
+    trace_path = tracePath;
+    if (!trace_path.empty() && trace_path.back() != std::filesystem::path::preferred_separator)
+    {
+        trace_path.push_back(std::filesystem::path::preferred_separator);
+    }
+}
+
 void UbUtils::CreateTraceDir()
 {
+    ResetRuntimeDropDiagnostics();
     trace_path = PrepareTraceDir(g_config_path);
+    queue_sampler_started = false;
+    queue_sampler_events.clear();
     PrintTimestamp("[setup] Prepare runlog directory: " + trace_path + "runlog");
+}
+
+void
+UbUtils::QueueSampleNotify(uint32_t nodeId, uint32_t portId)
+{
+    if (trace_path.empty())
+    {
+        return;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    if (node == nullptr)
+    {
+        return;
+    }
+
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(portId));
+    Ptr<UbSwitch> sw = node->GetObject<UbSwitch>();
+    if (port == nullptr || sw == nullptr)
+    {
+        return;
+    }
+
+    const uint64_t voqBytes = sw->GetQueueManager()->GetTotalOutPortBufferUsed(portId);
+    const uint64_t egressBytes = port->GetUbQueue()->GetCurrentBytes();
+    const uint64_t totalBytes = voqBytes + egressBytes;
+
+    std::ostringstream oss;
+    oss << "Queue Update, source: SAMPLE"
+        << " voqBytes: " << voqBytes
+        << " egressBytes: " << egressBytes
+        << " totalBytes: " << totalBytes;
+    const std::string fileName =
+        trace_path + "runlog/QueueTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, oss.str());
+}
+
+void
+UbUtils::QueueSampleTick(uint32_t nodeId, uint32_t portId, uint32_t intervalNs)
+{
+    QueueSampleNotify(nodeId, portId);
+    queue_sampler_events.push_back(
+        Simulator::Schedule(NanoSeconds(intervalNs),
+                            &UbUtils::QueueSampleTick,
+                            nodeId,
+                            portId,
+                            intervalNs));
+}
+
+void
+UbUtils::StartQueueSampler()
+{
+    if (queue_sampler_started)
+    {
+        return;
+    }
+
+    UintegerValue intervalValue;
+    g_queue_sample_interval.GetValue(intervalValue);
+    const uint32_t intervalNs = intervalValue.Get();
+    if (intervalNs == 0)
+    {
+        return;
+    }
+
+    const Time interval = NanoSeconds(intervalNs);
+    for (uint32_t nodeId = 0; nodeId < NodeList::GetNNodes(); ++nodeId)
+    {
+        Ptr<Node> node = NodeList::GetNode(nodeId);
+        if (node == nullptr)
+        {
+            continue;
+        }
+        Ptr<UbSwitch> sw = node->GetObject<UbSwitch>();
+        if (sw == nullptr)
+        {
+            continue;
+        }
+        const uint32_t devicesNum = node->GetNDevices();
+        for (uint32_t portId = 0; portId < devicesNum; ++portId)
+        {
+            Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(portId));
+            if (port == nullptr)
+            {
+                continue;
+            }
+            queue_sampler_events.push_back(
+                Simulator::Schedule(interval,
+                                    &UbUtils::QueueSampleTick,
+                                    nodeId,
+                                    portId,
+                                    intervalNs));
+        }
+    }
+
+    queue_sampler_started = true;
 }
 
 void UbUtils::PrintTraceInfo(const string& fileName, const string& info)
@@ -508,6 +709,316 @@ inline void UbUtils::PortRxNotify(uint32_t nodeId, uint32_t portId, uint32_t siz
     PrintTraceInfo(fileName, info);
 }
 
+void UbUtils::PfcStateNotify(uint32_t nodeId,
+                             uint32_t portId,
+                             const std::string& action,
+                             uint32_t priority,
+                             uint64_t ingressBytes)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "PFC " << action
+        << ", priority: " << priority
+        << " ingressBytes: " << ingressBytes;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/PfcTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::PfcDynamicStateNotify(uint32_t nodeId,
+                                    uint32_t portId,
+                                    uint32_t priority,
+                                    uint64_t ingressTotalBytes,
+                                    uint64_t sharedUsedBytes,
+                                    uint64_t headroomUsedBytes,
+                                    uint64_t xoffBytes,
+                                    uint64_t xonBytes,
+                                    bool pause)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "PFC_DYNAMIC " << (pause ? "PAUSE" : "RESUME")
+        << ", priority: " << priority
+        << " ingressTotalBytes: " << ingressTotalBytes
+        << " sharedUsedBytes: " << sharedUsedBytes
+        << " headroomUsedBytes: " << headroomUsedBytes
+        << " xoffBytes: " << xoffBytes
+        << " xonBytes: " << xonBytes;
+    string info = oss.str();
+    string fileName =
+        trace_path + "runlog/PfcDynamicTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::CbfcStateNotify(uint32_t nodeId,
+                              uint32_t portId,
+                              const std::string& action,
+                              uint32_t priority,
+                              int32_t availableCredits,
+                              uint32_t nextPacketBytes)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CBFC " << action
+        << ", priority: " << priority
+        << " availableCredits: " << availableCredits
+        << " nextPacketBytes: " << nextPacketBytes;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/CbfcTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::CbfcCreditRestoreTraceNotify(uint32_t nodeId,
+                                           uint32_t portId,
+                                           const std::vector<uint8_t>& credits)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CBFC CREDIT_RESTORE";
+    for (size_t i = 0; i < credits.size(); ++i)
+    {
+        oss << (i == 0 ? ", credits:" : " ") << static_cast<uint32_t>(credits[i]);
+    }
+    string info = oss.str();
+    string fileName = trace_path + "runlog/CbfcTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::CbfcCreditLevelNotify(uint32_t nodeId,
+                                    uint32_t portId,
+                                    const std::string& reason,
+                                    uint32_t priority,
+                                    int32_t availableCredits,
+                                    int32_t deltaCredits)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CBFC CREDIT_LEVEL"
+        << ", reason: " << reason
+        << " priority: " << priority
+        << " availableCredits: " << availableCredits
+        << " deltaCredits: " << deltaCredits;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/CbfcTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::DcqcnMarkNotify(uint32_t nodeId,
+                              uint32_t outPort,
+                              uint64_t totalQueueBytes,
+                              double markProbability)
+{
+    if (trace_path.empty() || !IsCongestionControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(6)
+        << "DCQCN MARK, outPort: " << outPort
+        << " totalQueueBytes: " << totalQueueBytes
+        << " markProbability: " << markProbability;
+    string info = oss.str();
+    string fileName =
+        trace_path + "runlog/DcqcnMarkTrace_node_" + to_string(nodeId) + "_port_" + to_string(outPort) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::DcqcnCnpNotify(uint32_t nodeId,
+                             uint32_t tpn,
+                             const std::string& action,
+                             uint8_t ecn,
+                             bool location)
+{
+    if (trace_path.empty() || !IsCongestionControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "DCQCN CNP " << action
+        << ", ecn: " << static_cast<uint32_t>(ecn)
+        << " location: " << static_cast<uint32_t>(location);
+    string info = oss.str();
+    string fileName = trace_path + "runlog/DcqcnCnpTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void UbUtils::DcqcnSenderStateNotify(uint32_t nodeId,
+                                     uint32_t tpn,
+                                     const std::string& reason,
+                                     double alpha,
+                                     uint64_t currentRateBps,
+                                     uint64_t targetRateBps,
+                                     uint64_t bytesSinceLastIncrease,
+                                     uint32_t timeRecoveryEvents,
+                                     uint32_t byteRecoveryEvents)
+{
+    if (trace_path.empty() || !IsCongestionControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(6)
+        << "DCQCN SENDER " << reason
+        << ", alpha: " << alpha
+        << " currentRateBps: " << currentRateBps
+        << " targetRateBps: " << targetRateBps
+        << " bytesSinceLastIncrease: " << bytesSinceLastIncrease
+        << " timeRecoveryEvents: " << timeRecoveryEvents
+        << " byteRecoveryEvents: " << byteRecoveryEvents;
+    string info = oss.str();
+    string fileName =
+        trace_path + "runlog/DcqcnSenderTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+bool UbUtils::IsTpDebugEnabledFor(uint32_t nodeId, uint32_t tpn)
+{
+    BooleanValue enabledValue;
+    if (!GlobalValue::GetValueByNameFailSafe("UB_TP_DEBUG_ENABLE", enabledValue) || !enabledValue.Get())
+    {
+        return false;
+    }
+
+    UintegerValue debugNodeIdValue;
+    UintegerValue debugTpnValue;
+    UintegerValue debugStartNsValue;
+    UintegerValue debugEndNsValue;
+    GlobalValue::GetValueByName("UB_TP_DEBUG_NODE_ID", debugNodeIdValue);
+    GlobalValue::GetValueByName("UB_TP_DEBUG_TPN", debugTpnValue);
+    GlobalValue::GetValueByName("UB_TP_DEBUG_START_NS", debugStartNsValue);
+    GlobalValue::GetValueByName("UB_TP_DEBUG_END_NS", debugEndNsValue);
+
+    if (nodeId != debugNodeIdValue.Get() || tpn != debugTpnValue.Get())
+    {
+        return false;
+    }
+
+    const uint64_t nowNs = static_cast<uint64_t>(Simulator::Now().GetNanoSeconds());
+    if (nowNs < debugStartNsValue.Get())
+    {
+        return false;
+    }
+    const uint32_t endNs = debugEndNsValue.Get();
+    if (endNs != 0 && nowNs > endNs)
+    {
+        return false;
+    }
+    return !trace_path.empty();
+}
+
+void UbUtils::TpDebugStateNotify(uint32_t nodeId,
+                                 uint32_t tpn,
+                                 const std::string& reason,
+                                 uint64_t psnSndNxt,
+                                 uint64_t psnSndUna,
+                                 uint64_t inflightPackets,
+                                 uint64_t maxInflightPackets,
+                                 bool inflightLimited,
+                                 bool ccLimited,
+                                 bool sendWindowLimited,
+                                 uint32_t activeSegments,
+                                 uint32_t totalSegments,
+                                 uint32_t ackQueueLen,
+                                 uint32_t cnpQueueLen)
+{
+    if (!IsTpDebugEnabledFor(nodeId, tpn))
+    {
+        return;
+    }
+
+    std::ostringstream oss;
+    oss << "TP DEBUG " << reason
+        << " psnSndNxt: " << psnSndNxt
+        << " psnSndUna: " << psnSndUna
+        << " inflightPackets: " << inflightPackets
+        << " maxInflightPackets: " << maxInflightPackets
+        << " inflightLimited: " << static_cast<uint32_t>(inflightLimited)
+        << " ccLimited: " << static_cast<uint32_t>(ccLimited)
+        << " sendWindowLimited: " << static_cast<uint32_t>(sendWindowLimited)
+        << " activeSegments: " << activeSegments
+        << " totalSegments: " << totalSegments
+        << " ackQueueLen: " << ackQueueLen
+        << " cnpQueueLen: " << cnpQueueLen;
+    const string info = oss.str();
+    const string fileName =
+        trace_path + "runlog/TpDebugTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+inline void UbUtils::QueueVoqNotify(uint32_t nodeId, uint32_t portId, uint64_t voqBytes)
+{
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    Ptr<UbPort> port = node != nullptr ? DynamicCast<UbPort>(node->GetDevice(portId)) : nullptr;
+    const uint64_t egressBytes = port != nullptr ? port->GetUbQueue()->GetCurrentBytes() : 0;
+    const uint64_t totalBytes = voqBytes + egressBytes;
+
+    std::ostringstream oss;
+    oss << "Queue Update, source: VOQ"
+        << " voqBytes: " << voqBytes
+        << " egressBytes: " << egressBytes
+        << " totalBytes: " << totalBytes;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/QueueTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+inline void UbUtils::QueueEgressEnqueueNotify(uint32_t nodeId,
+                                              uint32_t portId,
+                                              Ptr<const Packet> packet,
+                                              uint32_t egressBytes)
+{
+    (void)packet;
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    Ptr<UbSwitch> sw = node != nullptr ? node->GetObject<UbSwitch>() : nullptr;
+    const uint64_t voqBytes = sw != nullptr ? sw->GetQueueManager()->GetTotalOutPortBufferUsed(portId) : 0;
+    const uint64_t totalBytes = voqBytes + egressBytes;
+
+    std::ostringstream oss;
+    oss << "Queue Update, source: EGRESS_ENQUEUE"
+        << " voqBytes: " << voqBytes
+        << " egressBytes: " << egressBytes
+        << " totalBytes: " << totalBytes;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/QueueTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+inline void UbUtils::QueueEgressDequeueNotify(uint32_t nodeId,
+                                              uint32_t portId,
+                                              Ptr<const Packet> packet,
+                                              uint32_t egressBytes)
+{
+    (void)packet;
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    Ptr<UbSwitch> sw = node != nullptr ? node->GetObject<UbSwitch>() : nullptr;
+    const uint64_t voqBytes = sw != nullptr ? sw->GetQueueManager()->GetTotalOutPortBufferUsed(portId) : 0;
+    const uint64_t totalBytes = voqBytes + egressBytes;
+
+    std::ostringstream oss;
+    oss << "Queue Update, source: EGRESS_DEQUEUE"
+        << " voqBytes: " << voqBytes
+        << " egressBytes: " << egressBytes
+        << " totalBytes: " << totalBytes;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/QueueTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
 inline void UbUtils::LdstThreadMemTaskStartsNotify(uint32_t nodeId, uint32_t memTaskId)
 {
     string info = "Mem Task Starts,taskId: " + std::to_string(memTaskId);
@@ -713,7 +1224,7 @@ void UbUtils::CreateNode(const string &filename)
         }
         sw->Init();
         auto cc = UbCongestionControl::Create(UB_SWITCH);
-        cc->SwitchInit(sw);
+        cc->OnSwitchAttached(sw);
         if (!forwardDelay.empty()) {
             auto allocator = sw->GetAllocator();
             allocator->SetAttribute("AllocationTime", StringValue(forwardDelay));
@@ -1002,6 +1513,18 @@ void UbUtils::TopoTraceConnect()
     g_record_pkt_trace_enable.GetValue(val);
     RecordTraceEnabled = val.Get();
 
+    bool flowControlTraceEnabled = false;
+    if (GlobalValue::GetValueByNameFailSafe("UB_FLOW_CONTROL_TRACE_ENABLE", val))
+    {
+        flowControlTraceEnabled = val.Get();
+    }
+
+    bool congestionControlTraceEnabled = false;
+    if (GlobalValue::GetValueByNameFailSafe("UB_CONGESTION_CONTROL_TRACE_ENABLE", val))
+    {
+        congestionControlTraceEnabled = val.Get();
+    }
+
     NS_LOG_UNCOND("--- UnifiedBus Trace System Configuration ---");
     NS_LOG_UNCOND("UB_TRACE_ENABLE: " << (TraceEnable ? "ON" : "OFF"));
     if (TraceEnable) {
@@ -1009,6 +1532,12 @@ void UbUtils::TopoTraceConnect()
         NS_LOG_UNCOND("  UB_PACKET_TRACE_ENABLE: " << (PacketTraceEnable ? "ON" : "OFF") << "  (Packet Send/ACK timestamps, essential for detailed task latency breakdown)");
         NS_LOG_UNCOND("  UB_PORT_TRACE_ENABLE:   " << (PortTraceEnable ? "ON" : "OFF") << "  (All port traffic, high volume, for throughput)");
         NS_LOG_UNCOND("  UB_RECORD_PKT_TRACE:    " << (RecordTraceEnabled ? "ON" : "OFF") << "  (Per-hop packet path tracking)");
+        NS_LOG_UNCOND("  UB_FLOW_CONTROL_TRACE_ENABLE: "
+                      << (flowControlTraceEnabled ? "ON" : "OFF")
+                      << "  (Algorithm-emitted PFC/CBFC trace files)");
+        NS_LOG_UNCOND("  UB_CONGESTION_CONTROL_TRACE_ENABLE: "
+                      << (congestionControlTraceEnabled ? "ON" : "OFF")
+                      << "  (Algorithm-emitted DCQCN/CAQM trace files)");
     }
     NS_LOG_UNCOND("-------------------------------------------");
 
@@ -1065,12 +1594,26 @@ void UbUtils::TopoTraceConnect()
                 if (port) {
                     port->TraceConnectWithoutContext("PortTxNotify", MakeCallback(PortTxNotify));
                     port->TraceConnectWithoutContext("PortRxNotify", MakeCallback(PortRxNotify));
+                    port->GetUbQueue()->TraceConnectWithoutContext(
+                        "UbEnqueue",
+                        MakeBoundCallback(&UbUtils::QueueEgressEnqueueNotify, node->GetId(), i));
+                    port->GetUbQueue()->TraceConnectWithoutContext(
+                        "UbDequeue",
+                        MakeBoundCallback(&UbUtils::QueueEgressDequeueNotify, node->GetId(), i));
                 } else {
                     NS_ASSERT_MSG(0, "port is null");
                 }
             }
         }
+
+        if (sw != nullptr) {
+            sw->GetQueueManager()->TraceConnectWithoutContext(
+                "OutPortBufferBytes",
+                MakeBoundCallback(&UbUtils::QueueVoqNotify, node->GetId()));
+        }
     }
+
+    StartQueueSampler();
 }
 
 void UbUtils::SingleTpTraceConnect(uint32_t nodeId, uint32_t tpn)
