@@ -11,7 +11,7 @@ class OpenUSimRunScriptsTest(unittest.TestCase):
         return {
             "source_root": "scratch/ub-quick-example",
             "extractor_version": "test",
-            "entry_count": 3,
+            "entry_count": 4,
             "entries": [
                 {
                     "parameter_key": "ns3::UbPort::UbDataRate",
@@ -25,6 +25,16 @@ class OpenUSimRunScriptsTest(unittest.TestCase):
                 },
                 {
                     "parameter_key": "UB_TRACE_ENABLE",
+                    "kind": "GlobalValue",
+                    "value_type": "runtime-unavailable",
+                    "default_value": "false",
+                    "module": "GlobalValue",
+                    "category": "trace",
+                    "safety_sensitivity": "low",
+                    "tuning_stage": "instrumentation",
+                },
+                {
+                    "parameter_key": "UB_QUEUE_TRACE_ENABLE",
                     "kind": "GlobalValue",
                     "value_type": "runtime-unavailable",
                     "default_value": "false",
@@ -78,16 +88,19 @@ class OpenUSimRunScriptsTest(unittest.TestCase):
         overrides = network_attribute_writer.observability_preset("minimal")
         self.assertEqual(overrides["UB_PACKET_TRACE_ENABLE"], "false")
         self.assertEqual(overrides["UB_PORT_TRACE_ENABLE"], "false")
+        self.assertEqual(overrides["UB_QUEUE_TRACE_ENABLE"], "false")
         self.assertEqual(overrides["UB_RECORD_PKT_TRACE"], "false")
 
     def test_observability_preset_balanced_enables_packet_and_port(self):
         overrides = network_attribute_writer.observability_preset("balanced")
         self.assertEqual(overrides["UB_PACKET_TRACE_ENABLE"], "true")
         self.assertEqual(overrides["UB_PORT_TRACE_ENABLE"], "true")
+        self.assertEqual(overrides["UB_QUEUE_TRACE_ENABLE"], "true")
         self.assertEqual(overrides["UB_RECORD_PKT_TRACE"], "false")
 
     def test_observability_preset_detailed_enables_all(self):
         overrides = network_attribute_writer.observability_preset("detailed")
+        self.assertEqual(overrides["UB_QUEUE_TRACE_ENABLE"], "true")
         self.assertEqual(overrides["UB_RECORD_PKT_TRACE"], "true")
 
     def test_observability_preset_rejects_unknown_tier(self):

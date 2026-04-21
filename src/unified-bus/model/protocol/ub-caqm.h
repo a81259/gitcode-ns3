@@ -52,6 +52,9 @@ public:
     ~UbHostCaqm() override;
     static TypeId GetTypeId(void);
 
+    Time GetRttForTest() const { return m_rtt; }
+    void ApplyRttSampleForTest(Time sample);
+
     // 初始化
     void OnTpAttached(Ptr<UbTransportChannel> tp) override;
 
@@ -81,6 +84,7 @@ public:
 
 private:
     void StateReset();
+    void UpdateRttEstimate(Time sample);
 
     void DoDispose() override;
 
@@ -109,6 +113,7 @@ private:
     std::unordered_map<uint32_t, Time> m_psnSendTimeMap;
 
     Time m_rtt = NanoSeconds(0);
+    double m_rttEwmaGain = 0.125;
     EventId m_congestionStateResetEvent{};
 
     uint16_t m_HintE = 0;           // 聚合hint

@@ -138,11 +138,31 @@ public:
                                        uint32_t timeRecoveryEvents,
                                        uint32_t byteRecoveryEvents);
 
+    static void CaqmAckNotify(uint32_t nodeId,
+                              uint32_t tpn,
+                              uint32_t psnStart,
+                              uint32_t psnEnd,
+                              uint8_t cE,
+                              uint8_t iE,
+                              uint16_t hintE);
+
+    static void CaqmSenderStateNotify(uint32_t nodeId,
+                                      uint32_t tpn,
+                                      uint32_t psn,
+                                      uint32_t sequence,
+                                      uint32_t inFlight,
+                                      uint32_t cwnd,
+                                      uint8_t cE,
+                                      bool iE,
+                                      uint16_t hint);
+
     static bool IsTraceEnabled();
 
     static bool IsFlowControlTraceEnabled();
 
     static bool IsCongestionControlTraceEnabled();
+
+    static bool IsQueueTraceEnabled();
 
     static bool IsTpDebugEnabledFor(uint32_t nodeId, uint32_t tpn);
 
@@ -278,6 +298,12 @@ private:
     ns3::GlobalValue g_congestion_control_trace_enable =
     ns3::GlobalValue("UB_CONGESTION_CONTROL_TRACE_ENABLE",
                      "Enable algorithm-emitted congestion-control traces such as DCQCN/CAQM trace files.",
+                     ns3::BooleanValue(false),
+                     ns3::MakeBooleanChecker());
+
+    ns3::GlobalValue g_queue_trace_enable =
+    ns3::GlobalValue("UB_QUEUE_TRACE_ENABLE",
+                     "Enable queue trace files such as QueueTrace_* from event-driven updates and sampling.",
                      ns3::BooleanValue(false),
                      ns3::MakeBooleanChecker());
 

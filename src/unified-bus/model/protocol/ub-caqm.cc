@@ -100,6 +100,11 @@ TypeId UbHostCaqm::GetTypeId(void)
         TypeId("ns3::UbHostCaqm")
             .SetParent<ns3::UbCaqm>()
             .AddConstructor<UbHostCaqm>()
+            .AddAttribute("RttEwmaGain",
+                          "EWMA gain used by host-side CAQM runtime RTT estimate.",
+                          DoubleValue(0.125),
+                          MakeDoubleAccessor(&UbHostCaqm::m_rttEwmaGain),
+                          MakeDoubleChecker<double>(0.0, 1.0))
             .AddAttribute("UbCaqmCwnd",
                           "Initial congestion window size in bytes for host-side CAQM.",
                           UintegerValue(10 * UB_MTU_BYTE),
@@ -123,6 +128,26 @@ void UbHostCaqm::OnTpAttached(Ptr<UbTransportChannel> tp)
     m_src = tp->GetSrc();
     m_dst = tp->GetDest();
     m_tpn = tp->GetTpn();
+}
+
+void UbHostCaqm::UpdateRttEstimate(Time sample)
+{
+    if (sample <= NanoSeconds(0)) {
+        return;
+    }
+    if (m_rtt == NanoSeconds(0)) {
+        m_rtt = sample;
+        return;
+    }
+    const double currentNs = static_cast<double>(m_rtt.GetNanoSeconds());
+    const double sampleNs = static_cast<double>(sample.GetNanoSeconds());
+    const double ewmaNs = (1.0 - m_rttEwmaGain) * currentNs + m_rttEwmaGain * sampleNs;
+    m_rtt = NanoSeconds(static_cast<int64_t>(ewmaNs + 0.5));
+}
+
+void UbHostCaqm::ApplyRttSampleForTest(Time sample)
+{
+    UpdateRttEstimate(sample);
 }
 
 // 获取剩余窗口
@@ -278,6 +303,7 @@ UbCongestionExtTph UbHostCaqm::OnReceiverPrepareAckCongestionHeader(uint32_t psn
         cetph.SetC(m_CE);
         cetph.SetI(m_IE);
         cetph.SetHint(m_HintE);
+        utils::UbUtils::CaqmAckNotify(m_src, m_tpn, psnStart, psnEnd, m_CE, m_IE, m_HintE);
         m_CE = 0;
         m_IE = 0;
         m_HintE = 0;
@@ -300,8 +326,9 @@ void UbHostCaqm::OnSenderCongestionNotification(TpOpcode opcode,
         return;
     }
     if (m_congestionCtrlEnabled) {
-        if (Simulator::Now() - m_psnSendTimeMap[psn] < m_rtt || m_rtt == NanoSeconds(0)) {
-            m_rtt = Simulator::Now() - m_psnSendTimeMap[psn];
+        const auto sentIt = m_psnSendTimeMap.find(psn);
+        if (sentIt != m_psnSendTimeMap.end()) {
+            UpdateRttEstimate(Simulator::Now() - sentIt->second);
         }
         uint32_t sequence = header.GetAckSequence();
         if (sequence < m_lastSequence && m_lastSequence > DATA_BYTE_RECVD_RESET_NUM) {
@@ -326,6 +353,7 @@ void UbHostCaqm::OnSenderCongestionNotification(TpOpcode opcode,
                   << " C_E:" << (int)c_e
                   << " I_E:" << (int)i_e
                   << " Hint_e:" << (int)hint);
+        utils::UbUtils::CaqmSenderStateNotify(m_src, m_tpn, psn, sequence, m_inFlight, m_cwnd, c_e, i_e, hint);
         // 收到拥塞或者拒绝增窗反馈，切换至拥塞避免阶段。
         // 同时重启定时器，一段时间后若仍没有收到含有阻塞或拒绝增窗的ack，则切换到慢启动阶段，
         if (c_e > 0 || i_e == 0) {

@@ -168,6 +168,22 @@ UbUtils::IsCongestionControlTraceEnabled()
     return enabled.Get();
 }
 
+bool
+UbUtils::IsQueueTraceEnabled()
+{
+    if (!IsTraceEnabled())
+    {
+        return false;
+    }
+
+    BooleanValue enabled;
+    if (!GlobalValue::GetValueByNameFailSafe("UB_QUEUE_TRACE_ENABLE", enabled))
+    {
+        return false;
+    }
+    return enabled.Get();
+}
+
 uint32_t
 UbUtils::ExtractMpiRank(uint32_t systemId)
 {
@@ -347,7 +363,7 @@ void UbUtils::CreateTraceDir()
 void
 UbUtils::QueueSampleNotify(uint32_t nodeId, uint32_t portId)
 {
-    if (trace_path.empty())
+    if (trace_path.empty() || !IsQueueTraceEnabled())
     {
         return;
     }
@@ -394,6 +410,11 @@ UbUtils::QueueSampleTick(uint32_t nodeId, uint32_t portId, uint32_t intervalNs)
 void
 UbUtils::StartQueueSampler()
 {
+    if (!IsQueueTraceEnabled())
+    {
+        return;
+    }
+
     if (queue_sampler_started)
     {
         return;
@@ -883,6 +904,69 @@ void UbUtils::DcqcnSenderStateNotify(uint32_t nodeId,
     string info = oss.str();
     string fileName =
         trace_path + "runlog/DcqcnSenderTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void
+UbUtils::CaqmAckNotify(uint32_t nodeId,
+                       uint32_t tpn,
+                       uint32_t psnStart,
+                       uint32_t psnEnd,
+                       uint8_t cE,
+                       uint8_t iE,
+                       uint16_t hintE)
+{
+    if (trace_path.empty() || !IsCongestionControlTraceEnabled())
+    {
+        return;
+    }
+    if (cE == 0 && iE == 0 && hintE == 0)
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CAQM ACK"
+        << ", psnStart: " << psnStart
+        << " psnEnd: " << psnEnd
+        << " cE: " << static_cast<uint32_t>(cE)
+        << " iE: " << static_cast<uint32_t>(iE)
+        << " hintE: " << hintE;
+    string info = oss.str();
+    string fileName = trace_path + "runlog/CaqmAckTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+void
+UbUtils::CaqmSenderStateNotify(uint32_t nodeId,
+                               uint32_t tpn,
+                               uint32_t psn,
+                               uint32_t sequence,
+                               uint32_t inFlight,
+                               uint32_t cwnd,
+                               uint8_t cE,
+                               bool iE,
+                               uint16_t hint)
+{
+    if (trace_path.empty() || !IsCongestionControlTraceEnabled())
+    {
+        return;
+    }
+    if (cE == 0 && iE && hint == 0)
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CAQM SENDER"
+        << ", psn: " << psn
+        << " sequence: " << sequence
+        << " inFlight: " << inFlight
+        << " cwnd: " << cwnd
+        << " cE: " << static_cast<uint32_t>(cE)
+        << " iE: " << static_cast<uint32_t>(iE)
+        << " hint: " << hint;
+    string info = oss.str();
+    string fileName =
+        trace_path + "runlog/CaqmSenderTrace_node_" + to_string(nodeId) + "_tpn_" + to_string(tpn) + ".tr";
     PrintTraceInfo(fileName, info);
 }
 
@@ -1513,6 +1597,12 @@ void UbUtils::TopoTraceConnect()
     g_record_pkt_trace_enable.GetValue(val);
     RecordTraceEnabled = val.Get();
 
+    bool queueTraceEnabled = false;
+    if (GlobalValue::GetValueByNameFailSafe("UB_QUEUE_TRACE_ENABLE", val))
+    {
+        queueTraceEnabled = val.Get();
+    }
+
     bool flowControlTraceEnabled = false;
     if (GlobalValue::GetValueByNameFailSafe("UB_FLOW_CONTROL_TRACE_ENABLE", val))
     {
@@ -1532,6 +1622,9 @@ void UbUtils::TopoTraceConnect()
         NS_LOG_UNCOND("  UB_PACKET_TRACE_ENABLE: " << (PacketTraceEnable ? "ON" : "OFF") << "  (Packet Send/ACK timestamps, essential for detailed task latency breakdown)");
         NS_LOG_UNCOND("  UB_PORT_TRACE_ENABLE:   " << (PortTraceEnable ? "ON" : "OFF") << "  (All port traffic, high volume, for throughput)");
         NS_LOG_UNCOND("  UB_RECORD_PKT_TRACE:    " << (RecordTraceEnabled ? "ON" : "OFF") << "  (Per-hop packet path tracking)");
+        NS_LOG_UNCOND("  UB_QUEUE_TRACE_ENABLE:  "
+                      << (queueTraceEnabled ? "ON" : "OFF")
+                      << "  (QueueTrace_* files from queue events and periodic sampling)");
         NS_LOG_UNCOND("  UB_FLOW_CONTROL_TRACE_ENABLE: "
                       << (flowControlTraceEnabled ? "ON" : "OFF")
                       << "  (Algorithm-emitted PFC/CBFC trace files)");
@@ -1594,19 +1687,21 @@ void UbUtils::TopoTraceConnect()
                 if (port) {
                     port->TraceConnectWithoutContext("PortTxNotify", MakeCallback(PortTxNotify));
                     port->TraceConnectWithoutContext("PortRxNotify", MakeCallback(PortRxNotify));
-                    port->GetUbQueue()->TraceConnectWithoutContext(
-                        "UbEnqueue",
-                        MakeBoundCallback(&UbUtils::QueueEgressEnqueueNotify, node->GetId(), i));
-                    port->GetUbQueue()->TraceConnectWithoutContext(
-                        "UbDequeue",
-                        MakeBoundCallback(&UbUtils::QueueEgressDequeueNotify, node->GetId(), i));
+                    if (queueTraceEnabled) {
+                        port->GetUbQueue()->TraceConnectWithoutContext(
+                            "UbEnqueue",
+                            MakeBoundCallback(&UbUtils::QueueEgressEnqueueNotify, node->GetId(), i));
+                        port->GetUbQueue()->TraceConnectWithoutContext(
+                            "UbDequeue",
+                            MakeBoundCallback(&UbUtils::QueueEgressDequeueNotify, node->GetId(), i));
+                    }
                 } else {
                     NS_ASSERT_MSG(0, "port is null");
                 }
             }
         }
 
-        if (sw != nullptr) {
+        if (sw != nullptr && queueTraceEnabled) {
             sw->GetQueueManager()->TraceConnectWithoutContext(
                 "OutPortBufferBytes",
                 MakeBoundCallback(&UbUtils::QueueVoqNotify, node->GetId()));

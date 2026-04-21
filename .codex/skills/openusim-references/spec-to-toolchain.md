@@ -218,6 +218,16 @@ The skill-layer toolchain validates **parameter keys** (whether a key exists in 
 
 #### Discovering valid values
 
+Current examples from this repo's source of truth:
+
+- `ns3::UbSwitch::FlowControl`: `NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`, `PFC_DYNAMIC_PAPER`
+- `ns3::UbQueueManager::DynamicPfcResumeGapBytes`: dynamic PFC xon/xoff gap in bytes
+- `ns3::UbQueueManager::PaperDynamicPfcBeta`: paper-style dynamic PFC beta used by `PFC_DYNAMIC_PAPER`
+
+When the discussion turns from "which knob exists" to "what these congestion/PFC knobs mean in queue dynamics", consult:
+
+- `congestion-control-and-pfc-lessons.md`
+
 The runtime parameter catalog (`.openusim/project/parameter-catalog.json`) stores a `description` field for each entry. For enum-type attributes, the description typically lists valid values (e.g. "The flow control mechanism to use (NONE, CBFC, CBFC_SHARED, or PFC)."). Consult the catalog description before accepting a user-provided value.
 
 For values not discoverable from the catalog, check the C++ source:

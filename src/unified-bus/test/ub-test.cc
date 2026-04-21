@@ -401,6 +401,41 @@ public:
     }
 };
 
+class UbCaqmHostRttUsesSmoothedEstimateTest : public TestCase
+{
+public:
+    UbCaqmHostRttUsesSmoothedEstimateTest()
+        : TestCase("UnifiedBus - CAQM host RTT estimate uses EWMA instead of latching min RTT")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
+        Config::SetDefault("ns3::UbHostCaqm::RttEwmaGain", DoubleValue(0.125));
+
+        Ptr<UbHostCaqm> host = DynamicCast<UbHostCaqm>(UbCongestionControl::Create(UB_DEVICE));
+        NS_TEST_ASSERT_MSG_NE(host, nullptr, "CAQM host factory should return a concrete host object");
+
+        host->ApplyRttSampleForTest(NanoSeconds(100));
+        NS_TEST_ASSERT_MSG_EQ(host->GetRttForTest().GetNanoSeconds(),
+                              100,
+                              "First RTT sample should seed the smoothed RTT estimate");
+
+        host->ApplyRttSampleForTest(NanoSeconds(500));
+        NS_TEST_ASSERT_MSG_GT(host->GetRttForTest().GetNanoSeconds(),
+                              100,
+                              "A larger second RTT sample should increase the smoothed RTT estimate");
+        NS_TEST_ASSERT_MSG_LT(host->GetRttForTest().GetNanoSeconds(),
+                              500,
+                              "EWMA RTT estimate should smooth toward the sample rather than jump to it");
+
+        Config::Reset();
+    }
+};
+
 class UbSwitchAttachDisabledCongestionControlTest : public TestCase
 {
 public:
@@ -3628,6 +3663,84 @@ class UbAlgorithmTraceCategoryGateTest : public TestCase
     }
 };
 
+class UbQueueTraceCategoryGateTest : public TestCase
+{
+  public:
+    UbQueueTraceCategoryGateTest()
+        : TestCase("UnifiedBus - queue trace gate independently controls queue trace files")
+    {
+    }
+
+    void DoRun() override
+    {
+        namespace fs = std::filesystem;
+
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const fs::path caseDir =
+            fs::temp_directory_path() / ("ub-queue-trace-category-gate-" + uniqueSuffix);
+        const fs::path runlogDir = caseDir / "runlog";
+        std::error_code ec;
+        fs::remove_all(caseDir, ec);
+        ec.clear();
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory creation should succeed");
+
+        utils::UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_QUEUE_TRACE_ENABLE", BooleanValue(false));
+        GlobalValue::Bind("UB_QUEUE_SAMPLE_INTERVAL_NS", UintegerValue(1000));
+        utils::UbUtils::SetTracePathForTest(caseDir.string());
+
+        BuildLocalTpTopology();
+        utils::UbUtils::Get()->TopoTraceConnect();
+        Simulator::Stop(NanoSeconds(1500));
+        Simulator::Run();
+        Simulator::Destroy();
+        utils::UbUtils::Get()->Destroy();
+
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(runlogDir / "QueueTrace_node_0_port_0.tr"),
+                              false,
+                              "Queue trace file should stay off when queue-trace gate is off");
+
+        ec.clear();
+        fs::remove_all(runlogDir, ec);
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory reset should succeed");
+
+        utils::UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_QUEUE_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_QUEUE_SAMPLE_INTERVAL_NS", UintegerValue(1000));
+        utils::UbUtils::SetTracePathForTest(caseDir.string());
+
+        BuildLocalTpTopology();
+        utils::UbUtils::Get()->TopoTraceConnect();
+        Simulator::Stop(NanoSeconds(1500));
+        Simulator::Run();
+        Simulator::Destroy();
+        utils::UbUtils::Get()->Destroy();
+
+        const fs::path queueTraceFile = runlogDir / "QueueTrace_node_0_port_0.tr";
+        NS_TEST_ASSERT_MSG_EQ(fs::exists(queueTraceFile),
+                              true,
+                              "Queue trace file should be emitted when queue-trace gate is on");
+        const std::string text = std::ifstream(queueTraceFile).good()
+                                     ? [&queueTraceFile]() {
+                                           std::ifstream input(queueTraceFile);
+                                           std::ostringstream oss;
+                                           oss << input.rdbuf();
+                                           return oss.str();
+                                       }()
+                                     : "";
+        NS_TEST_ASSERT_MSG_NE(text.find("source: SAMPLE"),
+                              std::string::npos,
+                              "Queue trace file should contain sampled queue state when gate is on");
+
+        fs::remove_all(caseDir, ec);
+    }
+};
+
 namespace utils
 {
 
@@ -4108,6 +4221,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbDcqcnHostAckCeTphDefaultTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCongestionControlDisabledFactoryStillReturnsObjectTest(),
                 TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmHostRttUsesSmoothedEstimateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchAttachDisabledCongestionControlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchAttachEnabledCongestionControlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpRawRoundTripTest(), TestCase::Duration::QUICK);
@@ -4133,6 +4247,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbTraceDirSetupTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAlgorithmTraceGateDefaultOffTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAlgorithmTraceCategoryGateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueTraceCategoryGateTest(), TestCase::Duration::QUICK);
     AddTestCase(new utils::UbTraceFileConcurrencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbMpiRankExtractionHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSameMpiRankHelperTest(), TestCase::Duration::QUICK);
