@@ -82,7 +82,7 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbPort::UbDataRate` (DataRate)
   - `ns3::UbPort::UbInterframeGap` (Time)
 - Credit-based/PFC knobs:
-  - `ns3::UbSwitch::FlowControl` (`NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`)
+  - `ns3::UbSwitch::FlowControl` (`NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`, `PFC_DYNAMIC_PAPER`)
   - `ns3::UbPort::CbfcFlitLenByte`, `CbfcFlitsPerCell`, `CbfcInitCreditCell`, `CbfcRetCellGrainDataPacket`, `CbfcRetCellGrainControlPacket`
   - `ns3::UbPort::PfcUpThld`, `PfcLowThld`
 - Congestion control (CAQM) and buffers:
@@ -91,7 +91,8 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbQueueManager::SharedPoolBytes`
   - `ns3::UbQueueManager::HeadroomPerPortBytes`
   - `ns3::UbQueueManager::AlphaShift`
-  - `ns3::UbQueueManager::ResumeOffset`
+  - `ns3::UbQueueManager::DynamicPfcResumeGapBytes`
+  - `ns3::UbQueueManager::PaperDynamicPfcBeta`
 - Transport behavior (`ns3::UbTransportChannel`):
   - `UsePacketSpray` (bool)
   - `UseShortestPaths` (bool)
@@ -371,6 +372,8 @@ traffic.csv
 
 In `ub-quick-example`, `UbUtils::ParseTrace()` runs after the simulator. If `UB_PARSE_TRACE_ENABLE` is `true` and `UB_PYTHON_SCRIPT_PATH` points to `parse_trace.py`, the script processes `runlog/` and writes analysis CSVs (e.g., `task_statistics.csv`, `throughput.csv`) under the same case directory.
 
+The shipped case `scratch/2nodes_single-tp` keeps `UB_QUEUE_TRACE_ENABLE`, `UB_FLOW_CONTROL_TRACE_ENABLE`, and `UB_CONGESTION_CONTROL_TRACE_ENABLE` enabled on purpose as a trace example. Treat it as an observability-rich sample, not as the minimal recommended default for every new case.
+
 ---
 
 ## Network modeling notes (from code)
@@ -411,7 +414,8 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
   - `default ns3::UbQueueManager::SharedPoolBytes "12582912"`
   - `default ns3::UbQueueManager::HeadroomPerPortBytes "262144"`
   - `default ns3::UbQueueManager::AlphaShift "1"`
-  - `default ns3::UbQueueManager::ResumeOffset "4096"`
+  - `default ns3::UbQueueManager::DynamicPfcResumeGapBytes "4096"`
+  - `default ns3::UbQueueManager::PaperDynamicPfcBeta "8"` (only used with `PFC_DYNAMIC_PAPER`)
 - Congestion control
   - `global UB_CC_ALGO "CAQM"`
   - `global UB_CC_ENABLED "false"`
@@ -430,6 +434,9 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
   - `global UB_TRACE_ENABLE "true"`
   - `global UB_PARSE_TRACE_ENABLE "true"`
   - `global UB_RECORD_PKT_TRACE "true"`
+  - `global UB_QUEUE_TRACE_ENABLE "false"` (enable when `QueueTrace_*` evidence is needed)
+  - `global UB_FLOW_CONTROL_TRACE_ENABLE "false"` (enable when `PfcTrace_*`/`CbfcTrace_*` evidence is needed)
+  - `global UB_CONGESTION_CONTROL_TRACE_ENABLE "false"` (enable when `Dcqcn*`/`Caqm*` algorithm traces are needed)
   - `global UB_PYTHON_SCRIPT_PATH "scratch/ns-3-ub-tools/trace_analysis/parse_trace.py"`
 - Priority/VL sizing
   - `global UB_PRIORITY_NUM "16"`
