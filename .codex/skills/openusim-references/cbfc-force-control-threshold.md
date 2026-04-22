@@ -1,107 +1,166 @@
 # CBFC Force-Control Threshold
 
 <reference-hint>
-<use-when>Use this reference when the user asks how to tune `CbfcForceCtrlThresholdCell`, why CBFC should force a control frame, or whether the threshold should scale with credit size or with propagation budget.</use-when>
-<focus>How to interpret the forced control-frame threshold in CBFC, what failure it protects against, and how to tune it from bandwidth-delay and in-flight serialization budget rather than from arbitrary initial-credit ratios.</focus>
-<keywords>CBFC, CbfcForceCtrlThresholdCell, credit return, control frame, Crd_Ack Block, threshold, tuning</keywords>
+<use-when>Use this reference when the user asks how to tune `CbfcCtrlCrdRtrThldCell`, `CbfcRetCellGrainControlPacket`, why CBFC should force a control frame, or how much pending returned credit the receiver may temporarily keep before sending `Crd_Ack Block`.</use-when>
+<focus>How to interpret the CBFC forced control-frame threshold as a receiver-side pending-credit retention limit, why the control-packet grain must be considered together with the threshold, and how to choose a repo default that keeps control frames as a late fallback instead of the primary return path.</focus>
+<keywords>CBFC, CbfcCtrlCrdRtrThldCell, CbfcRetCellGrainControlPacket, credit return, control frame, Crd_Ack Block, threshold, tuning</keywords>
 </reference-hint>
 
 ## Core Judgment
 
-`CbfcForceCtrlThresholdCell` is not a generic "credit low-watermark".
+`CbfcCtrlCrdRtrThldCell` is not a generic "credit low-watermark".
 
-It is a `pending credit return` threshold:
+It is a `receiver-side pending credit return retention limit`:
 
 - local RX has already released credits
 - those credits have not yet been returned to the peer TX
-- if pending return grows too large, the peer can run out of transmit credits before the forced `Crd_Ack Block` arrives
+- once locally retained pending credit reaches this limit, RX should stop waiting for piggyback and send a control frame
 
-So the threshold should be chosen from a `credit-return latency budget`, not from an arbitrary fraction of initial credits.
+So this threshold answers:
+
+`how much returned credit am I willing to temporarily keep on the receiver before I flush it explicitly?`
+
+Not:
+
+`how little transmit credit can the sender still tolerate?`
 
 ## What The Threshold Protects
 
-The relevant question is:
+The relevant tradeoff is:
 
-`how many cells can the upstream sender still consume before my forced control frame arrives and restores credits?`
+`piggyback efficiency` vs `credit-return latency`
 
 If the threshold is too large:
 
-- the peer may stall waiting for returned credits
-- piggyback-only return becomes too slow under asymmetric traffic
+- RX keeps too much pending credit locally
+- explicit `Crd_Ack Block` is delayed too long
+- asymmetric traffic or sparse reverse traffic can make credit return look sticky
 
 If the threshold is too small:
 
-- control frames are forced too often
-- piggyback opportunities are underused
-- the model overstates control overhead
+- RX flushes pending credit too eagerly
+- control frames are generated more often than necessary
+- piggyback opportunities are cut short
 
 ## First-Principles Tuning Model
 
-Estimate the cells that the peer can still burn during this window:
+Think in two steps.
 
-`current packet remaining serialization`
-`+ forced control-frame serialization`
-`+ link propagation delay`
+Step 1:
 
-Then convert that byte budget into cells.
+decide how much `temporarily retained pending credit` you want to tolerate on the RX side before forcing a flush.
 
-In this repo's common default setup:
+Step 2:
 
-- link rate: `400Gbps`
-- flit size: `20B`
-- cell size: `8 flits = 160B`
-- control frame size: `2 flits = 40B`
-- typical link delay: `20ns`
-- practical large data packet budget: about `4KB`
+check whether the chosen `control-return burst size` is consistent with that retention budget and with the sender continuity margin.
 
-This gives roughly:
+So the sender-side budget still matters, but only after we first define what RX is allowed to retain.
 
-- `4KB` data serialization at `400Gbps` -> about `81.9ns`
-- control frame serialization -> about `0.8ns`
-- propagation -> `20ns`
-- total -> about `102.7ns`
+The important code behavior is:
 
-At `400Gbps`, that window carries about `4109B`, which is about `26 cells` at `160B/cell`.
+- trigger condition is `pending >= CbfcCtrlCrdRtrThldCell`
+- once triggered, fallback does **not** stop at one control frame
+- `MaybeQueueControlReturn()` loops and keeps sending control frames until pending credit drops below one control-credit grain
 
-That means a threshold around `32 cells` is already close to the minimum "do not let the peer stall before the forced control frame lands" budget.
+So the relevant pair is:
+
+- `CbfcCtrlCrdRtrThldCell`
+- `CbfcRetCellGrainControlPacket`
+
+not the threshold alone.
+
+Per-frame maximum credit return for one VL is:
+
+`63 * CbfcRetCellGrainControlPacket`
+
+because the control header encodes at most `63` grains per VL.
+
+That means:
+
+- with `control grain = 1`, one frame returns at most `63 cells`
+- with `control grain = 8`, one frame returns at most `504 cells`
+- with `control grain = 16`, one frame returns at most `1008 cells`
+
+So a larger threshold can still be reasonable if the control-packet grain is also large enough to make the fallback drain fast once it starts.
 
 ## Repo Default Rule
 
 This repo currently uses:
 
-- `CbfcForceCtrlThresholdCell = 64`
+- `CbfcCtrlCrdRtrThldCell = 1024`
+- `CbfcRetCellGrainControlPacket = 8`
 
-Why `64` instead of the tighter `~32`-cell latency budget:
+Interpret that as:
 
-- it still stays far below the default initial credit window (`6553` cells)
-- it gives piggyback return some room to work before forcing control traffic
-- it is still small enough that the peer should not wait long for credits under the common `400Gbps`, `20ns`, `160B/cell` setup
+- RX may temporarily accumulate about `1024` cells of already-returnable credit on one VL
+- but once fallback is triggered, each control frame may return up to `63 * 8 = 504` cells for that VL
+- so the default behavior is intentionally `late fallback, fast drain`
 
-Treat `64` as a practical default, not as a universal optimum.
+At the common repo geometry:
+
+- `cell size = 160B`
+- `1024 cells = 163840B = 160KB`
+- `CbfcInitCreditCell = 6553`, so `1024` is about `15.6%` of one VL's initial credit budget
+
+This default therefore means:
+
+- give piggyback a long runway
+- keep explicit control frames rare in steady state
+- accept that fallback happens late and may send a short burst of control frames to drain pending credit quickly
+
+The right question is:
+
+- do we want RX to keep this much pending credit locally before flushing?
+- once fallback starts, is the configured control grain large enough to return credit quickly?
+- is this temporary retention still acceptable for the peer and the workload?
+
+It favors:
+
+- giving piggyback more time
+- reducing explicit control-frame traffic
+- treating control frames as a true fallback path rather than the normal return path
+
+It does **not** mean "threshold should always be some fixed fraction of initial credit."
+
+Treat `1024/8` as a repo-level strategy choice:
+
+- `large retention budget`
+- `large control-return grain`
+- `late fallback`
+- `fast drain once fallback fires`
 
 ## Safe Tuning Rules
 
 Start from these rules:
 
-1. If the peer visibly stalls waiting for credit return, lower `CbfcForceCtrlThresholdCell`.
-2. If control frames become too frequent while throughput is already healthy, raise it moderately.
-3. Tune against:
+1. First decide how much pending returned credit RX is allowed to retain temporarily on one VL.
+2. Choose `CbfcRetCellGrainControlPacket` together with that retention budget; the larger the threshold, the more important it is that fallback can drain quickly.
+3. Then sanity-check that this retained-credit limit is still below a sender-stall-risk region for your link rate, delay, and cell size.
+4. If the peer visibly waits too long for returned credits, lower `CbfcCtrlCrdRtrThldCell` or raise `CbfcRetCellGrainControlPacket`.
+5. If control frames are too frequent and reverse traffic already provides enough piggyback opportunities, raise the threshold or raise the control-packet grain.
+6. Do not tune this parameter from `sender remaining credit` as if it were a sender-side low-watermark.
+7. Tune against:
    - link rate
    - link delay
    - cell size
-   - largest practical in-flight data packet serialization that can delay the forced control frame
-4. Do not tune this parameter as a fixed percentage of `CbfcInitCreditCell` unless that percentage has been justified by the actual latency budget.
+   - reverse-traffic sparsity
+   - how much pending credit the RX side is willing to keep before explicit flush
+   - how many control frames you are willing to burst once fallback starts
+8. Do not tune this parameter as a fixed percentage of `CbfcInitCreditCell` unless that percentage has been justified by actual pending-credit retention intent and then checked against sender continuity.
 
 ## Safe Wording
 
-- `CbfcForceCtrlThresholdCell` should be tuned from the credit-return latency budget.
-- A reasonable default keeps the upstream sender from exhausting credits before the forced control frame arrives.
-- In the common repo default setup, `64` cells is a practical default with moderate safety margin.
+- `CbfcCtrlCrdRtrThldCell` is a receiver-side pending-credit retention threshold.
+- It controls how much already-returnable credit RX may temporarily keep before forcing `Crd_Ack Block`.
+- `CbfcRetCellGrainControlPacket` controls how much credit one fallback control frame can return per VL.
+- Sender-side continuity only provides a safety ceiling; it is not the primary semantic definition.
+- In the common repo default setup, `1024/8` is a deliberate `late fallback, fast drain` default.
 
 ## Unsafe Wording
 
 - threshold should always be `1/16` of initial credit
 - bigger initial credit always means bigger threshold is better
+- threshold means "sender still has enough credit left"
 - this threshold means the local port itself is out of credits
 
 ## Practical Use
@@ -114,5 +173,7 @@ When comparing CBFC settings, change this parameter independently from:
 
 Interpret the result like this:
 
-- if lower threshold improves peer continuity but increases control-frame count, the old threshold was too lax
-- if higher threshold reduces control traffic without hurting peer continuity, the old threshold was too aggressive
+- if lower threshold improves peer continuity but increases control-frame count, the old threshold allowed RX to retain too much pending credit
+- if higher threshold reduces control traffic without hurting peer continuity, the old threshold was flushing too eagerly
+- if larger control-packet grain keeps fallback rare and still drains pending credit quickly, the old fallback burst size was too small
+- if larger control-packet grain leaves too much residual credit below one grain, the control-packet grain became too coarse for that workload

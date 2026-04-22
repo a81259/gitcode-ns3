@@ -164,8 +164,9 @@ TypeId UbPort::GetTypeId(void)
                           MakeUintegerChecker<uint8_t>())
             .AddAttribute("CbfcRetCellGrainControlPacket",
                           "Credit return granularity in Crd_Ack Block for control packets "
-                          "(Spec CTRL_CREDIT_GRAIN_SIZE). Valid: {1,2,4,8,16,32,64,128} cells; spec default 1.",
-                          UintegerValue(1),
+                          "(Spec CTRL_CREDIT_GRAIN_SIZE). Valid: {1,2,4,8,16,32,64,128} cells; "
+                          "repo default 8, spec default 1.",
+                          UintegerValue(8),
                           MakeUintegerAccessor(&UbPort::m_cbfcRetCellGrainControlPacket),
                           MakeUintegerChecker<uint8_t>())
             .AddAttribute("CbfcInitCreditCell",
@@ -181,12 +182,12 @@ TypeId UbPort::GetTypeId(void)
                           IntegerValue(4096),
                           MakeIntegerAccessor(&UbPort::m_cbfcSharedInitCells),
                           MakeIntegerChecker<int32_t>())
-            .AddAttribute("CbfcForceCtrlThresholdCell",
-                          "Per-VL pending-return threshold in cells. Once pending returned credits on a VL "
-                          "reach this threshold, the model forces a Crd_Ack control frame instead of waiting "
-                          "for more piggyback opportunities. Default 64 cells.",
-                          IntegerValue(64),
-                          MakeIntegerAccessor(&UbPort::m_cbfcForceCtrlThresholdCells),
+            .AddAttribute("CbfcCtrlCrdRtrThldCell",
+                          "Per-VL pending returned-credit threshold in cells. Once a VL reaches this threshold, "
+                          "CBFC switches to control-frame credit return instead of waiting for piggyback opportunities. "
+                          "Repo default 1024 cells.",
+                          IntegerValue(1024),
+                          MakeIntegerAccessor(&UbPort::m_cbfcCtrlCrdRtrThldCells),
                           MakeIntegerChecker<int32_t>(1))
             .AddAttribute("PfcUpThld",
                           "PFC XOFF threshold in bytes; a PAUSE frame is sent when the receive queue exceeds this level.",
@@ -292,7 +293,7 @@ void UbPort::CreateAndInitFc(FcType type)
             } else {
                 auto flowControl = DynamicCast<UbCbfc>(m_flowControl);
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell, m_cbfcRetCellGrainDataPacket,
-                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, m_cbfcForceCtrlThresholdCells,
+                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, m_cbfcCtrlCrdRtrThldCells,
                     GetNode()->GetId(), m_portId);
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl Cbfc Init");
             }
@@ -308,7 +309,7 @@ void UbPort::CreateAndInitFc(FcType type)
 
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell,
                                 m_cbfcRetCellGrainDataPacket, m_cbfcRetCellGrainControlPacket,
-                                reservedPerVlCells, m_cbfcForceCtrlThresholdCells, sharedInitCells,
+                                reservedPerVlCells, m_cbfcCtrlCrdRtrThldCells, sharedInitCells,
                                 GetNode()->GetId(), m_portId);
 
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl CbfcSharedMode Init");

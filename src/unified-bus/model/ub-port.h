@@ -237,7 +237,7 @@ private:
     uint8_t m_cbfcRetCellGrainControlPacket;    // 控制报文返回的CRD的粒度，通常从以下选项中选择 {1, 2, 4, 8, 16, 32, 64, 128}
     int32_t m_cbfcPortTxfree;
     int32_t m_cbfcSharedInitCells;
-    int32_t m_cbfcForceCtrlThresholdCells;
+    int32_t m_cbfcCtrlCrdRtrThldCells;
 
     // pfc
     int32_t m_pfcUpThld;

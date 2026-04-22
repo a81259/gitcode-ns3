@@ -117,6 +117,14 @@ public:
                                       int32_t availableCredits,
                                       int32_t deltaCredits);
 
+    static void CbfcControlSendNotify(uint32_t nodeId,
+                                      uint32_t portId,
+                                      const std::string& reason,
+                                      int32_t triggerThresholdCells,
+                                      int32_t emitMinPendingCells,
+                                      const std::vector<int32_t>& pendingCredits,
+                                      const std::vector<uint8_t>& sendCredits);
+
     static void DcqcnMarkNotify(uint32_t nodeId,
                                 uint32_t outPort,
                                 uint64_t totalQueueBytes,

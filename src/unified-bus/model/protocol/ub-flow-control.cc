@@ -11,6 +11,29 @@ namespace ns3 {
 NS_OBJECT_ENSURE_REGISTERED(UbFlowControl);
 NS_LOG_COMPONENT_DEFINE("UbFlowControl");
 
+namespace {
+
+bool
+IsValidCbfcCellGrain(uint8_t grain)
+{
+    switch (grain)
+    {
+    case 1:
+    case 2:
+    case 4:
+    case 8:
+    case 16:
+    case 32:
+    case 64:
+    case 128:
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
 TypeId UbFlowControl::GetTypeId(void)
 {
     static TypeId tid = TypeId("ns3::UbFlowControl").SetParent<Object>().AddConstructor<UbFlowControl>();
@@ -130,7 +153,7 @@ TypeId UbCbfc::GetTypeId(void)
 }
 
 void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
-                  uint8_t retCellGrainControlPacket, int32_t portTxfree, int32_t forceCtrlThresholdCells,
+                  uint8_t retCellGrainControlPacket, int32_t portTxfree, int32_t ctrlCrdRtrThldCells,
                   uint32_t nodeId, uint32_t portId)
 {
     // 基础参数配置
@@ -138,7 +161,7 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
     m_cbfcCfg.m_nFlitPerCell = nFlitPerCell;
     m_cbfcCfg.m_retCellGrainDataPacket = retCellGrainDataPacket;
     m_cbfcCfg.m_retCellGrainControlPacket = retCellGrainControlPacket;
-    m_cbfcCfg.m_forceCtrlThresholdCells = forceCtrlThresholdCells;
+    m_cbfcCfg.m_ctrlCrdRtrThldCells = ctrlCrdRtrThldCells;
     IntegerValue val;
     g_ub_vl_num.GetValue(val);
     int ubVlNum = val.Get();
@@ -154,7 +177,7 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
                  << " flitsPerCell=" << static_cast<uint32_t>(m_cbfcCfg.m_nFlitPerCell)
                  << " retCellGrainData=" << static_cast<uint32_t>(m_cbfcCfg.m_retCellGrainDataPacket)
                  << " retCellGrainCtrl=" << static_cast<uint32_t>(m_cbfcCfg.m_retCellGrainControlPacket)
-                 << " forceCtrlThreshold=" << m_cbfcCfg.m_forceCtrlThresholdCells
+                 << " ctrlCrdRtrThld=" << m_cbfcCfg.m_ctrlCrdRtrThldCells
                  << " initCreditPerVl=" << portTxfree);
 
     NS_ABORT_MSG_IF(m_cbfcCfg.m_flitLen == 0 || m_cbfcCfg.m_nFlitPerCell == 0,
@@ -162,7 +185,13 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
     NS_ABORT_MSG_IF(m_cbfcCfg.m_retCellGrainDataPacket == 0 ||
                         m_cbfcCfg.m_retCellGrainControlPacket == 0,
                     "CBFC requires non-zero return grain for both data and control packets");
-    NS_ABORT_MSG_IF(m_cbfcCfg.m_forceCtrlThresholdCells <= 0,
+    NS_ABORT_MSG_IF(!IsValidCbfcCellGrain(m_cbfcCfg.m_nFlitPerCell),
+                    "CBFC flits-per-cell must be one of {1,2,4,8,16,32,64,128}");
+    NS_ABORT_MSG_IF(!IsValidCbfcCellGrain(m_cbfcCfg.m_retCellGrainDataPacket),
+                    "CBFC data-packet credit grain must be one of {1,2,4,8,16,32,64,128}");
+    NS_ABORT_MSG_IF(!IsValidCbfcCellGrain(m_cbfcCfg.m_retCellGrainControlPacket),
+                    "CBFC control-packet credit grain must be one of {1,2,4,8,16,32,64,128}");
+    NS_ABORT_MSG_IF(m_cbfcCfg.m_ctrlCrdRtrThldCells <= 0,
                     "CBFC requires a positive control-frame force threshold");
     NS_ABORT_MSG_IF(portTxfree < 0,
                     "CBFC requires non-negative initial transmit credit per VL");
@@ -220,14 +249,8 @@ bool UbCbfc::IsFcLimited(Ptr<UbIngressQueue> ingressQ)
 void UbCbfc::OnIngressReleased(const UbFlowControlEventContext& context)
 {
     if (context.inPortId != context.outPortId) { // 转发的报文
-        ReleaseOccupiedCrd(context.packet, m_portId);
-        Ptr<Packet> cbfcPkt = (ShouldForceControlReturn() || ShouldSendControlFallback(m_portId))
-                                  ? ReleaseOccupiedCrd(nullptr, m_portId)
-                                  : nullptr;
-        if (cbfcPkt != nullptr)
-        {
-            SendCrdAck(cbfcPkt, m_portId);
-        }
+        AccumulateReturnedCredit(context.packet, m_portId);
+        MaybeQueueControlReturn(m_portId);
     }
 }
 
@@ -261,13 +284,8 @@ UbCbfc::ControlCreditRestoreNotify(uint32_t nodeId,
 
 void UbCbfc::OnIngressEnqueued(const UbFlowControlEventContext& context)
 {
-    ReleaseOccupiedCrd(context.packet, m_portId);
-    Ptr<Packet> cbfcPkt = (ShouldForceControlReturn() || ShouldSendControlFallback(m_portId))
-                              ? ReleaseOccupiedCrd(nullptr, m_portId)
-                              : nullptr;
-    if (cbfcPkt != nullptr) {
-        SendCrdAck(cbfcPkt, m_portId);
-    }
+    AccumulateReturnedCredit(context.packet, m_portId);
+    MaybeQueueControlReturn(m_portId);
 }
 
 int32_t UbCbfc::GetCrdToReturn(uint8_t vlId)
@@ -383,17 +401,12 @@ void UbCbfc::SendCrdAck(Ptr<Packet> cbfcPkt, uint32_t targetPortId)
     NS_LOG_DEBUG("send crd pkt");
 }
 
-Ptr<Packet> UbCbfc::ReleaseOccupiedCrd(Ptr<Packet> p, uint32_t targetPortId)
+void UbCbfc::AccumulateReturnedCredit(Ptr<Packet> p, uint32_t targetPortId)
 {
-    Ptr<Node> node = NodeList::GetNode(m_nodeId);
-    
-    Ptr<Packet> cbfcPkt = nullptr;
-    bool shouldReturnCredit = false;
-    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
-    auto flowControl = DynamicCast<UbCbfc>(port->GetFlowControl());
-
     if (p != nullptr) {
         uint32_t pktSize = p->GetSize();
+        Ptr<Node> node = NodeList::GetNode(m_nodeId);
+        Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
         UbDatalinkPacketHeader pktHeader;
         p->PeekHeader(pktHeader);
         uint8_t vlId = pktHeader.GetPacketVL();
@@ -401,27 +414,44 @@ Ptr<Packet> UbCbfc::ReleaseOccupiedCrd(Ptr<Packet> p, uint32_t targetPortId)
                      << " vlId: " << (uint32_t)vlId << " pktSize: " << pktSize);
 
         int32_t consumeCellNum = ceil((float)(pktSize) / (m_cbfcCfg.m_flitLen * m_cbfcCfg.m_nFlitPerCell));
-        flowControl->SetCrdToReturn(vlId, consumeCellNum, port);
+        SetCrdToReturn(vlId, consumeCellNum, port);
+    }
+}
+
+Ptr<Packet> UbCbfc::BuildControlReturnPacket(uint32_t targetPortId,
+                                             int32_t minPendingCells,
+                                             const std::string& reason)
+{
+    Ptr<Node> node = NodeList::GetNode(m_nodeId);
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
+    if (port == nullptr) {
+        return nullptr;
     }
 
     int32_t leftCrdToReturn = 0;
     int32_t crdSndGrains = 0;
+    bool shouldReturnCredit = false;
     port->ResetCredits();
-
     IntegerValue val;
     g_ub_vl_num.GetValue(val);
     int ubVlNum = val.Get();
+    std::vector<int32_t> pendingSnapshot;
+    pendingSnapshot.reserve(ubVlNum);
 
     for (int index = 0; index < ubVlNum; index++) {
-        leftCrdToReturn = flowControl->GetCrdToReturn(index);
-        if (leftCrdToReturn >= m_cbfcCfg.m_retCellGrainControlPacket) {
-            crdSndGrains = leftCrdToReturn / m_cbfcCfg.m_retCellGrainControlPacket;
+        leftCrdToReturn = GetCrdToReturn(index);
+        pendingSnapshot.push_back(leftCrdToReturn);
+        if (leftCrdToReturn >= minPendingCells) {
+            const int32_t pendingGrains = leftCrdToReturn / m_cbfcCfg.m_retCellGrainControlPacket;
+            crdSndGrains = std::min(pendingGrains, static_cast<int32_t>(kMaxCtrlCreditGrainsPerFrame));
             NS_LOG_DEBUG("index: " << (uint32_t)index << " m_cbfcCfg->m_retCellGrainControlPacket: "
                          << (uint32_t)m_cbfcCfg.m_retCellGrainControlPacket
                          << " crdSndGrains: " << crdSndGrains);
-            port->SetCredits(index, crdSndGrains);
-            flowControl->UpdateCrdToReturn(index, crdSndGrains * m_cbfcCfg.m_retCellGrainControlPacket, port);
-            shouldReturnCredit = true;
+            if (crdSndGrains > 0) {
+                port->SetCredits(index, static_cast<uint8_t>(crdSndGrains));
+                UpdateCrdToReturn(index, crdSndGrains * m_cbfcCfg.m_retCellGrainControlPacket, port);
+                shouldReturnCredit = true;
+            }
         }
     }
 
@@ -429,11 +459,34 @@ Ptr<Packet> UbCbfc::ReleaseOccupiedCrd(Ptr<Packet> p, uint32_t targetPortId)
         NS_LOG_DEBUG("SndCredits[ " << (uint32_t)index << " ]: " << (uint32_t)port->m_credits[index]);
     }
 
-    if (shouldReturnCredit) {
-        cbfcPkt = UbDataLink::GenControlCreditPacket(port->m_credits);
+    if (!shouldReturnCredit) {
+        return nullptr;
     }
+    std::vector<uint8_t> sendCredits;
+    sendCredits.reserve(ubVlNum);
+    for (int index = 0; index < ubVlNum; ++index) {
+        sendCredits.push_back(port->m_credits[index]);
+    }
+    utils::UbUtils::CbfcControlSendNotify(
+        m_nodeId,
+        targetPortId,
+        reason,
+        m_cbfcCfg.m_ctrlCrdRtrThldCells,
+        minPendingCells,
+        pendingSnapshot,
+        sendCredits);
+    return UbDataLink::GenControlCreditPacket(port->m_credits);
+}
 
-    return cbfcPkt;
+Ptr<Packet>
+UbCbfc::MaybeBuildControlReturnPacket(uint32_t targetPortId)
+{
+    if (ShouldForceControlReturn()) {
+        return BuildControlReturnPacket(targetPortId,
+                                        m_cbfcCfg.m_retCellGrainControlPacket,
+                                        "force_threshold");
+    }
+    return nullptr;
 }
 
 uint8_t
@@ -518,31 +571,25 @@ bool
 UbCbfc::ShouldForceControlReturn() const
 {
     for (int32_t pending : m_crdToReturn) {
-        if (pending >= m_cbfcCfg.m_forceCtrlThresholdCells) {
+        if (pending >= m_cbfcCfg.m_ctrlCrdRtrThldCells) {
             return true;
         }
     }
     return false;
 }
 
-bool
-UbCbfc::ShouldSendControlFallback(uint32_t targetPortId) const
+void
+UbCbfc::MaybeQueueControlReturn(uint32_t targetPortId)
 {
-    Ptr<Node> node = NodeList::GetNode(m_nodeId);
-    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
-    if (port == nullptr) {
-        return false;
+    if (!ShouldForceControlReturn()) {
+        return;
     }
-    if (!port->GetUbQueue()->IsEmpty() || port->IsBusy()) {
-        return false;
+    while (Ptr<Packet> cbfcPkt =
+               BuildControlReturnPacket(targetPortId,
+                                        m_cbfcCfg.m_retCellGrainControlPacket,
+                                        "force_threshold")) {
+        SendCrdAck(cbfcPkt, targetPortId);
     }
-
-    for (int32_t pending : m_crdToReturn) {
-        if (pending >= m_cbfcCfg.m_retCellGrainControlPacket) {
-            return true;
-        }
-    }
-    return false;
 }
 
 FcType UbCbfc::GetFcType()
@@ -561,11 +608,11 @@ TypeId UbCbfcSharedCredit::GetTypeId(void)
 
 void UbCbfcSharedCredit::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
                             uint8_t retCellGrainControlPacket, int32_t reservedPerVlCells,
-                            int32_t forceCtrlThresholdCells,
+                            int32_t ctrlCrdRtrThldCells,
                             int32_t sharedInitCells, uint32_t nodeId, uint32_t portId)
 {
     UbCbfc::Init(flitLen, nFlitPerCell, retCellGrainDataPacket, retCellGrainControlPacket,
-                 reservedPerVlCells, forceCtrlThresholdCells, nodeId, portId);
+                 reservedPerVlCells, ctrlCrdRtrThldCells, nodeId, portId);
 
     m_shareCrd = sharedInitCells;
     m_reservedPerVlCells = reservedPerVlCells;

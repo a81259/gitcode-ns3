@@ -2343,9 +2343,19 @@ class UbCbfcProbe : public UbCbfc
         return m_crdTxfree.at(vl);
     }
 
-    bool ShouldForceControlReturnForTest() const
+    bool ShouldUseCtrlCrdRtrForTest() const
     {
         return ShouldForceControlReturn();
+    }
+
+    Ptr<Packet> MaybeBuildControlReturnPacketForTest(uint32_t targetPortId)
+    {
+        return MaybeBuildControlReturnPacket(targetPortId);
+    }
+
+    void MaybeQueueControlReturnForTest(uint32_t targetPortId)
+    {
+        MaybeQueueControlReturn(targetPortId);
     }
 };
 
@@ -3334,7 +3344,7 @@ class UbSwitchLocalCbfcConfigTest : public TestCase
         Ptr<Node> node = CreateObject<Node>();
         Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
         sw->SetCbfcCellGeometry(/*flitLenBytes*/ 10, /*flitsPerCell*/ 2);
-        sw->SetCbfcReturnCellGrain(/*dataPacketCells*/ 3, /*controlPacketCells*/ 2);
+        sw->SetCbfcReturnCellGrain(/*dataPacketCells*/ 4, /*controlPacketCells*/ 2);
         sw->SetCbfcCredits(/*initCreditCells*/ 5, /*sharedInitCreditCells*/ 0);
         node->AggregateObject(sw);
 
@@ -3499,7 +3509,7 @@ class UbCbfcControlFrameFallbackWithoutDataPacketTest : public TestCase
 {
   public:
     UbCbfcControlFrameFallbackWithoutDataPacketTest()
-        : TestCase("UnifiedBus - CBFC uses control-frame fallback when no data packet is available")
+        : TestCase("UnifiedBus - CBFC does not emit control frame below ctrl-credit-return threshold without data packet")
     {
     }
 
@@ -3526,26 +3536,21 @@ class UbCbfcControlFrameFallbackWithoutDataPacketTest : public TestCase
         port->m_flowControl = probe;
 
         probe->SetCrdToReturn(4, 1, port);
-        Ptr<Packet> fallback = probe->ReleaseOccupiedCrd(nullptr, port->GetIfIndex());
-        NS_TEST_ASSERT_MSG_NE(fallback,
+        Ptr<Packet> fallback = probe->MaybeBuildControlReturnPacketForTest(port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_EQ(fallback,
                               nullptr,
-                              "when no DLLDP is available, pending credit should fall back to a control frame");
-        UbDatalinkHeader dlHeader;
-        fallback->PeekHeader(dlHeader);
-        NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
-                              true,
-                              "fallback packet should be a real control frame");
+                              "below the ctrl-credit-return threshold, pending credit should stay queued instead of generating a control frame");
 
         Simulator::Destroy();
         Config::Reset();
     }
 };
 
-class UbCbfcForceControlFrameAtThresholdTest : public TestCase
+class UbCbfcCtrlCrdRtrThresholdTriggersControlFrameTest : public TestCase
 {
   public:
-    UbCbfcForceControlFrameAtThresholdTest()
-        : TestCase("UnifiedBus - CBFC forces control-frame credit return once pending threshold is reached")
+    UbCbfcCtrlCrdRtrThresholdTriggersControlFrameTest()
+        : TestCase("UnifiedBus - CBFC switches to control-frame credit return once pending threshold is reached")
     {
     }
 
@@ -3558,7 +3563,7 @@ class UbCbfcForceControlFrameAtThresholdTest : public TestCase
         Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
         Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
         Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
-        Config::SetDefault("ns3::UbPort::CbfcForceCtrlThresholdCell", IntegerValue(64));
+        Config::SetDefault("ns3::UbPort::CbfcCtrlCrdRtrThldCell", IntegerValue(64));
 
         Ptr<Node> node = CreateObject<Node>();
         Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
@@ -3573,25 +3578,154 @@ class UbCbfcForceControlFrameAtThresholdTest : public TestCase
         port->m_flowControl = probe;
 
         probe->SetCrdToReturn(6, 63, port);
-        NS_TEST_ASSERT_MSG_EQ(probe->ShouldForceControlReturnForTest(),
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldUseCtrlCrdRtrForTest(),
                               false,
-                              "pending below threshold should not force control-frame return yet");
+                              "pending below threshold should not switch to control-frame credit return yet");
 
         probe->SetCrdToReturn(6, 1, port);
-        NS_TEST_ASSERT_MSG_EQ(probe->ShouldForceControlReturnForTest(),
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldUseCtrlCrdRtrForTest(),
                               true,
-                              "pending reaching threshold should switch to forced control-frame return");
+                              "pending reaching threshold should switch to control-frame credit return");
 
-        Ptr<Packet> forced = probe->ReleaseOccupiedCrd(nullptr, port->GetIfIndex());
+        Ptr<Packet> forced = probe->MaybeBuildControlReturnPacketForTest(port->GetIfIndex());
         NS_TEST_ASSERT_MSG_NE(forced,
                               nullptr,
-                              "forced-return threshold should immediately generate a control frame");
+                              "the ctrl-credit-return threshold should immediately generate a control frame");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(6),
+                              63u,
+                              "control-frame credit return must still respect the 6-bit credit-field limit per VL");
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(6),
+                              1,
+                              "one cell should remain pending after the first control-return frame when 64 cells are queued");
 
         UbDatalinkHeader dlHeader;
         forced->PeekHeader(dlHeader);
         NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
                               true,
-                              "forced return should use a real control credit frame");
+                              "ctrl-credit-return should use a real control credit frame");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcForcedControlReturnFlushesAllEligibleVlsTest : public TestCase
+{
+  public:
+    UbCbfcForcedControlReturnFlushesAllEligibleVlsTest()
+        : TestCase("UnifiedBus - CBFC ctrl-credit-return flushes every VL already eligible for control return")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+        Config::SetDefault("ns3::UbPort::CbfcCtrlCrdRtrThldCell", IntegerValue(64));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), port->GetIfIndex());
+        port->m_flowControl = probe;
+
+        probe->SetCrdToReturn(6, 64, port);
+        probe->SetCrdToReturn(3, 4, port);
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldUseCtrlCrdRtrForTest(),
+                              true,
+                              "one VL reaching threshold should trigger the immediate ctrl-credit-return path");
+
+        Ptr<Packet> forced = probe->MaybeBuildControlReturnPacketForTest(port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_NE(forced,
+                              nullptr,
+                              "ctrl-credit-return path should build a control frame when threshold is hit");
+
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(6),
+                              1,
+                              "the triggering VL should retain only the residual cells left after one 63-grain control frame");
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(3),
+                              0,
+                              "ctrl-credit-return should also flush other VLs already eligible for control return");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(6),
+                              63u,
+                              "control frame should clamp the triggering VL to the 6-bit credit-field limit");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(3),
+                              4u,
+                              "control frame should carry other eligible VL credits in the same packet");
+
+        UbDatalinkHeader dlHeader;
+        forced->PeekHeader(dlHeader);
+        NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
+                              true,
+                              "mixed-VL ctrl-credit-return should still use a real control credit frame");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcForcedControlReturnChunksControlFramesAtSixBitLimitTest : public TestCase
+{
+  public:
+    UbCbfcForcedControlReturnChunksControlFramesAtSixBitLimitTest()
+        : TestCase("UnifiedBus - CBFC ctrl-credit-return chunks large pending credit into multiple control frames")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+        Config::SetDefault("ns3::UbPort::CbfcCtrlCrdRtrThldCell", IntegerValue(64));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), port->GetIfIndex());
+        port->m_flowControl = probe;
+
+        probe->SetCrdToReturn(6, 130, port);
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldUseCtrlCrdRtrForTest(),
+                              true,
+                              "pending above threshold should enter ctrl-credit-return mode");
+
+        Ptr<Packet> first = probe->MaybeBuildControlReturnPacketForTest(port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_NE(first,
+                              nullptr,
+                              "large pending credit should still build a first control frame");
+        NS_TEST_ASSERT_MSG_EQ(port->GetCredits(6),
+                              63u,
+                              "a single control frame must clamp one VL to the 6-bit credit-field limit");
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(6),
+                              67,
+                              "only the actually encoded 63 cells should be deducted from pending credit");
+
+        probe->MaybeQueueControlReturnForTest(port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(6),
+                              0,
+                              "batch control-return enqueue should drain the remaining pending credit");
 
         Simulator::Destroy();
         Config::Reset();
@@ -3615,7 +3749,7 @@ class UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest : public TestCase
         Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
         Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
         Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
-        Config::SetDefault("ns3::UbPort::CbfcForceCtrlThresholdCell", IntegerValue(64));
+        Config::SetDefault("ns3::UbPort::CbfcCtrlCrdRtrThldCell", IntegerValue(64));
 
         Ptr<Node> node = CreateObject<Node>();
         Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
@@ -3637,12 +3771,12 @@ class UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest : public TestCase
         egressPort->m_flowControl = egressProbe;
 
         ingressProbe->SetCrdToReturn(5, 64, ingressPort);
-        NS_TEST_ASSERT_MSG_EQ(ingressProbe->ShouldForceControlReturnForTest(),
+        NS_TEST_ASSERT_MSG_EQ(ingressProbe->ShouldUseCtrlCrdRtrForTest(),
                               true,
-                              "ingress-side flow control should see threshold reached");
-        NS_TEST_ASSERT_MSG_EQ(egressProbe->ShouldForceControlReturnForTest(),
+                              "ingress-side flow control should see the ctrl-credit-return threshold reached");
+        NS_TEST_ASSERT_MSG_EQ(egressProbe->ShouldUseCtrlCrdRtrForTest(),
                               false,
-                              "egress-side flow control should stay below threshold in this setup");
+                              "egress-side flow control should stay below the ctrl-credit-return threshold in this setup");
 
         Ptr<Packet> packet = Create<Packet>(128);
         UbDataLink::GenPacketHeader(packet,
@@ -4631,7 +4765,10 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcPiggybackRestoreClearsLocalCreditBitTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcControlFrameFallbackWithoutDataPacketTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbCbfcForceControlFrameAtThresholdTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcCtrlCrdRtrThresholdTriggersControlFrameTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForcedControlReturnFlushesAllEligibleVlsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForcedControlReturnChunksControlFramesAtSixBitLimitTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest(), TestCase::Duration::QUICK);
 #endif
 #ifdef NS3_MPI

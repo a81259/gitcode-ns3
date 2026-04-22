@@ -839,6 +839,38 @@ void UbUtils::CbfcCreditLevelNotify(uint32_t nodeId,
     PrintTraceInfo(fileName, info);
 }
 
+void UbUtils::CbfcControlSendNotify(uint32_t nodeId,
+                                    uint32_t portId,
+                                    const std::string& reason,
+                                    int32_t triggerThresholdCells,
+                                    int32_t emitMinPendingCells,
+                                    const std::vector<int32_t>& pendingCredits,
+                                    const std::vector<uint8_t>& sendCredits)
+{
+    if (trace_path.empty() || !IsFlowControlTraceEnabled())
+    {
+        return;
+    }
+    std::ostringstream oss;
+    oss << "CBFC CONTROL_SEND"
+        << ", reason: " << reason
+        << " triggerThresholdCells: " << triggerThresholdCells
+        << " emitMinPendingCells: " << emitMinPendingCells
+        << " pendingCredits:";
+    for (size_t i = 0; i < pendingCredits.size(); ++i)
+    {
+        oss << (i == 0 ? "" : " ") << pendingCredits[i];
+    }
+    oss << " sendCredits:";
+    for (size_t i = 0; i < sendCredits.size(); ++i)
+    {
+        oss << (i == 0 ? "" : " ") << static_cast<uint32_t>(sendCredits[i]);
+    }
+    string info = oss.str();
+    string fileName = trace_path + "runlog/CbfcTrace_node_" + to_string(nodeId) + "_port_" + to_string(portId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
 void UbUtils::DcqcnMarkNotify(uint32_t nodeId,
                               uint32_t outPort,
                               uint64_t totalQueueBytes,
