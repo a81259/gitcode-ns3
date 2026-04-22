@@ -216,8 +216,12 @@ bool UbCbfc::IsFcLimited(Ptr<UbIngressQueue> ingressQ)
 void UbCbfc::OnIngressReleased(const UbFlowControlEventContext& context)
 {
     if (context.inPortId != context.outPortId) { // 转发的报文
-        Ptr<Packet> cbfcPkt = ReleaseOccupiedCrd(context.packet, context.inPortId);
-        if (cbfcPkt != nullptr) {
+        ReleaseOccupiedCrd(context.packet, context.inPortId);
+        Ptr<Packet> cbfcPkt = ShouldSendControlFallback(context.inPortId)
+                                  ? ReleaseOccupiedCrd(nullptr, context.inPortId)
+                                  : nullptr;
+        if (cbfcPkt != nullptr)
+        {
             SendCrdAck(cbfcPkt, context.inPortId);
         }
     }
@@ -230,11 +234,17 @@ void UbCbfc::OnEgressEnqueued(const UbFlowControlEventContext& context)
         return;
     }
     CbfcConsumeCrd(context.packet); // 计算消耗的信用证
+    TryAttachPiggybackCredit(context.packet);
 }
 
 void UbCbfc::OnControlFrameReceived(Ptr<Packet> p)
 {
     CbfcRestoreCrd(p);
+}
+
+void UbCbfc::OnDataPacketReceived(Ptr<Packet> p)
+{
+    RestoreDataPacketCredit(p);
 }
 
 void
@@ -247,10 +257,10 @@ UbCbfc::ControlCreditRestoreNotify(uint32_t nodeId,
 
 void UbCbfc::OnIngressEnqueued(const UbFlowControlEventContext& context)
 {
-    Ptr<Node> node = NodeList::GetNode(m_nodeId);
-    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(m_portId));
-
-    Ptr<Packet> cbfcPkt = ReleaseOccupiedCrd(context.packet, m_portId);
+    ReleaseOccupiedCrd(context.packet, m_portId);
+    Ptr<Packet> cbfcPkt = ShouldSendControlFallback(m_portId)
+                              ? ReleaseOccupiedCrd(nullptr, m_portId)
+                              : nullptr;
     if (cbfcPkt != nullptr) {
         SendCrdAck(cbfcPkt, m_portId);
     }
@@ -376,17 +386,20 @@ Ptr<Packet> UbCbfc::ReleaseOccupiedCrd(Ptr<Packet> p, uint32_t targetPortId)
     Ptr<Packet> cbfcPkt = nullptr;
     bool shouldReturnCredit = false;
     Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
-    uint32_t pktSize = p->GetSize();
-    UbDatalinkPacketHeader pktHeader;
-    p->PeekHeader(pktHeader);
-    uint8_t vlId = pktHeader.GetPacketVL();
-    NS_LOG_DEBUG("NodeId: " << node->GetId() << " PortId: " << port->GetIfIndex()
-                 << " vlId: " << (uint32_t)vlId << " pktSize: " << pktSize);
-
-    int32_t consumeCellNum = ceil((float)(pktSize) / (m_cbfcCfg.m_flitLen * m_cbfcCfg.m_nFlitPerCell));
-
     auto flowControl = DynamicCast<UbCbfc>(port->GetFlowControl());
-    flowControl->SetCrdToReturn(vlId, consumeCellNum, port);
+
+    if (p != nullptr) {
+        uint32_t pktSize = p->GetSize();
+        UbDatalinkPacketHeader pktHeader;
+        p->PeekHeader(pktHeader);
+        uint8_t vlId = pktHeader.GetPacketVL();
+        NS_LOG_DEBUG("NodeId: " << node->GetId() << " PortId: " << port->GetIfIndex()
+                     << " vlId: " << (uint32_t)vlId << " pktSize: " << pktSize);
+
+        int32_t consumeCellNum = ceil((float)(pktSize) / (m_cbfcCfg.m_flitLen * m_cbfcCfg.m_nFlitPerCell));
+        flowControl->SetCrdToReturn(vlId, consumeCellNum, port);
+    }
+
     int32_t leftCrdToReturn = 0;
     int32_t crdSndGrains = 0;
     port->ResetCredits();
@@ -417,6 +430,104 @@ Ptr<Packet> UbCbfc::ReleaseOccupiedCrd(Ptr<Packet> p, uint32_t targetPortId)
     }
 
     return cbfcPkt;
+}
+
+uint8_t
+UbCbfc::SelectPiggybackCreditVl() const
+{
+    IntegerValue val;
+    g_ub_vl_num.GetValue(val);
+    const uint8_t ubVlNum = static_cast<uint8_t>(val.Get());
+
+    for (uint8_t offset = 1; offset <= ubVlNum; ++offset) {
+        uint8_t candidate = static_cast<uint8_t>((m_lastPiggybackVl + offset) % ubVlNum);
+        if (m_crdToReturn[candidate] >= m_cbfcCfg.m_retCellGrainDataPacket) {
+            return candidate;
+        }
+    }
+    return UB_PRIORITY_NUM_DEFAULT;
+}
+
+bool
+UbCbfc::TryAttachPiggybackCredit(Ptr<Packet> p)
+{
+    if (p == nullptr) {
+        return false;
+    }
+
+    UbDatalinkPacketHeader header;
+    p->RemoveHeader(header);
+    if (header.GetCredit()) {
+        p->AddHeader(header);
+        return false;
+    }
+
+    const uint8_t targetVl = SelectPiggybackCreditVl();
+    if (targetVl >= UB_PRIORITY_NUM_DEFAULT) {
+        p->AddHeader(header);
+        return false;
+    }
+
+    header.SetCredit(true);
+    header.SetCreditTargetVL(targetVl);
+    p->AddHeader(header);
+    m_crdToReturn[targetVl] -= m_cbfcCfg.m_retCellGrainDataPacket;
+    m_lastPiggybackVl = targetVl;
+    return true;
+}
+
+bool
+UbCbfc::RestoreDataPacketCredit(Ptr<Packet> p)
+{
+    if (p == nullptr) {
+        return false;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(m_nodeId);
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(m_portId));
+
+    UbDatalinkPacketHeader header;
+    p->RemoveHeader(header);
+    if (!header.GetCredit()) {
+        p->AddHeader(header);
+        return false;
+    }
+
+    const uint8_t targetVl = header.GetCreditTargetVL();
+    const int32_t restoreCells = m_cbfcCfg.m_retCellGrainDataPacket;
+    m_crdTxfree[targetVl] += restoreCells;
+    utils::UbUtils::CbfcCreditLevelNotify(m_nodeId,
+                                          m_portId,
+                                          "RESTORE",
+                                          targetVl,
+                                          m_crdTxfree[targetVl],
+                                          restoreCells);
+
+    header.SetCredit(false);
+    header.SetCreditTargetVL(0);
+    p->AddHeader(header);
+    Simulator::ScheduleNow(&UbPort::TriggerTransmit, port);
+    return true;
+}
+
+bool
+UbCbfc::ShouldSendControlFallback(uint32_t targetPortId) const
+{
+    Ptr<Node> node = NodeList::GetNode(m_nodeId);
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(targetPortId));
+    if (port == nullptr) {
+        return false;
+    }
+    if (!port->GetUbQueue()->IsEmpty() || port->IsBusy()) {
+        return false;
+    }
+
+    for (int32_t pending : m_crdToReturn) {
+        if (pending >= m_cbfcCfg.m_retCellGrainControlPacket) {
+            return true;
+        }
+    }
+    return false;
 }
 
 FcType UbCbfc::GetFcType()
@@ -501,11 +612,17 @@ void UbCbfcSharedCredit::OnEgressEnqueued(const UbFlowControlEventContext& conte
         return;
     }
     CbfcSharedConsumeCrd(context.packet);
+    TryAttachPiggybackCredit(context.packet);
 }
 
 void UbCbfcSharedCredit::OnControlFrameReceived(Ptr<Packet> p)
 {
     CbfcSharedRestoreCrd(p);
+}
+
+void UbCbfcSharedCredit::OnDataPacketReceived(Ptr<Packet> p)
+{
+    RestoreSharedDataPacketCredit(p);
 }
 
 // CBFC 信用共享模式：信用消耗（Consume）逻辑
@@ -614,6 +731,43 @@ bool UbCbfcSharedCredit::CbfcSharedRestoreCrd(Ptr<Packet> p)
 
     Simulator::ScheduleNow(&UbPort::TriggerTransmit, port);
     return ret;
+}
+
+bool
+UbCbfcSharedCredit::RestoreSharedDataPacketCredit(Ptr<Packet> p)
+{
+    if (p == nullptr) {
+        return false;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(m_nodeId);
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(m_portId));
+
+    UbDatalinkPacketHeader header;
+    p->RemoveHeader(header);
+    if (!header.GetCredit()) {
+        p->AddHeader(header);
+        return false;
+    }
+
+    m_shareCrd += m_cbfcCfg.m_retCellGrainDataPacket;
+    IntegerValue val;
+    g_ub_vl_num.GetValue(val);
+    const int ubVlNum = val.Get();
+    for (int vl = 0; vl < ubVlNum && m_shareCrd > 0; ++vl) {
+        if (m_crdTxfree[vl] < m_reservedPerVlCells) {
+            const int32_t need = m_reservedPerVlCells - m_crdTxfree[vl];
+            const int32_t grant = std::min<int32_t>(need, m_shareCrd);
+            m_crdTxfree[vl] += grant;
+            m_shareCrd -= grant;
+        }
+    }
+
+    header.SetCredit(false);
+    header.SetCreditTargetVL(0);
+    p->AddHeader(header);
+    Simulator::ScheduleNow(&UbPort::TriggerTransmit, port);
+    return true;
 }
 
 TypeId UbPfc::GetTypeId(void)

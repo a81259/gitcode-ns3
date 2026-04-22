@@ -384,9 +384,15 @@ void UbSwitch::SwitchHandlePacket(Ptr<UbPort> port, Ptr<Packet> packet)
             port->GetFlowControl()->OnControlFrameReceived(packet);
             break;
         case UB_URMA_DATA_PACKET:
+            if (IsCBFCEnable() || IsCBFCSharedEnable()) {
+                port->GetFlowControl()->OnDataPacketReceived(packet);
+            }
             HandleURMADataPacket(port, packet);
             break;
         case UB_LDST_DATA_PACKET:
+            if (IsCBFCEnable() || IsCBFCSharedEnable()) {
+                port->GetFlowControl()->OnDataPacketReceived(packet);
+            }
             HandleLdstDataPacket(port, packet);
             break;
         default:

@@ -125,6 +125,8 @@ public:
     virtual void OnEgressEnqueued(const UbFlowControlEventContext& context) {}
     // 对端发来的 flow-control 控制帧到达后调用。
     virtual void OnControlFrameReceived(Ptr<Packet> p) {}
+    // 普通 DLLDP 数据包到达后调用；用于消费本跳 piggyback credit 等 data-link 本地语义。
+    virtual void OnDataPacketReceived(Ptr<Packet> p) {}
     // 报文已经完成 ingress 入账后调用。
     virtual void OnIngressEnqueued(const UbFlowControlEventContext& context) {}
     virtual FcType GetFcType()
@@ -151,6 +153,7 @@ public:
     virtual void OnIngressReleased(const UbFlowControlEventContext& context) override;
     virtual void OnEgressEnqueued(const UbFlowControlEventContext& context) override;
     virtual void OnControlFrameReceived(Ptr<Packet> p) override;
+    virtual void OnDataPacketReceived(Ptr<Packet> p) override;
     virtual void OnIngressEnqueued(const UbFlowControlEventContext& context) override;
     int32_t GetCrdToReturn(uint8_t vlId);
     void SetCrdToReturn(uint8_t vlId, int32_t consumeCell, Ptr<UbPort> targetPort);
@@ -182,9 +185,16 @@ protected:
     std::vector<int32_t>  m_crdTxfree;      // 发送端口每个vl信用证
     std::vector<int32_t>  m_crdToReturn;    // 用于记录每个vl需要返回的信用证
     std::vector<bool> m_creditBlockedLast;  // 上一次是否因 credit 不足而阻塞
+    uint8_t m_lastPiggybackVl {0};
+
+protected:
+    bool TryAttachPiggybackCredit(Ptr<Packet> p);
 
 private:
     bool CbfcRestoreCrd(Ptr<Packet> p);
+    bool RestoreDataPacketCredit(Ptr<Packet> p);
+    bool ShouldSendControlFallback(uint32_t targetPortId) const;
+    uint8_t SelectPiggybackCreditVl() const;
 };
 
 
@@ -206,10 +216,12 @@ public:
     bool IsFcLimited(Ptr<UbIngressQueue> ingressQ) override;
     void OnEgressEnqueued(const UbFlowControlEventContext& context) override;
     void OnControlFrameReceived(Ptr<Packet> p) override;
+    void OnDataPacketReceived(Ptr<Packet> p) override;
 
 private:
     bool CbfcSharedConsumeCrd(Ptr<Packet> p);
     bool CbfcSharedRestoreCrd(Ptr<Packet> p);
+    bool RestoreSharedDataPacketCredit(Ptr<Packet> p);
     int32_t m_shareCrd {0};
     int32_t m_reservedPerVlCells {0};
 };

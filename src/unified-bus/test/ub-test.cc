@@ -2322,6 +2322,28 @@ class UbObservingFlowControl : public UbFlowControl
     uint32_t m_observedPriority {0};
 };
 
+class UbCbfcProbe : public UbCbfc
+{
+  public:
+    static TypeId GetTypeId(void)
+    {
+        static TypeId tid = TypeId("ns3::UbCbfcProbe")
+            .SetParent<UbCbfc>()
+            .AddConstructor<UbCbfcProbe>();
+        return tid;
+    }
+
+    int32_t GetPendingCells(uint32_t vl) const
+    {
+        return m_crdToReturn.at(vl);
+    }
+
+    int32_t GetTxFreeCells(uint32_t vl) const
+    {
+        return m_crdTxfree.at(vl);
+    }
+};
+
 UbSinglePortPfcFixture
 CreateSinglePortPfcFixture(FcType mode,
                            uint32_t reserveBytes,
@@ -3335,6 +3357,185 @@ class UbSwitchLocalCbfcConfigTest : public TestCase
 };
 #endif
 
+class UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest : public TestCase
+{
+  public:
+    UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest()
+        : TestCase("UnifiedBus - CBFC piggyback target VL can differ from packet VL")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 100, node->GetId(), port->GetIfIndex());
+        port->m_flowControl = probe;
+
+        constexpr uint8_t kTargetVl = 5;
+        for (int i = 0; i < 4; ++i)
+        {
+            probe->SetCrdToReturn(kTargetVl, 1, port);
+        }
+
+        Ptr<Packet> packet = Create<Packet>(256);
+        UbDataLink::GenPacketHeader(packet,
+                                    false,
+                                    false,
+                                    /*crdVl*/ 1,
+                                    /*pktVl*/ 2,
+                                    false,
+                                    false,
+                                    UbDatalinkHeaderConfig::PACKET_IPV4);
+        Ptr<UbPacketQueue> ingressQueue = CreateObject<UbPacketQueue>();
+        ingressQueue->SetIngressPriority(2);
+        ingressQueue->SetInPortId(1);
+        ingressQueue->SetOutPortId(0);
+
+        probe->OnEgressEnqueued({
+            .packet = packet,
+            .ingressQueue = ingressQueue,
+            .inPortId = 0,
+            .outPortId = 0,
+            .priority = 2,
+        });
+
+        UbDatalinkPacketHeader header;
+        packet->PeekHeader(header);
+        NS_TEST_ASSERT_MSG_EQ(header.GetCredit(),
+                              true,
+                              "eligible data packet should carry piggyback credit");
+        NS_TEST_ASSERT_MSG_EQ(header.GetCreditTargetVL(),
+                              kTargetVl,
+                              "piggyback should target the selected pending-return VL, not packet VL");
+        NS_TEST_ASSERT_MSG_EQ(header.GetPacketVL(),
+                              2u,
+                              "piggyback must not alter the packet's own VL");
+        NS_TEST_ASSERT_MSG_EQ(probe->GetPendingCells(kTargetVl),
+                              0,
+                              "one data-grain worth of pending cells should be consumed by piggyback");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcPiggybackRestoreClearsLocalCreditBitTest : public TestCase
+{
+  public:
+    UbCbfcPiggybackRestoreClearsLocalCreditBitTest()
+        : TestCase("UnifiedBus - CBFC piggyback restore is consumed locally and clears header state")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        auto fixture = CreateMultiPortSwitchFixture(FcType::CBFC,
+                                                    /*portsNum*/ 1,
+                                                    /*reserveBytes*/ 0,
+                                                    /*sharedPoolBytes*/ 0,
+                                                    /*headroomPerPortBytes*/ 0,
+                                                    /*resumeGapBytes*/ 16,
+                                                    /*alphaShift*/ 1,
+                                                    {});
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 10, fixture.node->GetId(), fixture.ports[0]->GetIfIndex());
+        fixture.ports[0]->m_flowControl = probe;
+
+        const int32_t before = probe->GetTxFreeCells(6);
+        Ptr<Packet> packet = Create<Packet>(128);
+        UbDataLink::GenPacketHeader(packet,
+                                    true,
+                                    false,
+                                    /*crdVl*/ 6,
+                                    /*pktVl*/ 3,
+                                    false,
+                                    false,
+                                    UbDatalinkHeaderConfig::PACKET_IPV4);
+
+        probe->OnDataPacketReceived(packet);
+
+        UbDatalinkPacketHeader header;
+        packet->PeekHeader(header);
+        NS_TEST_ASSERT_MSG_EQ(header.GetCredit(),
+                              false,
+                              "piggyback credit flag should be cleared after the local hop consumes it");
+        NS_TEST_ASSERT_MSG_EQ(header.GetCreditTargetVL(),
+                              0u,
+                              "piggyback target VL should be cleared after local consumption");
+        NS_TEST_ASSERT_MSG_EQ(probe->GetTxFreeCells(6),
+                              before + 4,
+                              "piggyback restore should add one data-grain worth of cells to the target VL");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcControlFrameFallbackWithoutDataPacketTest : public TestCase
+{
+  public:
+    UbCbfcControlFrameFallbackWithoutDataPacketTest()
+        : TestCase("UnifiedBus - CBFC uses control-frame fallback when no data packet is available")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 100, node->GetId(), port->GetIfIndex());
+        port->m_flowControl = probe;
+
+        probe->SetCrdToReturn(4, 1, port);
+        Ptr<Packet> fallback = probe->ReleaseOccupiedCrd(nullptr, port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_NE(fallback,
+                              nullptr,
+                              "when no DLLDP is available, pending credit should fall back to a control frame");
+        UbDatalinkHeader dlHeader;
+        fallback->PeekHeader(dlHeader);
+        NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
+                              true,
+                              "fallback packet should be a real control frame");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 #ifdef NS3_MPI
 class UbCreateTopoRemoteLinkTest : public TestCase
 {
@@ -4288,6 +4489,9 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbCbfcRejectsZeroCellGeometryTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedRejectsNegativeThresholdTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchLocalCbfcConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcPiggybackRestoreClearsLocalCreditBitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcControlFrameFallbackWithoutDataPacketTest(), TestCase::Duration::QUICK);
 #endif
 #ifdef NS3_MPI
     AddTestCase(new UbCreateTopoRemoteLinkTest(), TestCase::Duration::QUICK);
