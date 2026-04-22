@@ -78,7 +78,7 @@ because the control header encodes at most `63` grains per VL.
 That means:
 
 - with `control grain = 1`, one frame returns at most `63 cells`
-- with `control grain = 8`, one frame returns at most `504 cells`
+- with `control grain = 32`, one frame returns at most `2016 cells`
 - with `control grain = 16`, one frame returns at most `1008 cells`
 
 So a larger threshold can still be reasonable if the control-packet grain is also large enough to make the fallback drain fast once it starts.
@@ -88,12 +88,12 @@ So a larger threshold can still be reasonable if the control-packet grain is als
 This repo currently uses:
 
 - `CbfcCtrlCrdRtrThldCell = 1024`
-- `CbfcRetCellGrainControlPacket = 8`
+- `CbfcRetCellGrainControlPacket = 32`
 
 Interpret that as:
 
 - RX may temporarily accumulate about `1024` cells of already-returnable credit on one VL
-- but once fallback is triggered, each control frame may return up to `63 * 8 = 504` cells for that VL
+- but once fallback is triggered, each control frame may return up to `63 * 32 = 2016` cells for that VL
 - so the default behavior is intentionally `late fallback, fast drain`
 
 At the common repo geometry:
@@ -122,7 +122,7 @@ It favors:
 
 It does **not** mean "threshold should always be some fixed fraction of initial credit."
 
-Treat `1024/8` as a repo-level strategy choice:
+Treat `1024/32` as a repo-level strategy choice:
 
 - `large retention budget`
 - `large control-return grain`
@@ -154,7 +154,7 @@ Start from these rules:
 - It controls how much already-returnable credit RX may temporarily keep before forcing `Crd_Ack Block`.
 - `CbfcRetCellGrainControlPacket` controls how much credit one fallback control frame can return per VL.
 - Sender-side continuity only provides a safety ceiling; it is not the primary semantic definition.
-- In the common repo default setup, `1024/8` is a deliberate `late fallback, fast drain` default.
+- In the common repo default setup, `1024/32` is a deliberate `late fallback, fast drain` default.
 
 ## Unsafe Wording
 

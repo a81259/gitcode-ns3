@@ -165,8 +165,8 @@ TypeId UbPort::GetTypeId(void)
             .AddAttribute("CbfcRetCellGrainControlPacket",
                           "Credit return granularity in Crd_Ack Block for control packets "
                           "(Spec CTRL_CREDIT_GRAIN_SIZE). Valid: {1,2,4,8,16,32,64,128} cells; "
-                          "repo default 8, spec default 1.",
-                          UintegerValue(8),
+                          "repo default 32, spec default 1.",
+                          UintegerValue(32),
                           MakeUintegerAccessor(&UbPort::m_cbfcRetCellGrainControlPacket),
                           MakeUintegerChecker<uint8_t>())
             .AddAttribute("CbfcInitCreditCell",
