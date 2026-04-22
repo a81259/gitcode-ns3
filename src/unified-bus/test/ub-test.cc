@@ -2342,6 +2342,11 @@ class UbCbfcProbe : public UbCbfc
     {
         return m_crdTxfree.at(vl);
     }
+
+    bool ShouldForceControlReturnForTest() const
+    {
+        return ShouldForceControlReturn();
+    }
 };
 
 UbSinglePortPfcFixture
@@ -3384,7 +3389,7 @@ class UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest : public TestCase
 
         Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
         probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
-                    /*initCredit*/ 100, node->GetId(), port->GetIfIndex());
+                    /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), port->GetIfIndex());
         port->m_flowControl = probe;
 
         constexpr uint8_t kTargetVl = 5;
@@ -3457,7 +3462,7 @@ class UbCbfcPiggybackRestoreClearsLocalCreditBitTest : public TestCase
 
         Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
         probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
-                    /*initCredit*/ 10, fixture.node->GetId(), fixture.ports[0]->GetIfIndex());
+                    /*initCredit*/ 10, /*forceThreshold*/ 64, fixture.node->GetId(), fixture.ports[0]->GetIfIndex());
         fixture.ports[0]->m_flowControl = probe;
 
         const int32_t before = probe->GetTxFreeCells(6);
@@ -3517,7 +3522,7 @@ class UbCbfcControlFrameFallbackWithoutDataPacketTest : public TestCase
 
         Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
         probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
-                    /*initCredit*/ 100, node->GetId(), port->GetIfIndex());
+                    /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), port->GetIfIndex());
         port->m_flowControl = probe;
 
         probe->SetCrdToReturn(4, 1, port);
@@ -3530,6 +3535,140 @@ class UbCbfcControlFrameFallbackWithoutDataPacketTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
                               true,
                               "fallback packet should be a real control frame");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcForceControlFrameAtThresholdTest : public TestCase
+{
+  public:
+    UbCbfcForceControlFrameAtThresholdTest()
+        : TestCase("UnifiedBus - CBFC forces control-frame credit return once pending threshold is reached")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+        Config::SetDefault("ns3::UbPort::CbfcForceCtrlThresholdCell", IntegerValue(64));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> port = CreateObject<UbPort>();
+        node->AddDevice(port);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> probe = CreateObject<UbCbfcProbe>();
+        probe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                    /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), port->GetIfIndex());
+        port->m_flowControl = probe;
+
+        probe->SetCrdToReturn(6, 63, port);
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldForceControlReturnForTest(),
+                              false,
+                              "pending below threshold should not force control-frame return yet");
+
+        probe->SetCrdToReturn(6, 1, port);
+        NS_TEST_ASSERT_MSG_EQ(probe->ShouldForceControlReturnForTest(),
+                              true,
+                              "pending reaching threshold should switch to forced control-frame return");
+
+        Ptr<Packet> forced = probe->ReleaseOccupiedCrd(nullptr, port->GetIfIndex());
+        NS_TEST_ASSERT_MSG_NE(forced,
+                              nullptr,
+                              "forced-return threshold should immediately generate a control frame");
+
+        UbDatalinkHeader dlHeader;
+        forced->PeekHeader(dlHeader);
+        NS_TEST_ASSERT_MSG_EQ(dlHeader.IsControlCreditHeader(),
+                              true,
+                              "forced return should use a real control credit frame");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest : public TestCase
+{
+  public:
+    UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest()
+        : TestCase("UnifiedBus - CBFC forwarded release checks threshold state on the ingress port instance")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbSwitch::FlowControl", EnumValue(FcType::CBFC));
+        Config::SetDefault("ns3::UbPort::CbfcFlitLenByte", UintegerValue(20));
+        Config::SetDefault("ns3::UbPort::CbfcFlitsPerCell", UintegerValue(8));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainDataPacket", UintegerValue(4));
+        Config::SetDefault("ns3::UbPort::CbfcRetCellGrainControlPacket", UintegerValue(1));
+        Config::SetDefault("ns3::UbPort::CbfcInitCreditCell", IntegerValue(100));
+        Config::SetDefault("ns3::UbPort::CbfcForceCtrlThresholdCell", IntegerValue(64));
+
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
+        node->AggregateObject(sw);
+        Ptr<UbPort> ingressPort = CreateObject<UbPort>();
+        Ptr<UbPort> egressPort = CreateObject<UbPort>();
+        node->AddDevice(ingressPort);
+        node->AddDevice(egressPort);
+        sw->Init();
+
+        Ptr<UbCbfcProbe> ingressProbe = CreateObject<UbCbfcProbe>();
+        ingressProbe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                           /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), ingressPort->GetIfIndex());
+        ingressPort->m_flowControl = ingressProbe;
+
+        Ptr<UbCbfcProbe> egressProbe = CreateObject<UbCbfcProbe>();
+        egressProbe->Init(/*flitLen*/ 20, /*flitsPerCell*/ 8, /*retData*/ 4, /*retCtrl*/ 1,
+                          /*initCredit*/ 100, /*forceThreshold*/ 64, node->GetId(), egressPort->GetIfIndex());
+        egressPort->m_flowControl = egressProbe;
+
+        ingressProbe->SetCrdToReturn(5, 64, ingressPort);
+        NS_TEST_ASSERT_MSG_EQ(ingressProbe->ShouldForceControlReturnForTest(),
+                              true,
+                              "ingress-side flow control should see threshold reached");
+        NS_TEST_ASSERT_MSG_EQ(egressProbe->ShouldForceControlReturnForTest(),
+                              false,
+                              "egress-side flow control should stay below threshold in this setup");
+
+        Ptr<Packet> packet = Create<Packet>(128);
+        UbDataLink::GenPacketHeader(packet,
+                                    false,
+                                    false,
+                                    /*crdVl*/ 1,
+                                    /*pktVl*/ 5,
+                                    false,
+                                    false,
+                                    UbDatalinkHeaderConfig::PACKET_IPV4);
+        Ptr<UbPacketQueue> ingressQueue = CreateObject<UbPacketQueue>();
+        ingressQueue->SetIngressPriority(5);
+        ingressQueue->SetInPortId(ingressPort->GetIfIndex());
+        ingressQueue->SetOutPortId(egressPort->GetIfIndex());
+
+        egressProbe->OnIngressReleased({
+            .packet = packet,
+            .ingressQueue = ingressQueue,
+            .inPortId = ingressPort->GetIfIndex(),
+            .outPortId = egressPort->GetIfIndex(),
+            .priority = 5,
+        });
+
+        NS_TEST_ASSERT_MSG_LT(ingressProbe->GetPendingCells(5),
+                              64,
+                              "forwarded release should drain pending credits on the ingress-port flow-control instance");
 
         Simulator::Destroy();
         Config::Reset();
@@ -4492,6 +4631,8 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcPiggybackRestoreClearsLocalCreditBitTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCbfcControlFrameFallbackWithoutDataPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForceControlFrameAtThresholdTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest(), TestCase::Duration::QUICK);
 #endif
 #ifdef NS3_MPI
     AddTestCase(new UbCreateTopoRemoteLinkTest(), TestCase::Duration::QUICK);

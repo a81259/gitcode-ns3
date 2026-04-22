@@ -146,7 +146,7 @@ public:
     virtual FcType GetFcType() override;
 
     void Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
-              uint8_t retCellGrainControlPacket, int32_t portTxfree,
+              uint8_t retCellGrainControlPacket, int32_t portTxfree, int32_t forceCtrlThresholdCells,
               uint32_t nodeId, uint32_t portId);
 
     virtual bool IsFcLimited(Ptr<UbIngressQueue> ingressQ) override;
@@ -180,6 +180,7 @@ protected:
         uint8_t  m_nFlitPerCell;                 // N值 {1, 2, 4, 8, 16, 32}
         uint8_t  m_retCellGrainDataPacket;       // 返回的CRD的粒度，通常从以下选项中选择 {1, 2, 4, 8, 16, 32, 64, 128}
         uint8_t  m_retCellGrainControlPacket;    // 返回的CRD的粒度，通常从以下选项中选择 {1, 2, 4, 8, 16, 32, 64, 128}
+        int32_t  m_forceCtrlThresholdCells;      // 触发强制 Crd_Ack Block 的 per-VL pending-return 阈值（单位：cell）
     } m_cbfcCfg {};
 
     std::vector<int32_t>  m_crdTxfree;      // 发送端口每个vl信用证
@@ -189,6 +190,7 @@ protected:
 
 protected:
     bool TryAttachPiggybackCredit(Ptr<Packet> p);
+    bool ShouldForceControlReturn() const;
 
 private:
     bool CbfcRestoreCrd(Ptr<Packet> p);
@@ -211,6 +213,7 @@ public:
 
     void Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
               uint8_t retCellGrainControlPacket, int32_t reservedPerVlCells,
+              int32_t forceCtrlThresholdCells,
               int32_t sharedInitCells, uint32_t nodeId, uint32_t portId);
 
     bool IsFcLimited(Ptr<UbIngressQueue> ingressQ) override;

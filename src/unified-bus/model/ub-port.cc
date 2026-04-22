@@ -181,6 +181,13 @@ TypeId UbPort::GetTypeId(void)
                           IntegerValue(4096),
                           MakeIntegerAccessor(&UbPort::m_cbfcSharedInitCells),
                           MakeIntegerChecker<int32_t>())
+            .AddAttribute("CbfcForceCtrlThresholdCell",
+                          "Per-VL pending-return threshold in cells. Once pending returned credits on a VL "
+                          "reach this threshold, the model forces a Crd_Ack control frame instead of waiting "
+                          "for more piggyback opportunities. Default 64 cells.",
+                          IntegerValue(64),
+                          MakeIntegerAccessor(&UbPort::m_cbfcForceCtrlThresholdCells),
+                          MakeIntegerChecker<int32_t>(1))
             .AddAttribute("PfcUpThld",
                           "PFC XOFF threshold in bytes; a PAUSE frame is sent when the receive queue exceeds this level.",
                           IntegerValue(DEFAULT_PFC_UP_THLD),
@@ -285,7 +292,8 @@ void UbPort::CreateAndInitFc(FcType type)
             } else {
                 auto flowControl = DynamicCast<UbCbfc>(m_flowControl);
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell, m_cbfcRetCellGrainDataPacket,
-                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, GetNode()->GetId(), m_portId);
+                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, m_cbfcForceCtrlThresholdCells,
+                    GetNode()->GetId(), m_portId);
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl Cbfc Init");
             }
             break;
@@ -300,7 +308,7 @@ void UbPort::CreateAndInitFc(FcType type)
 
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell,
                                 m_cbfcRetCellGrainDataPacket, m_cbfcRetCellGrainControlPacket,
-                                reservedPerVlCells, sharedInitCells,
+                                reservedPerVlCells, m_cbfcForceCtrlThresholdCells, sharedInitCells,
                                 GetNode()->GetId(), m_portId);
 
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl CbfcSharedMode Init");

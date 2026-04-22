@@ -130,7 +130,7 @@ TypeId UbCbfc::GetTypeId(void)
 }
 
 void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
-                  uint8_t retCellGrainControlPacket, int32_t portTxfree,
+                  uint8_t retCellGrainControlPacket, int32_t portTxfree, int32_t forceCtrlThresholdCells,
                   uint32_t nodeId, uint32_t portId)
 {
     // 基础参数配置
@@ -138,6 +138,7 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
     m_cbfcCfg.m_nFlitPerCell = nFlitPerCell;
     m_cbfcCfg.m_retCellGrainDataPacket = retCellGrainDataPacket;
     m_cbfcCfg.m_retCellGrainControlPacket = retCellGrainControlPacket;
+    m_cbfcCfg.m_forceCtrlThresholdCells = forceCtrlThresholdCells;
     IntegerValue val;
     g_ub_vl_num.GetValue(val);
     int ubVlNum = val.Get();
@@ -153,6 +154,7 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
                  << " flitsPerCell=" << static_cast<uint32_t>(m_cbfcCfg.m_nFlitPerCell)
                  << " retCellGrainData=" << static_cast<uint32_t>(m_cbfcCfg.m_retCellGrainDataPacket)
                  << " retCellGrainCtrl=" << static_cast<uint32_t>(m_cbfcCfg.m_retCellGrainControlPacket)
+                 << " forceCtrlThreshold=" << m_cbfcCfg.m_forceCtrlThresholdCells
                  << " initCreditPerVl=" << portTxfree);
 
     NS_ABORT_MSG_IF(m_cbfcCfg.m_flitLen == 0 || m_cbfcCfg.m_nFlitPerCell == 0,
@@ -160,6 +162,8 @@ void UbCbfc::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDat
     NS_ABORT_MSG_IF(m_cbfcCfg.m_retCellGrainDataPacket == 0 ||
                         m_cbfcCfg.m_retCellGrainControlPacket == 0,
                     "CBFC requires non-zero return grain for both data and control packets");
+    NS_ABORT_MSG_IF(m_cbfcCfg.m_forceCtrlThresholdCells <= 0,
+                    "CBFC requires a positive control-frame force threshold");
     NS_ABORT_MSG_IF(portTxfree < 0,
                     "CBFC requires non-negative initial transmit credit per VL");
 
@@ -216,13 +220,18 @@ bool UbCbfc::IsFcLimited(Ptr<UbIngressQueue> ingressQ)
 void UbCbfc::OnIngressReleased(const UbFlowControlEventContext& context)
 {
     if (context.inPortId != context.outPortId) { // 转发的报文
-        ReleaseOccupiedCrd(context.packet, context.inPortId);
-        Ptr<Packet> cbfcPkt = ShouldSendControlFallback(context.inPortId)
-                                  ? ReleaseOccupiedCrd(nullptr, context.inPortId)
+        Ptr<Node> node = NodeList::GetNode(m_nodeId);
+        Ptr<UbPort> targetPort = DynamicCast<UbPort>(node->GetDevice(context.inPortId));
+        auto targetFlowControl = DynamicCast<UbCbfc>(targetPort->GetFlowControl());
+
+        targetFlowControl->ReleaseOccupiedCrd(context.packet, context.inPortId);
+        Ptr<Packet> cbfcPkt = (targetFlowControl->ShouldForceControlReturn() ||
+                               targetFlowControl->ShouldSendControlFallback(context.inPortId))
+                                  ? targetFlowControl->ReleaseOccupiedCrd(nullptr, context.inPortId)
                                   : nullptr;
         if (cbfcPkt != nullptr)
         {
-            SendCrdAck(cbfcPkt, context.inPortId);
+            targetFlowControl->SendCrdAck(cbfcPkt, context.inPortId);
         }
     }
 }
@@ -258,7 +267,7 @@ UbCbfc::ControlCreditRestoreNotify(uint32_t nodeId,
 void UbCbfc::OnIngressEnqueued(const UbFlowControlEventContext& context)
 {
     ReleaseOccupiedCrd(context.packet, m_portId);
-    Ptr<Packet> cbfcPkt = ShouldSendControlFallback(m_portId)
+    Ptr<Packet> cbfcPkt = (ShouldForceControlReturn() || ShouldSendControlFallback(m_portId))
                               ? ReleaseOccupiedCrd(nullptr, m_portId)
                               : nullptr;
     if (cbfcPkt != nullptr) {
@@ -511,6 +520,17 @@ UbCbfc::RestoreDataPacketCredit(Ptr<Packet> p)
 }
 
 bool
+UbCbfc::ShouldForceControlReturn() const
+{
+    for (int32_t pending : m_crdToReturn) {
+        if (pending >= m_cbfcCfg.m_forceCtrlThresholdCells) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool
 UbCbfc::ShouldSendControlFallback(uint32_t targetPortId) const
 {
     Ptr<Node> node = NodeList::GetNode(m_nodeId);
@@ -546,10 +566,11 @@ TypeId UbCbfcSharedCredit::GetTypeId(void)
 
 void UbCbfcSharedCredit::Init(uint8_t flitLen, uint8_t nFlitPerCell, uint8_t retCellGrainDataPacket,
                             uint8_t retCellGrainControlPacket, int32_t reservedPerVlCells,
+                            int32_t forceCtrlThresholdCells,
                             int32_t sharedInitCells, uint32_t nodeId, uint32_t portId)
 {
     UbCbfc::Init(flitLen, nFlitPerCell, retCellGrainDataPacket, retCellGrainControlPacket,
-                 reservedPerVlCells, nodeId, portId);
+                 reservedPerVlCells, forceCtrlThresholdCells, nodeId, portId);
 
     m_shareCrd = sharedInitCells;
     m_reservedPerVlCells = reservedPerVlCells;
