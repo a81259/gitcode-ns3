@@ -3126,8 +3126,8 @@ class UbPfcForwardingUsesIngressPortConfigTest : public TestCase
         constexpr uint32_t kPriority = 1;
         fixture.queueManager->PushToVoq(kIngressPort, kEgressPort, kPriority, 120);
 
-        Ptr<UbPfc> egressFlowControl = DynamicCast<UbPfc>(fixture.ports[kEgressPort]->GetFlowControl());
-        egressFlowControl->OnIngressReleased({
+        Ptr<UbPfc> ingressFlowControl = DynamicCast<UbPfc>(fixture.ports[kIngressPort]->GetFlowControl());
+        ingressFlowControl->OnIngressReleased({
             .packet = Create<Packet>(120),
             .ingressQueue = nullptr,
             .inPortId = kIngressPort,
@@ -3170,7 +3170,7 @@ class UbFlowControlReleaseHookRunsAfterIngressDequeueTest : public TestCase
 
         Ptr<UbObservingFlowControl> observingFc = CreateObject<UbObservingFlowControl>();
         observingFc->Configure(fixture.queueManager, kIngressPort, kPriority);
-        fixture.ports[kEgressPort]->m_flowControl = observingFc;
+        fixture.ports[kIngressPort]->m_flowControl = observingFc;
 
         // Keep the port busy so SendPacket/AllocateNextPacket won't try to hit a null channel.
         fixture.ports[kEgressPort]->SetSendState(SendState::BUSY);
@@ -3658,7 +3658,7 @@ class UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest : public TestCase
         ingressQueue->SetInPortId(ingressPort->GetIfIndex());
         ingressQueue->SetOutPortId(egressPort->GetIfIndex());
 
-        egressProbe->OnIngressReleased({
+        ingressProbe->OnIngressReleased({
             .packet = packet,
             .ingressQueue = ingressQueue,
             .inPortId = ingressPort->GetIfIndex(),

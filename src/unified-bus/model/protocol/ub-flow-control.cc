@@ -220,18 +220,13 @@ bool UbCbfc::IsFcLimited(Ptr<UbIngressQueue> ingressQ)
 void UbCbfc::OnIngressReleased(const UbFlowControlEventContext& context)
 {
     if (context.inPortId != context.outPortId) { // 转发的报文
-        Ptr<Node> node = NodeList::GetNode(m_nodeId);
-        Ptr<UbPort> targetPort = DynamicCast<UbPort>(node->GetDevice(context.inPortId));
-        auto targetFlowControl = DynamicCast<UbCbfc>(targetPort->GetFlowControl());
-
-        targetFlowControl->ReleaseOccupiedCrd(context.packet, context.inPortId);
-        Ptr<Packet> cbfcPkt = (targetFlowControl->ShouldForceControlReturn() ||
-                               targetFlowControl->ShouldSendControlFallback(context.inPortId))
-                                  ? targetFlowControl->ReleaseOccupiedCrd(nullptr, context.inPortId)
+        ReleaseOccupiedCrd(context.packet, m_portId);
+        Ptr<Packet> cbfcPkt = (ShouldForceControlReturn() || ShouldSendControlFallback(m_portId))
+                                  ? ReleaseOccupiedCrd(nullptr, m_portId)
                                   : nullptr;
         if (cbfcPkt != nullptr)
         {
-            targetFlowControl->SendCrdAck(cbfcPkt, context.inPortId);
+            SendCrdAck(cbfcPkt, m_portId);
         }
     }
 }

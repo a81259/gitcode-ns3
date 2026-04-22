@@ -238,8 +238,9 @@ void UbRoundRobinAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
             !ingressQueue->IsGeneratedDataPacket()) {
             // Forwarded packet (not locally generated)
             auto node = NodeList::GetNode(m_nodeId);
+            auto inPort = DynamicCast<UbPort>(node->GetDevice(inPortId));
             node->GetObject<UbSwitch>()->NotifySwitchDequeue(inPortId, outPortId, priority, packet);
-            outPort->GetFlowControl()->OnIngressReleased(context);
+            inPort->GetFlowControl()->OnIngressReleased(context);
         }
     }
     m_isRunning[outPortId] = false;
@@ -489,8 +490,9 @@ void UbDwrrAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
                     !q->IsGeneratedDataPacket()) {
                     // Forwarded packet (not locally generated)
                     auto node = NodeList::GetNode(m_nodeId);
+                    auto inPort = DynamicCast<UbPort>(node->GetDevice(inPortId));
                     node->GetObject<UbSwitch>()->NotifySwitchDequeue(inPortId, outPortId, priority, packet);
-                    outPort->GetFlowControl()->OnIngressReleased(context);
+                    inPort->GetFlowControl()->OnIngressReleased(context);
                 }
 
                 sentAny = true;
