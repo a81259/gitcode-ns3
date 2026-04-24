@@ -231,9 +231,9 @@ int UbRoutingProcess::SelectAdaptiveOutPort(RoutingKey &rtKey, const std::vector
     return selectedPort;
 }
 
-uint64_t UbRoutingProcess::CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint8_t priority)
+uint64_t UbRoutingProcess::CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint8_t priority, uint32_t salt)
 {
-    uint8_t buf[13];
+    uint8_t buf[17];
     buf[0] = (sip >> 24) & 0xff;
     buf[1] = (sip >> 16) & 0xff;
     buf[2] = (sip >> 8) & 0xff;
@@ -247,6 +247,10 @@ uint64_t UbRoutingProcess::CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, 
     buf[10] = (dport >> 8) & 0xff;
     buf[11] = dport & 0xff;
     buf[12] = priority;
+    buf[13] = (salt >> 24) & 0xff;
+    buf[14] = (salt >> 16) & 0xff;
+    buf[15] = (salt >> 8) & 0xff;
+    buf[16] = salt & 0xff;
     std::string str(reinterpret_cast<const char*>(buf), sizeof(buf));
     uint64_t hash = Hash64(str);
     return hash;
@@ -261,6 +265,8 @@ int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey, const std::vector<uint16_
     uint16_t dport = rtKey.dport;
     uint8_t priority = rtKey.priority;
     bool usePacketSpray = rtKey.usePacketSpray;
+    // hash key用本地ip做盐值，使同一条流/包在不同交换机上会有不同的hash
+    uint32_t salt = utils::NodeIdToIp(m_nodeId).Get();
 
     size_t totalSize = shortestPorts.size() + nonShortestPorts.size();
 
@@ -272,11 +278,11 @@ int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey, const std::vector<uint16_
     if (usePacketSpray) {
         // Packet spray should stay exactly even over time for each flow while still
         // randomizing the starting port across different flows.
-        const uint64_t flowBase = CalcHash(sip, dip, 0, dport, priority);
+        const uint64_t flowBase = CalcHash(sip, dip, 0, dport, priority, salt);
         hash64 = flowBase + sport;
     } else {
         // usePacketSpray == LB_MODE_PER_FLOW
-        hash64 = CalcHash(sip, dip, 0, 0, priority);
+        hash64 = CalcHash(sip, dip, 0, 0, priority, salt);
     }
     
     size_t idx = hash64 % totalSize;
