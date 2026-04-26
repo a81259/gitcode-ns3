@@ -221,10 +221,10 @@ private:
  *      字节3-5：
  *      [NPI:25] (Network Partition Identifier)
  */
-class UbNetworkHeader : public Header {
+class UbIpBasedNetworkHeader : public Header {
 public:
-    UbNetworkHeader();
-    virtual ~UbNetworkHeader();
+    UbIpBasedNetworkHeader();
+    virtual ~UbIpBasedNetworkHeader();
 
     static TypeId GetTypeId(void);
     TypeId GetInstanceTypeId(void) const override;
@@ -359,7 +359,7 @@ private:
     // Byte2-3
     uint16_t m_dcna = 0;
 
-    // Byte4-5: Congestion Control (与 UbNetworkHeader 复用结构思想)
+    // Byte4-5: Congestion Control (与 UbIpBasedNetworkHeader 复用结构思想)
     uint8_t m_mode = 0; // 3 bits
     union {
         struct {  // mode 000
@@ -463,7 +463,7 @@ private:
         // Byte3-5
         uint32_t m_dcna = 0;
     
-        // Byte6-7: Congestion Control (与 UbNetworkHeader 复用结构思想)
+        // Byte6-7: Congestion Control (与 UbIpBasedNetworkHeader 复用结构思想)
         uint8_t m_mode = 0; // 3 bits
         union {
             struct {  // mode 000
@@ -662,6 +662,38 @@ private:
 
     // 常量定义
     static const uint32_t totalHeaderSize = 8; // 总头部大小 (8字节)
+};
+
+/**
+ * \ingroup ub-header
+ * \brief UB CNP extended transport header
+ *
+ * 报文头格式：总计16字节
+ *      字节0:[ECN:2][Location:1][Reserved:5]
+ *      字节1-15: Reserved
+ */
+class UbCnpExtTph : public Header {
+public:
+    UbCnpExtTph();
+    virtual ~UbCnpExtTph();
+
+    static TypeId GetTypeId(void);
+    TypeId GetInstanceTypeId(void) const override;
+    void Print(std::ostream& os) const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    uint32_t GetSerializedSize(void) const override;
+
+    void SetEcn(uint8_t ecn);
+    uint8_t GetEcn() const;
+    void SetLocation(bool location);
+    bool GetLocation() const;
+
+private:
+    uint8_t m_ecn{0};
+    bool m_location{false};
+
+    static const uint32_t totalHeaderSize = 16;
 };
 
 /**

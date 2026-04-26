@@ -6,20 +6,51 @@
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
 #include "ns3/nstime.h"
+#include "ub-datatype.h"
 #include "ub-network-address.h"
 
 namespace ns3 {
+
+class Node;
+class UbPfcFixedDecisionHook;
+class UbPfcDynamicDecisionHook;
+class UbPfcPaperDynamicDecisionHook;
 
 constexpr uint32_t DEFAULT_RESERVE_PER_QUEUE_BYTES = 1048576;  // 1MB
 constexpr uint64_t DEFAULT_SHARED_POOL_BYTES       = 0;        // disabled
 constexpr uint32_t DEFAULT_HEADROOM_PER_PORT_BYTES = 0;        // disabled
 constexpr uint32_t DEFAULT_ALPHA_SHIFT             = 1;        // shared / 2
-constexpr uint32_t DEFAULT_RESUME_OFFSET           = 4 * 1024; // 1 MTU
+constexpr uint32_t DEFAULT_DYNAMIC_PFC_RESUME_GAP_BYTES = 4 * 1024;
+constexpr uint32_t DEFAULT_PAPER_DYNAMIC_PFC_BETA = 8;
+constexpr uint32_t DEFAULT_PAPER_DYNAMIC_PFC_PRIORITY_COUNT = 8;
 
 enum class IngressQueueType {
     VOQ,        // Virtual Output Queue - 转发数据包队列
     TP,         // Transport Channel - 传输层可靠通道
     BASE        // 基类默认值 - 不应出现在运行时
+};
+
+struct UbIngressQueueOccupancy {
+    uint64_t total_bytes {0};
+    uint64_t shared_bytes {0};
+    uint64_t headroom_bytes {0};
+};
+
+struct UbIngressPortOccupancy {
+    uint64_t non_headroom_bytes {0};
+    uint64_t headroom_bytes {0};
+    uint64_t total_bytes {0};
+};
+
+struct UbSwitchBufferOccupancy {
+    uint64_t shared_pool_used_bytes {0};
+    uint64_t total_buffered_bytes {0};
+};
+
+struct UbBufferProfileView {
+    uint64_t reserve_per_queue_bytes {0};
+    uint64_t shared_pool_bytes {0};
+    uint64_t headroom_per_port_bytes {0};
 };
 
 /**
@@ -109,6 +140,10 @@ public:
     ~UbQueueManager() {}
     void Init();
     static TypeId GetTypeId(void);
+    void SetOwnerNode(Ptr<Node> node)
+    {
+        m_ownerNode = node;
+    }
 
     // Init
     void SetVLNum(uint32_t vlNum)
@@ -174,30 +209,40 @@ public:
     uint64_t GetOutPortBufferUsed(uint32_t outPort, uint32_t priority);
     
     /** OutPort视图：某outPort所有优先级的总buffer占用 */
-    uint64_t GetTotalOutPortBufferUsed(uint32_t outPort);
+    uint64_t GetTotalOutPortBufferUsed(uint32_t outPort) const;
     
     uint32_t GetReservePerQueueBytes() const { return m_reservePerQueueBytes; }
     void SetReservePerQueueBytes(uint32_t size);
+    void SetPaperDynamicAdmissionEnabled(bool enabled) { m_paperDynamicAdmissionEnabled = enabled; }
+    bool IsPaperDynamicAdmissionEnabled() const { return m_paperDynamicAdmissionEnabled; }
 
     // ========== Three-Tier Buffer (reserve → shared → headroom) ==========
 
     bool CheckIngressAdmission(uint32_t inPort, uint32_t priority, uint32_t pSize);
-
-    uint64_t GetXoffThreshold() const;
-    uint64_t GetXonThreshold() const;
+    UbIngressQueueOccupancy GetIngressQueueOccupancy(uint32_t inPort, uint32_t priority) const;
+    UbIngressPortOccupancy GetIngressPortOccupancy(uint32_t inPort) const;
+    UbSwitchBufferOccupancy GetSwitchBufferOccupancy() const;
+    UbBufferProfileView GetBufferProfileView() const;
     uint64_t GetQueueIngressSharedBytes(uint32_t inPort, uint32_t priority) const;
-    uint64_t GetGlobalSharedUsedBytes() const { return m_sharedUsedBytes; }
     uint64_t GetQueueIngressHeadroomBytes(uint32_t inPort, uint32_t priority) const;
     uint64_t GetQueueIngressTotalBytes(uint32_t inPort, uint32_t priority) const;
     uint64_t GetIngressControlBytes(uint32_t inPort, uint32_t priority) const;
     uint64_t GetOutPortControlBytes(uint32_t outPort, uint32_t priority) const;
-    uint32_t GetResumeOffset() const { return m_resumeOffset; }
-    uint64_t GetSharedPoolBytes() const { return m_sharedPoolBytes; }
-    uint32_t GetHeadroomPerPortBytes() const { return m_headroomPerPortBytes; }
+    void AddEgressBufferedBytes(uint32_t bytes);
+    void RemoveEgressBufferedBytes(uint32_t bytes);
 
 private:
     using DarrayU64 = std::vector<std::vector<uint64_t>>;
+    friend class UbPfcFixedDecisionHook;
+    friend class UbPfcDynamicDecisionHook;
+    friend class UbPfcPaperDynamicDecisionHook;
     bool IsLocallyGeneratedControlFrame(uint32_t inPort, uint32_t outPort, uint32_t priority) const;
+    uint64_t GetIngressAdmissionThresholdBytes(uint32_t inPort, uint32_t priority) const;
+    uint64_t GetDynamicPauseThresholdBytes() const;
+    uint64_t GetDynamicResumeThresholdBytes() const;
+    uint64_t GetPaperPauseThresholdBytes(uint64_t totalBufferedBytes) const;
+    uint64_t GetPaperResumeThresholdBytes(uint64_t totalBufferedBytes) const;
+    uint64_t GetSwitchTotalBufferedBytes() const;
     void UpdateIngressAdmission(uint32_t inPort, uint32_t priority, uint32_t pSize);
     void RemoveFromIngressAdmission(uint32_t inPort, uint32_t priority, uint32_t pSize);
 
@@ -213,13 +258,20 @@ private:
     uint64_t m_sharedPoolBytes {DEFAULT_SHARED_POOL_BYTES};
     uint32_t m_alphaShift {DEFAULT_ALPHA_SHIFT};
     uint32_t m_headroomPerPortBytes {DEFAULT_HEADROOM_PER_PORT_BYTES};
-    uint32_t m_resumeOffset {DEFAULT_RESUME_OFFSET};
+    uint32_t m_dynamicPfcResumeGapBytes {DEFAULT_DYNAMIC_PFC_RESUME_GAP_BYTES};
+    uint32_t m_paperDynamicPfcBeta {DEFAULT_PAPER_DYNAMIC_PFC_BETA};
+    bool m_paperDynamicAdmissionEnabled {false};
     uint64_t m_totalHeadroomBytes {0};
     uint64_t m_totalReservedBytes {0};
     uint64_t m_sharedUsedBytes {0};
+    uint64_t m_totalVoqBufferedBytes {0};
+    uint64_t m_totalEgressBufferedBytes {0};
+    std::vector<uint64_t> m_totalOutPortVoqBufferedBytes;
     DarrayU64 m_hdrmBytes;    // [inPort][priority] headroom usage
     DarrayU64 m_ingressControlBytes; // [inPort][priority] control-frame occupancy outside data-plane admission
     DarrayU64 m_outPortControlBytes; // [outPort][priority] control-frame occupancy outside data-plane admission
+    Ptr<Node> m_ownerNode;
+    TracedCallback<uint32_t, uint64_t> m_traceOutPortBufferBytes;
 };
 } // namespace ns3
 

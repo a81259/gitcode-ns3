@@ -199,6 +199,20 @@ class OpenUSimStageSkillDocsTest(unittest.TestCase):
         self.assertIn("optional post-analysis companion skill", agents_text)
         self.assertIn("not a fifth stage", agents_text)
 
+    def test_pfc_dynamic_paper_reference_names_source_paper(self):
+        lessons_text = self.read_text(
+            ".codex/skills/openusim-references/congestion-control-and-pfc-lessons.md"
+        )
+        toolchain_text = self.read_text(
+            ".codex/skills/openusim-references/spec-to-toolchain.md"
+        )
+        scratch_readme_text = self.read_text("scratch/README.md")
+        paper_title = "Congestion Control for Large-Scale RDMA Deployments"
+
+        for text in (lessons_text, toolchain_text, scratch_readme_text):
+            self.assertIn("PFC_DYNAMIC_PAPER", text)
+            self.assertIn(paper_title, text)
+
     def test_old_openusim_helper_surface_is_gone(self):
         repo_root = self.repo_root()
         self.assertFalse((repo_root / ".codex/skills/openusim-helper/SKILL.md").exists())

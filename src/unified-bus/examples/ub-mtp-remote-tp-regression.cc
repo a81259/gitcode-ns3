@@ -165,7 +165,7 @@ InitNode(Ptr<Node> node, UbNodeType_t nodeType, uint32_t portCount)
 
     sw->Init();
     Ptr<UbCongestionControl> congestionCtrl = UbCongestionControl::Create(UB_SWITCH);
-    congestionCtrl->SwitchInit(sw);
+    congestionCtrl->OnSwitchAttached(sw);
 }
 
 void

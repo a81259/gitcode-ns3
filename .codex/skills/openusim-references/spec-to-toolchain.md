@@ -218,6 +218,27 @@ The skill-layer toolchain validates **parameter keys** (whether a key exists in 
 
 #### Discovering valid values
 
+Current examples from this repo's source of truth:
+
+- `ns3::UbSwitch::FlowControl`: `NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`, `PFC_DYNAMIC_PAPER`
+- `ns3::UbQueueManager::DynamicPfcResumeGapBytes`: dynamic PFC xon/xoff gap in bytes
+- `ns3::UbQueueManager::PaperDynamicPfcBeta`: paper-style dynamic PFC beta used by `PFC_DYNAMIC_PAPER`, the DCQCN paper reproduction mode for **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015)
+
+#### Legacy network attribute keys
+
+Do not write these older keys into `network_attribute.txt`; current `UbUtils::SetComponentsAttribute()` rejects them before `ConfigStore` loads the file.
+
+| Legacy key | Current key/value |
+|------------|-------------------|
+| `ns3::UbQueueManager::ResumeOffset` | `ns3::UbQueueManager::DynamicPfcResumeGapBytes` |
+| `ns3::UbSwitch::EnableCBFC` | `ns3::UbSwitch::FlowControl "CBFC"` |
+| `ns3::UbSwitch::EnablePFC` | `ns3::UbSwitch::FlowControl "PFC_FIXED"` or `"PFC_DYNAMIC"` |
+| `ns3::UbApiThread::*` | `ns3::UbLdstThread::*` |
+
+When the discussion turns from "which knob exists" to "what these congestion/PFC knobs mean in queue dynamics", consult:
+
+- `congestion-control-and-pfc-lessons.md`
+
 The runtime parameter catalog (`.openusim/project/parameter-catalog.json`) stores a `description` field for each entry. For enum-type attributes, the description typically lists valid values (e.g. "The flow control mechanism to use (NONE, CBFC, CBFC_SHARED, or PFC)."). Consult the catalog description before accepting a user-provided value.
 
 For values not discoverable from the catalog, check the C++ source:

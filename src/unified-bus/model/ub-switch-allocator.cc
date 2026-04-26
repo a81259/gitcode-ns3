@@ -25,6 +25,26 @@ NS_OBJECT_ENSURE_REGISTERED(UbSwitchAllocator);
 NS_OBJECT_ENSURE_REGISTERED(UbDwrrAllocator);
 NS_LOG_COMPONENT_DEFINE("UbSwitchAllocator");
 
+namespace {
+
+UbFlowControlEventContext
+MakeAllocatorFlowControlEventContext(Ptr<Packet> packet,
+                                     Ptr<UbIngressQueue> ingressQueue,
+                                     uint32_t inPortId,
+                                     uint32_t outPortId,
+                                     uint32_t priority)
+{
+    return {
+        .packet = packet,
+        .ingressQueue = ingressQueue,
+        .inPortId = inPortId,
+        .outPortId = outPortId,
+        .priority = priority,
+    };
+}
+
+} // namespace
+
 TypeId UbSwitchAllocator::GetTypeId(void)
 {
     static TypeId tid = TypeId("ns3::UbSwitchAllocator")
@@ -190,20 +210,37 @@ void UbRoundRobinAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
     auto ingressQueue = SelectNextIngressQueue(outPort);
     // 调度得到的ingressqueue加入egressqueue
     if (ingressQueue != nullptr) {
+        const uint32_t nextPacketBytes = ingressQueue->GetNextPacketSize();
+        if (!outPort->GetUbQueue()->CanEnqueue(nextPacketBytes)) {
+            NS_LOG_DEBUG("[UbRoundRobinAllocator AllocateNextPacket] egress queue full, keep packet in ingress queue"
+                         << " outPortId=" << outPortId
+                         << " bytes=" << nextPacketBytes);
+            m_isRunning[outPortId] = false;
+            return;
+        }
+
         auto packet = ingressQueue->GetNextPacket();
         auto inPortId = ingressQueue->GetInPortId();
         auto priority = ingressQueue->GetIngressPriority();
         auto packetEntry = std::make_tuple(inPortId, priority, packet);
-        outPort->GetFlowControl()->HandleSentPacket(packet, ingressQueue);
-        outPort->GetUbQueue()->DoEnqueue(packetEntry);
-        outPort->GetFlowControl()->HandleReleaseOccupiedFlowControl(packet, inPortId, outPortId);
+        auto context = MakeAllocatorFlowControlEventContext(packet,
+                                                            ingressQueue,
+                                                            inPortId,
+                                                            outPortId,
+                                                            priority);
+        const bool enqueueOk = outPort->EnqueueToEgress(packetEntry);
+        NS_ASSERT_MSG(enqueueOk,
+                      "allocator pre-check promised egress queue capacity, but DoEnqueue still failed");
+        outPort->GetFlowControl()->OnEgressEnqueued(context);
 
         // Packet moved from VOQ to EgressQueue, notify Switch to update buffer statistics
         if (ingressQueue->GetIngressQueueType() != IngressQueueType::TP &&
             !ingressQueue->IsGeneratedDataPacket()) {
             // Forwarded packet (not locally generated)
             auto node = NodeList::GetNode(m_nodeId);
+            auto inPort = DynamicCast<UbPort>(node->GetDevice(inPortId));
             node->GetObject<UbSwitch>()->NotifySwitchDequeue(inPortId, outPortId, priority, packet);
+            inPort->GetFlowControl()->OnIngressReleased(context);
         }
     }
     m_isRunning[outPortId] = false;
@@ -420,6 +457,12 @@ void UbDwrrAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
                 }
 
                 uint32_t pktSize = q->GetNextPacketSize();
+                if (!outPort->GetUbQueue()->CanEnqueue(pktSize)) {
+                    NS_LOG_DEBUG("[UbDwrrAllocator AllocateNextPacket] egress queue full, keep packet in ingress queue"
+                                 << " outPortId=" << outPortId
+                                 << " bytes=" << pktSize);
+                    break;
+                }
 
                 // 第一个包就发不出去：不扣赤字，并回滚 m_rrIdx
                 if (pktSize > deficit) {
@@ -432,16 +475,24 @@ void UbDwrrAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
                 auto packet = q->GetNextPacket();
                 auto inPortId = q->GetInPortId();
                 auto packetEntry = std::make_tuple(inPortId, priority, packet);
-                outPort->GetFlowControl()->HandleSentPacket(packet, q);
-                outPort->GetUbQueue()->DoEnqueue(packetEntry);
-                outPort->GetFlowControl()->HandleReleaseOccupiedFlowControl(packet, inPortId, outPortId);
+                auto context = MakeAllocatorFlowControlEventContext(packet,
+                                                                    q,
+                                                                    inPortId,
+                                                                    outPortId,
+                                                                    priority);
+                const bool enqueueOk = outPort->EnqueueToEgress(packetEntry);
+                NS_ASSERT_MSG(enqueueOk,
+                              "allocator pre-check promised egress queue capacity, but DoEnqueue still failed");
+                outPort->GetFlowControl()->OnEgressEnqueued(context);
 
                 // Packet moved from VOQ to EgressQueue, notify Switch to update buffer statistics
-                if (ingressQueue->GetIngressQueueType() != IngressQueueType::TP &&
-                    !ingressQueue->IsGeneratedDataPacket()) {
+                if (q->GetIngressQueueType() != IngressQueueType::TP &&
+                    !q->IsGeneratedDataPacket()) {
                     // Forwarded packet (not locally generated)
                     auto node = NodeList::GetNode(m_nodeId);
+                    auto inPort = DynamicCast<UbPort>(node->GetDevice(inPortId));
                     node->GetObject<UbSwitch>()->NotifySwitchDequeue(inPortId, outPortId, priority, packet);
+                    inPort->GetFlowControl()->OnIngressReleased(context);
                 }
 
                 sentAny = true;

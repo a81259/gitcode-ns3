@@ -5,6 +5,7 @@
 #include "ns3/ub-network-address.h"
 #include "ns3/ub-caqm.h"
 #include "ns3/ub-tag.h"
+#include "ns3/ub-utils.h"
 #ifdef NS3_MPI
 #include "ns3/mpi-receiver.h"
 #endif
@@ -59,6 +60,7 @@ bool UbEgressQueue::DoEnqueue(PacketEntry packetEntry)
 
     // Check byte limit
     if (m_currentBytes + pktSize > m_maxEgressBytes) {
+        UbUtils::RecordRuntimePacketDrop("egress queue buffer full");
         NS_LOG_WARN ("Buffer full, packet dropped: " 
                      << (m_currentBytes + pktSize) << " bytes > limit " << m_maxEgressBytes 
                      << " bytes. Packet dropped (inPort=" << inPortId 
@@ -68,10 +70,38 @@ bool UbEgressQueue::DoEnqueue(PacketEntry packetEntry)
     
     m_egressQ.push(packetEntry);
     m_currentBytes += pktSize;  // 更新字节统计
+    m_traceUbEnqueue(pkt, static_cast<uint32_t>(m_currentBytes));
 
     NS_LOG_LOGIC ("[UbEgressQueue DoEnqueue] Egress Queue size: " << m_egressQ.size () 
                   << " bytes: " << m_currentBytes << " (+" << pktSize << ")");
 
+    return true;
+}
+
+bool UbEgressQueue::CanEnqueue(uint32_t packetBytes) const
+{
+    return m_currentBytes + packetBytes <= m_maxEgressBytes;
+}
+
+bool
+UbPort::EnqueueToEgress(PacketEntry packetEntry)
+{
+    auto [inPortId, priority, packet] = packetEntry;
+    (void)inPortId;
+    (void)priority;
+    const uint32_t pktSize = packet->GetSize();
+
+    const bool enqueueOk = m_ubEQ->DoEnqueue(packetEntry);
+    if (!enqueueOk)
+    {
+        return false;
+    }
+
+    Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
+    if (ubSwitch != nullptr)
+    {
+        ubSwitch->GetQueueManager()->AddEgressBufferedBytes(pktSize);
+    }
     return true;
 }
 
@@ -101,6 +131,7 @@ PacketEntry UbEgressQueue::DoDequeue()
     auto [inPortId, priority, pkt] = packetEntry;
     uint32_t pktSize = pkt->GetSize();
     m_currentBytes -= pktSize;  // 更新字节统计
+    m_traceUbDequeue(pkt, static_cast<uint32_t>(m_currentBytes));
 
     NS_LOG_LOGIC ("[UbEgressQueue DoDequeue] Egress Queue size: " << m_egressQ.size ()
                   << " bytes: " << m_currentBytes << " (-" << pktSize << ")");
@@ -155,8 +186,9 @@ TypeId UbPort::GetTypeId(void)
                           MakeUintegerChecker<uint8_t>())
             .AddAttribute("CbfcRetCellGrainControlPacket",
                           "Credit return granularity in Crd_Ack Block for control packets "
-                          "(Spec CTRL_CREDIT_GRAIN_SIZE). Valid: {1,2,4,8,16,32,64,128} cells; spec default 1.",
-                          UintegerValue(1),
+                          "(Spec CTRL_CREDIT_GRAIN_SIZE). Valid: {1,2,4,8,16,32,64,128} cells; "
+                          "repo default 32, spec default 1.",
+                          UintegerValue(32),
                           MakeUintegerAccessor(&UbPort::m_cbfcRetCellGrainControlPacket),
                           MakeUintegerChecker<uint8_t>())
             .AddAttribute("CbfcInitCreditCell",
@@ -172,6 +204,13 @@ TypeId UbPort::GetTypeId(void)
                           IntegerValue(4096),
                           MakeIntegerAccessor(&UbPort::m_cbfcSharedInitCells),
                           MakeIntegerChecker<int32_t>())
+            .AddAttribute("CbfcCtrlCrdRtrThldCell",
+                          "Per-VL pending returned-credit threshold in cells. Once a VL reaches this threshold, "
+                          "CBFC switches to control-frame credit return instead of waiting for piggyback opportunities. "
+                          "Repo default 1024 cells.",
+                          IntegerValue(1024),
+                          MakeIntegerAccessor(&UbPort::m_cbfcCtrlCrdRtrThldCells),
+                          MakeIntegerChecker<int32_t>(1))
             .AddAttribute("PfcUpThld",
                           "PFC XOFF threshold in bytes; a PAUSE frame is sent when the receive queue exceeds this level.",
                           IntegerValue(DEFAULT_PFC_UP_THLD),
@@ -276,7 +315,8 @@ void UbPort::CreateAndInitFc(FcType type)
             } else {
                 auto flowControl = DynamicCast<UbCbfc>(m_flowControl);
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell, m_cbfcRetCellGrainDataPacket,
-                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, GetNode()->GetId(), m_portId);
+                    m_cbfcRetCellGrainControlPacket, m_cbfcPortTxfree, m_cbfcCtrlCrdRtrThldCells,
+                    GetNode()->GetId(), m_portId);
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl Cbfc Init");
             }
             break;
@@ -291,7 +331,7 @@ void UbPort::CreateAndInitFc(FcType type)
 
                 flowControl->Init(m_cbfcFlitLen, m_cbfcFlitsPerCell,
                                 m_cbfcRetCellGrainDataPacket, m_cbfcRetCellGrainControlPacket,
-                                reservedPerVlCells, sharedInitCells,
+                                reservedPerVlCells, m_cbfcCtrlCrdRtrThldCells, sharedInitCells,
                                 GetNode()->GetId(), m_portId);
 
                 NS_LOG_DEBUG("[UbPort CreateAndInitFc] flowControl CbfcSharedMode Init");
@@ -299,6 +339,7 @@ void UbPort::CreateAndInitFc(FcType type)
             break;
         case FcType::PFC_FIXED:
         case FcType::PFC_DYNAMIC:
+        case FcType::PFC_DYNAMIC_PAPER:
             m_flowControl = CreateObject<UbPfc>();
             if (m_flowControl == nullptr) {
                 NS_FATAL_ERROR("Failed to create UbPfc object for port " << m_portId);
@@ -355,13 +396,17 @@ void UbPort::DequeuePacket(void)
     m_sendState = SendState::BUSY;
 
     auto [inPortId, priority, packet] = m_ubEQ->DoDequeue();
+    Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
+    if (ubSwitch != nullptr)
+    {
+        ubSwitch->GetQueueManager()->RemoveEgressBufferedBytes(packet->GetSize());
+    }
 
     m_currentPkt = packet;
     m_currentInPortId = inPortId;
     m_currentPriority = priority;
     if (m_ubEQ->IsEmpty()) {
         // Switch allocation when port sendding packet.
-        Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
         if (ubSwitch != nullptr && ubSwitch->GetAllocator() != nullptr) {
             Simulator::ScheduleNow(&UbSwitchAllocator::TriggerAllocator, ubSwitch->GetAllocator(), this);
         }
@@ -501,7 +546,7 @@ void UbPort::AddIpv4Header(Ptr<Packet> p, Ipv4Address sIp, Ipv4Address dIp)
 
 void UbPort::AddNetHeader(Ptr<Packet> p)
 {
-    UbNetworkHeader netHeader;
+    UbIpBasedNetworkHeader netHeader;
     p->AddHeader(netHeader);
 }
 
@@ -625,11 +670,6 @@ void UbPort::SetDataRate(DataRate bps)
 {
     NS_LOG_DEBUG("port set data rate");
     m_bps = bps;
-    Ptr<UbCongestionControl> congestionCtrl = GetNode()->GetObject<UbSwitch>()->GetCongestionCtrl();
-    if (congestionCtrl->GetCongestionAlgo() == CAQM) {
-        Ptr<UbSwitchCaqm> caqmSw = DynamicCast<UbSwitchCaqm>(congestionCtrl);
-        caqmSw->SetDataRate(m_portId, bps);
-    }
 }
 
 void UbPort::IncreaseRcvQueueSize(Ptr<Packet> p, Ptr<UbPort> port)

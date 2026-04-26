@@ -82,7 +82,7 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbPort::UbDataRate` (DataRate)
   - `ns3::UbPort::UbInterframeGap` (Time)
 - Credit-based/PFC knobs:
-  - `ns3::UbSwitch::FlowControl` (`NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`)
+  - `ns3::UbSwitch::FlowControl` (`NONE`, `CBFC`, `CBFC_SHARED`, `PFC_FIXED`, `PFC_DYNAMIC`, `PFC_DYNAMIC_PAPER`)
   - `ns3::UbPort::CbfcFlitLenByte`, `CbfcFlitsPerCell`, `CbfcInitCreditCell`, `CbfcRetCellGrainDataPacket`, `CbfcRetCellGrainControlPacket`
   - `ns3::UbPort::PfcUpThld`, `PfcLowThld`
 - Congestion control (CAQM) and buffers:
@@ -91,7 +91,8 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbQueueManager::SharedPoolBytes`
   - `ns3::UbQueueManager::HeadroomPerPortBytes`
   - `ns3::UbQueueManager::AlphaShift`
-  - `ns3::UbQueueManager::ResumeOffset`
+  - `ns3::UbQueueManager::DynamicPfcResumeGapBytes`
+  - `ns3::UbQueueManager::PaperDynamicPfcBeta`
 - Transport behavior (`ns3::UbTransportChannel`):
   - `UsePacketSpray` (bool)
   - `UseShortestPaths` (bool)
@@ -102,6 +103,35 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbApp::EnableMultiPath` (bool)
   - `ns3::UbApiLdst::*` (ThreadNum, LoadResponseSize, StoreRequestSize, QueuePriority)
   - `ns3::UbApiLdstThread::*` (StoreOutstanding, LoadOutstanding, LoadRequestSize, QueuePriority, UsePacketSpray, UseShortestPaths)
+
+### Upgrading copied cases
+
+If you copied an older `scratch/` case into your own workspace, check `network_attribute.txt` before running it against a newer build. Known legacy keys are rejected before ns-3 `ConfigStore` loads the file so the error points at the migration instead of a generic attribute failure.
+
+| Old key or behavior | Current form |
+|---------------------|--------------|
+| `default ns3::UbQueueManager::ResumeOffset "..."` | `default ns3::UbQueueManager::DynamicPfcResumeGapBytes "..."` |
+| `default ns3::UbSwitch::EnableCBFC "true"` | `default ns3::UbSwitch::FlowControl "CBFC"` |
+| `default ns3::UbSwitch::EnablePFC "true"` | Choose `default ns3::UbSwitch::FlowControl "PFC_FIXED"` or `"PFC_DYNAMIC"` |
+| `default ns3::UbApiThread::*` | `default ns3::UbLdstThread::*` |
+| Depend on old `CbfcRetCellGrainControlPacket` default | Set `default ns3::UbPort::CbfcRetCellGrainControlPacket "1"` explicitly to reproduce older behavior; current repo default is `32` |
+| Need `QueueTrace_*` files | Set `global UB_QUEUE_TRACE_ENABLE "true"` |
+| Need `PfcTrace_*` or `CbfcTrace_*` files | Set `global UB_FLOW_CONTROL_TRACE_ENABLE "true"` |
+| Need `Dcqcn*` or `Caqm*` algorithm traces | Set `global UB_CONGESTION_CONTROL_TRACE_ENABLE "true"` |
+
+Runs with `default ns3::UbTransportChannel::EnableRetrans "false"` now stop early when a packet is dropped. Fix the route/buffer/flow-control cause, or enable retransmission if the experiment intentionally allows loss recovery.
+
+### `PFC_DYNAMIC_PAPER`
+
+`PFC_DYNAMIC_PAPER` is a paper-reproduction mode for the DCQCN paper **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015). It is separate from the repo's default `PFC_DYNAMIC` mode.
+
+The current implementation uses:
+
+- `xoff = PaperDynamicPfcBeta * max(SharedPoolBytes - totalBufferedBytes, 0) / priorities`
+- `xon = max(xoff - 2 * UB_MTU_BYTE, 0)`
+- `totalBufferedBytes = VOQ backlog + egress queue backlog` across the switch
+
+Use `PFC_DYNAMIC_PAPER` when the experiment is explicitly trying to reproduce or compare against that paper-style dynamic PFC threshold. Use `PFC_DYNAMIC` for the repo's shared-pool dynamic PFC mode.
 
 Project-level `global` keys (defined as `GlobalValue` in code and read by UB):
 
@@ -371,6 +401,8 @@ traffic.csv
 
 In `ub-quick-example`, `UbUtils::ParseTrace()` runs after the simulator. If `UB_PARSE_TRACE_ENABLE` is `true` and `UB_PYTHON_SCRIPT_PATH` points to `parse_trace.py`, the script processes `runlog/` and writes analysis CSVs (e.g., `task_statistics.csv`, `throughput.csv`) under the same case directory.
 
+The shipped case `scratch/2nodes_single-tp` keeps `UB_QUEUE_TRACE_ENABLE`, `UB_FLOW_CONTROL_TRACE_ENABLE`, and `UB_CONGESTION_CONTROL_TRACE_ENABLE` enabled on purpose as a trace example. Treat it as an observability-rich sample, not as the minimal recommended default for every new case.
+
 ---
 
 ## Network modeling notes (from code)
@@ -379,7 +411,7 @@ In `ub-quick-example`, `UbUtils::ParseTrace()` runs after the simulator. If `UB_
 - IFG: `ns3::UbPort::UbInterframeGap` (set to `0ns` to disable spacing).
 - Queue/buffer: `ns3::UbQueueManager::BufferSize` bounds ingress/egress accounting used by the switch.
 - Path choice: `UseShortestPaths` influences which outport sets are considered; `UsePacketSpray` toggles per-packet load-balance usage in headers and routing.
-- Congestion control: `UB_CC_ALGO` and `UB_CC_ENABLED` pick and enable the algorithm (CAQM classes are implemented).
+- Congestion control: `UB_CC_ALGO` and `UB_CC_ENABLED` pick and enable the algorithm. `CAQM` and RTP-only `DCQCN` are implemented.
 
 ---
 
@@ -411,14 +443,29 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
   - `default ns3::UbQueueManager::SharedPoolBytes "12582912"`
   - `default ns3::UbQueueManager::HeadroomPerPortBytes "262144"`
   - `default ns3::UbQueueManager::AlphaShift "1"`
-  - `default ns3::UbQueueManager::ResumeOffset "4096"`
+  - `default ns3::UbQueueManager::DynamicPfcResumeGapBytes "4096"`
+  - `default ns3::UbQueueManager::PaperDynamicPfcBeta "8"` (only used with `PFC_DYNAMIC_PAPER`, the paper-style mode for **"Congestion Control for Large-Scale RDMA Deployments"**)
 - Congestion control
   - `global UB_CC_ALGO "CAQM"`
   - `global UB_CC_ENABLED "false"`
+  - RTP-only DCQCN defaults
+  - `global UB_CC_ALGO "DCQCN"`
+  - `default ns3::UbHostDcqcn::CnpInterval "50us"`
+  - `default ns3::UbHostDcqcn::InitialRate "50Gbps"`
+  - `default ns3::UbHostDcqcn::RateIncreaseTimer "55us"`
+  - `default ns3::UbHostDcqcn::ByteCounterThreshold "10485760"`
+  - `default ns3::UbHostDcqcn::RateAi "40Mbps"`
+  - `default ns3::UbHostDcqcn::HyperAiRate "100Mbps"`
+  - `default ns3::UbSwitchDcqcn::KminBytes "5120"`
+  - `default ns3::UbSwitchDcqcn::KmaxBytes "204800"`
+  - `default ns3::UbSwitchDcqcn::Pmax "0.01"`
 - Trace and parsing
   - `global UB_TRACE_ENABLE "true"`
   - `global UB_PARSE_TRACE_ENABLE "true"`
   - `global UB_RECORD_PKT_TRACE "true"`
+  - `global UB_QUEUE_TRACE_ENABLE "false"` (enable when `QueueTrace_*` evidence is needed)
+  - `global UB_FLOW_CONTROL_TRACE_ENABLE "false"` (enable when `PfcTrace_*`/`CbfcTrace_*` evidence is needed)
+  - `global UB_CONGESTION_CONTROL_TRACE_ENABLE "false"` (enable when `Dcqcn*`/`Caqm*` algorithm traces are needed)
   - `global UB_PYTHON_SCRIPT_PATH "scratch/ns-3-ub-tools/trace_analysis/parse_trace.py"`
 - Priority/VL sizing
   - `global UB_PRIORITY_NUM "16"`

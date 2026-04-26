@@ -152,7 +152,7 @@ uint32_t UbFault::GetPacketSize(Ptr<Packet> packet)
     UdpHeader UHeader;
     Ipv4Header I4Header;
     UbDatalinkPacketHeader DataLinkPacketHeader;
-    UbNetworkHeader networkHeader;
+    UbIpBasedNetworkHeader networkHeader;
     uint32_t MAExtTaHeaderSize = MAExtTaHeader.GetSerializedSize();
     uint32_t UbTransactionHeaderSize = TransactionHeader.GetSerializedSize();
     uint32_t UbTransportHeaderSize = TransportHeader.GetSerializedSize();

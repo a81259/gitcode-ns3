@@ -2,6 +2,21 @@
 
 **Language**: [English](RELEASE_NOTES_UB_en.md) | [中文](RELEASE_NOTES_UB.md)
 
+## Release 1.2.1
+
+**Release Date**: April 2026
+
+### Features and Behavior Changes
+
+- Added RTP-side DCQCN support, plus `PFC_DYNAMIC_PAPER` as the paper-style dynamic PFC threshold reproduction mode for the DCQCN paper **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015).
+- `ub-quick-example` now stops early when `EnableRetrans=false` and a packet is dropped, with guidance to check routing, buffer, and flow-control settings instead of continuing a run that has no recovery path.
+
+### Compatibility and Migration
+
+- `network_attribute.txt` is now scanned for known legacy keys before `ConfigStore` loads it, so copied cases get a migration hint. Known migrations include `ns3::UbQueueManager::ResumeOffset` -> `ns3::UbQueueManager::DynamicPfcResumeGapBytes`, `ns3::UbSwitch::EnableCBFC/EnablePFC` -> `ns3::UbSwitch::FlowControl`, and `ns3::UbApiThread::*` -> `ns3::UbLdstThread::*`.
+- If an older case depends on the previous `CbfcRetCellGrainControlPacket=1` behavior, set that value explicitly in `network_attribute.txt`; the current repo default is `32`.
+- Fine-grained trace files are controlled by new switches: `UB_QUEUE_TRACE_ENABLE`, `UB_FLOW_CONTROL_TRACE_ENABLE`, and `UB_CONGESTION_CONTROL_TRACE_ENABLE`. Older cases that omit them still run, but they do not automatically produce the corresponding `QueueTrace_*`, `PfcTrace_*`, `CbfcTrace_*`, `Dcqcn*`, or `Caqm*` files.
+
 ## Release 1.2.0
 
 **Release Date**: March 2026

@@ -63,6 +63,7 @@ testpy-output/
 .openusim/
 scratch/openusim-generated/
 scratch/debug*/
+scratch/archived/
 
 # Temporary and backup files
 *.tmp

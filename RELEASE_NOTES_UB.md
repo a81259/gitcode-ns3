@@ -2,6 +2,21 @@
 
 **语言**: [English](RELEASE_NOTES_UB_en.md) | [中文](RELEASE_NOTES_UB.md)
 
+## Release 1.2.1
+
+**发布日期**: 2026 年 4 月
+
+### 新特性与行为变化
+
+- 新增 RTP 侧 DCQCN 支持，并新增 `PFC_DYNAMIC_PAPER` 作为 DCQCN 论文 **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015) 的 paper-style dynamic PFC 阈值复现模式。
+- `ub-quick-example` 在 `EnableRetrans=false` 且发生丢包时会提前停止，并提示检查路由、缓冲区和流控配置，避免无恢复能力的运行继续产生不可解释结果。
+
+### 兼容性与迁移
+
+- `network_attribute.txt` 现在会在 `ConfigStore` 前检查已知旧 key，并输出迁移提示。已知迁移包括：`ns3::UbQueueManager::ResumeOffset` → `ns3::UbQueueManager::DynamicPfcResumeGapBytes`，`ns3::UbSwitch::EnableCBFC/EnablePFC` → `ns3::UbSwitch::FlowControl`，`ns3::UbApiThread::*` → `ns3::UbLdstThread::*`。
+- 如果旧 case 依赖旧的 `CbfcRetCellGrainControlPacket=1` 行为，请在 `network_attribute.txt` 里显式设置该值；当前 repo 默认值为 `32`。
+- 细粒度 trace 文件由新开关控制：`UB_QUEUE_TRACE_ENABLE`、`UB_FLOW_CONTROL_TRACE_ENABLE`、`UB_CONGESTION_CONTROL_TRACE_ENABLE`。旧 case 不写这些开关可以继续运行，但不会自动生成对应的 `QueueTrace_*`、`PfcTrace_*`、`CbfcTrace_*`、`Dcqcn*` 或 `Caqm*` 文件。
+
 ## Release 1.2.0
 
 **发布日期**: 2026 年 3 月
