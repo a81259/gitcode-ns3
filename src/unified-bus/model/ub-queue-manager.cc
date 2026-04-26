@@ -170,11 +170,14 @@ void UbQueueManager::Init()
 
     m_inPortBuffer.assign(m_portsNum, std::vector<uint64_t>(m_vlNum, 0));
     m_outPortBuffer.assign(m_portsNum, std::vector<uint64_t>(m_vlNum, 0));
+    m_totalOutPortVoqBufferedBytes.assign(m_portsNum, 0);
     m_hdrmBytes.assign(m_portsNum, std::vector<uint64_t>(m_vlNum, 0));
     m_ingressControlBytes.assign(m_portsNum, std::vector<uint64_t>(m_vlNum, 0));
     m_outPortControlBytes.assign(m_portsNum, std::vector<uint64_t>(m_vlNum, 0));
 
     m_sharedUsedBytes = 0;
+    m_totalVoqBufferedBytes = 0;
+    m_totalEgressBufferedBytes = 0;
     m_totalHeadroomBytes = static_cast<uint64_t>(m_headroomPerPortBytes) * m_portsNum;
     m_totalReservedBytes = static_cast<uint64_t>(m_reservePerQueueBytes) * m_vlNum * m_portsNum;
 
@@ -250,6 +253,8 @@ void UbQueueManager::PushToVoq(uint32_t inPort, uint32_t outPort,
     if (IsLocallyGeneratedControlFrame(inPort, outPort, priority)) {
         m_ingressControlBytes[inPort][priority] += pSize;
         m_outPortControlBytes[outPort][priority] += pSize;
+        m_totalVoqBufferedBytes += pSize;
+        m_totalOutPortVoqBufferedBytes[outPort] += pSize;
         NS_LOG_DEBUG("PushToVoq recorded local control frame outside data-plane admission: inPort="
                      << inPort << " outPort=" << outPort << " pri=" << priority
                      << " size=" << pSize);
@@ -258,6 +263,8 @@ void UbQueueManager::PushToVoq(uint32_t inPort, uint32_t outPort,
 
     UpdateIngressAdmission(inPort, priority, pSize);
     m_outPortBuffer[outPort][priority] += pSize;
+    m_totalVoqBufferedBytes += pSize;
+    m_totalOutPortVoqBufferedBytes[outPort] += pSize;
     m_traceOutPortBufferBytes(outPort, GetTotalOutPortBufferUsed(outPort));
 
     NS_LOG_DEBUG("PushToVoq: inPort=" << inPort << " outPort=" << outPort
@@ -276,6 +283,11 @@ void UbQueueManager::PopFromVoq(uint32_t inPort, uint32_t outPort,
                       "Out-port control accounting underflow");
         m_ingressControlBytes[inPort][priority] -= pSize;
         m_outPortControlBytes[outPort][priority] -= pSize;
+        NS_ASSERT_MSG(m_totalVoqBufferedBytes >= pSize, "VOQ total accounting underflow");
+        m_totalVoqBufferedBytes -= pSize;
+        NS_ASSERT_MSG(m_totalOutPortVoqBufferedBytes[outPort] >= pSize,
+                      "Out-port VOQ total accounting underflow");
+        m_totalOutPortVoqBufferedBytes[outPort] -= pSize;
         NS_LOG_DEBUG("PopFromVoq drained local control-frame accounting: inPort="
                      << inPort << " outPort=" << outPort << " pri=" << priority
                      << " size=" << pSize);
@@ -283,6 +295,11 @@ void UbQueueManager::PopFromVoq(uint32_t inPort, uint32_t outPort,
     }
 
     RemoveFromIngressAdmission(inPort, priority, pSize);
+    NS_ASSERT_MSG(m_totalVoqBufferedBytes >= pSize, "VOQ total accounting underflow");
+    m_totalVoqBufferedBytes -= pSize;
+    NS_ASSERT_MSG(m_totalOutPortVoqBufferedBytes[outPort] >= pSize,
+                  "Out-port VOQ total accounting underflow");
+    m_totalOutPortVoqBufferedBytes[outPort] -= pSize;
     m_outPortBuffer[outPort][priority] -= pSize;
     m_traceOutPortBufferBytes(outPort, GetTotalOutPortBufferUsed(outPort));
 
@@ -317,11 +334,7 @@ uint64_t UbQueueManager::GetOutPortBufferUsed(uint32_t outPort, uint32_t priorit
 
 uint64_t UbQueueManager::GetTotalOutPortBufferUsed(uint32_t outPort) const
 {
-    uint64_t sum = 0;
-    for (uint32_t i = 0; i < m_vlNum; i++) {
-        sum += m_outPortBuffer[outPort][i];
-    }
-    return sum;
+    return m_totalOutPortVoqBufferedBytes[outPort];
 }
 
 void UbQueueManager::SetReservePerQueueBytes(uint32_t size)
@@ -439,17 +452,7 @@ uint64_t UbQueueManager::GetPaperResumeThresholdBytes(uint64_t totalBufferedByte
 
 uint64_t UbQueueManager::GetSwitchTotalBufferedBytes() const
 {
-    uint64_t globalOccupancyBytes = 0;
-    Ptr<Node> node = m_ownerNode;
-    if (node == nullptr) {
-        return 0;
-    }
-    for (uint32_t outPort = 0; outPort < node->GetNDevices(); ++outPort) {
-        Ptr<UbPort> out = DynamicCast<UbPort>(node->GetDevice(outPort));
-        globalOccupancyBytes += GetTotalOutPortBufferUsed(outPort);
-        globalOccupancyBytes += out != nullptr ? out->GetUbQueue()->GetCurrentBytes() : 0;
-    }
-    return globalOccupancyBytes;
+    return m_totalVoqBufferedBytes + m_totalEgressBufferedBytes;
 }
 
 uint64_t UbQueueManager::GetIngressAdmissionThresholdBytes(uint32_t, uint32_t) const
@@ -524,6 +527,17 @@ uint64_t UbQueueManager::GetIngressControlBytes(uint32_t inPort, uint32_t priori
 uint64_t UbQueueManager::GetOutPortControlBytes(uint32_t outPort, uint32_t priority) const
 {
     return m_outPortControlBytes[outPort][priority];
+}
+
+void UbQueueManager::AddEgressBufferedBytes(uint32_t bytes)
+{
+    m_totalEgressBufferedBytes += bytes;
+}
+
+void UbQueueManager::RemoveEgressBufferedBytes(uint32_t bytes)
+{
+    NS_ASSERT_MSG(m_totalEgressBufferedBytes >= bytes, "Egress total accounting underflow");
+    m_totalEgressBufferedBytes -= bytes;
 }
 
 } // namespace ns3

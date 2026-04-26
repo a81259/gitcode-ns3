@@ -228,7 +228,7 @@ void UbRoundRobinAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
                                                             inPortId,
                                                             outPortId,
                                                             priority);
-        const bool enqueueOk = outPort->GetUbQueue()->DoEnqueue(packetEntry);
+        const bool enqueueOk = outPort->EnqueueToEgress(packetEntry);
         NS_ASSERT_MSG(enqueueOk,
                       "allocator pre-check promised egress queue capacity, but DoEnqueue still failed");
         outPort->GetFlowControl()->OnEgressEnqueued(context);
@@ -480,7 +480,7 @@ void UbDwrrAllocator::AllocateNextPacket(Ptr<UbPort> outPort)
                                                                     inPortId,
                                                                     outPortId,
                                                                     priority);
-                const bool enqueueOk = outPort->GetUbQueue()->DoEnqueue(packetEntry);
+                const bool enqueueOk = outPort->EnqueueToEgress(packetEntry);
                 NS_ASSERT_MSG(enqueueOk,
                               "allocator pre-check promised egress queue capacity, but DoEnqueue still failed");
                 outPort->GetFlowControl()->OnEgressEnqueued(context);

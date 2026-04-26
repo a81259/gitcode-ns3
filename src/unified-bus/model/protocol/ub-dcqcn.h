@@ -17,15 +17,6 @@ class UbTransportChannel;
 class UbPort;
 class UniformRandomVariable;
 
-struct UbDcqcnCnpFields
-{
-    uint8_t ecn{0};
-    bool location{false};
-};
-
-uint32_t PackDcqcnCnpRaw(uint8_t ecn, bool location);
-UbDcqcnCnpFields UnpackDcqcnCnpRaw(uint32_t raw);
-
 class UbDcqcn : public UbCongestionControl
 {
 public:
@@ -50,6 +41,7 @@ public:
                                       UbIpBasedNetworkHeader header) override;
     UbCongestionExtTph OnReceiverPrepareAckCongestionHeader(uint32_t psnStart,
                                                             uint32_t psnEnd) override;
+    TpOpcode GetAckOpcode() const override;
     void OnSenderDataPacketSent(uint32_t psn, uint32_t size) override;
     void OnSenderCongestionNotification(TpOpcode opcode,
                                         uint32_t psn,
@@ -121,15 +113,7 @@ public:
     void OnSwitchPostDequeue(uint32_t inPort, uint32_t outPort, Ptr<Packet> p) override;
 
 private:
-    enum class QueueOccupancyMode : uint8_t
-    {
-        OUTPORT_BACKLOG = 0,
-        TOTAL_OUTPORT = 0, // Backward-compatible alias.
-        STAGING_ONLY = 1,
-        EGRESS_ONLY = 1, // Backward-compatible alias.
-    };
-
-    uint64_t GetTotalQueueOccupancyBytes(uint32_t outPort) const;
+    uint64_t GetOutPortBacklogBytes(uint32_t outPort) const;
     void MaybeMarkPacket(uint32_t outPort, Ptr<Packet> p);
 
     Ptr<UbSwitch> m_switch;
@@ -137,7 +121,6 @@ private:
     uint32_t m_kminBytes{0};
     uint32_t m_kmaxBytes{0};
     double m_pmax{1.0};
-    QueueOccupancyMode m_queueOccupancyMode{QueueOccupancyMode::OUTPORT_BACKLOG};
 };
 
 } // namespace ns3

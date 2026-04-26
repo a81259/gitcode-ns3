@@ -83,6 +83,28 @@ bool UbEgressQueue::CanEnqueue(uint32_t packetBytes) const
     return m_currentBytes + packetBytes <= m_maxEgressBytes;
 }
 
+bool
+UbPort::EnqueueToEgress(PacketEntry packetEntry)
+{
+    auto [inPortId, priority, packet] = packetEntry;
+    (void)inPortId;
+    (void)priority;
+    const uint32_t pktSize = packet->GetSize();
+
+    const bool enqueueOk = m_ubEQ->DoEnqueue(packetEntry);
+    if (!enqueueOk)
+    {
+        return false;
+    }
+
+    Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
+    if (ubSwitch != nullptr)
+    {
+        ubSwitch->GetQueueManager()->AddEgressBufferedBytes(pktSize);
+    }
+    return true;
+}
+
 PacketEntry UbEgressQueue::Peekqueue()
 {
     NS_LOG_FUNCTION (this);
@@ -374,13 +396,17 @@ void UbPort::DequeuePacket(void)
     m_sendState = SendState::BUSY;
 
     auto [inPortId, priority, packet] = m_ubEQ->DoDequeue();
+    Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
+    if (ubSwitch != nullptr)
+    {
+        ubSwitch->GetQueueManager()->RemoveEgressBufferedBytes(packet->GetSize());
+    }
 
     m_currentPkt = packet;
     m_currentInPortId = inPortId;
     m_currentPriority = priority;
     if (m_ubEQ->IsEmpty()) {
         // Switch allocation when port sendding packet.
-        Ptr<UbSwitch> ubSwitch = GetNode()->GetObject<UbSwitch>();
         if (ubSwitch != nullptr && ubSwitch->GetAllocator() != nullptr) {
             Simulator::ScheduleNow(&UbSwitchAllocator::TriggerAllocator, ubSwitch->GetAllocator(), this);
         }

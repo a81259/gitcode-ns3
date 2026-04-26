@@ -356,7 +356,8 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
 void
 UbTransportChannel::EnqueueDcqcnCnp(uint8_t ecn, bool location)
 {
-    Ptr<Packet> cnp = BuildDcqcnCnpForTest(ecn, location);
+    Ptr<Packet> cnp = BuildDcqcnCnp(ecn, location);
+    const uint8_t packetVl = std::max<uint8_t>(m_priority, 1);
 
     UbPort::AddUdpHeader(cnp, this);
     UbPort::AddIpv4Header(cnp, this);
@@ -367,8 +368,8 @@ UbTransportChannel::EnqueueDcqcnCnp(uint8_t ecn, bool location)
     UbDataLink::GenPacketHeader(cnp,
                                 false,
                                 false,
-                                m_priority,
-                                m_priority,
+                                packetVl,
+                                packetVl,
                                 m_usePacketSpray,
                                 m_useShortestPaths,
                                 UbDatalinkHeaderConfig::PACKET_IPV4);
@@ -385,14 +386,14 @@ UbTransportChannel::EnqueueDcqcnCnp(uint8_t ecn, bool location)
 }
 
 Ptr<Packet>
-UbTransportChannel::BuildDcqcnCnpForTest(uint8_t ecn, bool location) const
+UbTransportChannel::BuildDcqcnCnp(uint8_t ecn, bool location) const
 {
     Ptr<Packet> cnp = Create<Packet>(0);
 
-    UbCongestionExtTph cetph;
-    cetph.SetAckSequence(0);
-    cetph.SetRawBytes4to7(PackDcqcnCnpRaw(ecn, location));
-    cnp->AddHeader(cetph);
+    UbCnpExtTph cnpHeader;
+    cnpHeader.SetEcn(ecn);
+    cnpHeader.SetLocation(location);
+    cnp->AddHeader(cnpHeader);
 
     UbTransportHeader tpHeader;
     tpHeader.SetLastPacket(false);
@@ -615,17 +616,24 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     }
     UbAckTransactionHeader AckTaHeader;
     UbTransportHeader TpHeader;
-    UbCongestionExtTph CETPH;
     p->RemoveHeader(TpHeader); // 处理接收包信息
-    p->RemoveHeader(CETPH);
     if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP)) {
+        UbCnpExtTph cnpHeader;
+        p->RemoveHeader(cnpHeader);
+        UbCongestionExtTph notification;
+        notification.SetAckSequence(0);
+        notification.SetRawBytes4to7(
+            (static_cast<uint32_t>(cnpHeader.GetEcn() & 0x3U) << 30) |
+            (static_cast<uint32_t>(cnpHeader.GetLocation() ? 1U : 0U) << 29));
         m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP,
                                                          TpHeader.GetPsn(),
-                                                         CETPH);
+                                                         notification);
         NS_LOG_DEBUG("Recv TP CNP");
         return;
     }
     if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
+        UbCongestionExtTph CETPH;
+        p->RemoveHeader(CETPH);
         m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
                                                          TpHeader.GetPsn(),
                                                          CETPH);
@@ -832,7 +840,9 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
         AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
         ackp->AddHeader(AckTaHeader);
-        ackp->AddHeader(CETPH);
+        if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
+            ackp->AddHeader(CETPH);
+        }
         ackp->AddHeader(TpHeader);
         ackp->AddHeader(udpHeader);
         UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());
@@ -923,7 +933,9 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
     AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
     ackp->AddHeader(AckTaHeader);
-    ackp->AddHeader(CETPH);
+    if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
+        ackp->AddHeader(CETPH);
+    }
     ackp->AddHeader(TpHeader);
     ackp->AddHeader(udpHeader);
     UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());

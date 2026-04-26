@@ -17,10 +17,6 @@
 namespace ns3 {
 
 namespace {
-
-constexpr uint8_t DCQCN_CNP_ECN_MASK = 0x3;
-constexpr uint8_t DCQCN_CNP_ECN_SHIFT = 30;
-constexpr uint8_t DCQCN_CNP_LOCATION_SHIFT = 29;
 constexpr uint8_t DCQCN_FECN_MODE = 0b100;
 constexpr uint8_t DCQCN_FECN_LEVEL_MARKED = 0x1;
 
@@ -31,24 +27,6 @@ AverageRate(const DataRate& lhs, const DataRate& rhs)
 }
 
 } // namespace
-
-uint32_t
-PackDcqcnCnpRaw(uint8_t ecn, bool location)
-{
-    const uint32_t maskedEcn =
-        static_cast<uint32_t>(ecn & DCQCN_CNP_ECN_MASK) << DCQCN_CNP_ECN_SHIFT;
-    const uint32_t locationBit = static_cast<uint32_t>(location) << DCQCN_CNP_LOCATION_SHIFT;
-    return maskedEcn | locationBit;
-}
-
-UbDcqcnCnpFields
-UnpackDcqcnCnpRaw(uint32_t raw)
-{
-    UbDcqcnCnpFields fields;
-    fields.ecn = (raw >> DCQCN_CNP_ECN_SHIFT) & DCQCN_CNP_ECN_MASK;
-    fields.location = ((raw >> DCQCN_CNP_LOCATION_SHIFT) & 0x1U) != 0;
-    return fields;
-}
 
 NS_OBJECT_ENSURE_REGISTERED(UbDcqcn);
 NS_OBJECT_ENSURE_REGISTERED(UbHostDcqcn);
@@ -479,6 +457,12 @@ UbHostDcqcn::OnReceiverPrepareAckCongestionHeader(uint32_t psnStart, uint32_t ps
     return cetph;
 }
 
+TpOpcode
+UbHostDcqcn::GetAckOpcode() const
+{
+    return TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
+}
+
 void
 UbHostDcqcn::OnSenderDataPacketSent(uint32_t psn, uint32_t size)
 {
@@ -523,13 +507,15 @@ UbHostDcqcn::OnSenderCongestionNotification(TpOpcode opcode,
         return;
     }
 
-    const UbDcqcnCnpFields fields = UnpackDcqcnCnpRaw(header.GetRawBytes4to7());
-    if (fields.ecn == 0)
+    const uint32_t raw = header.GetRawBytes4to7();
+    const uint8_t ecn = static_cast<uint8_t>((raw >> 30) & 0x3U);
+    const bool location = ((raw >> 29) & 0x1U) != 0;
+    if (ecn == 0)
     {
         return;
     }
 
-    utils::UbUtils::DcqcnCnpNotify(m_hostNodeId, m_tp->GetTpn(), "RX", fields.ecn, fields.location);
+    utils::UbUtils::DcqcnCnpNotify(m_hostNodeId, m_tp->GetTpn(), "RX", ecn, location);
 
     m_targetRate = m_currentRate;
 
@@ -562,7 +548,7 @@ UbHostDcqcn::ApplySyntheticCnpForTest()
     EnsureSenderStartState();
     UbCongestionExtTph cnp;
     cnp.SetAckSequence(0);
-    cnp.SetRawBytes4to7(PackDcqcnCnpRaw(0x1, false));
+    cnp.SetRawBytes4to7(static_cast<uint32_t>(0x1U) << 30);
     OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP, 0, cnp);
 }
 
@@ -574,23 +560,6 @@ UbSwitchDcqcn::GetTypeId(void)
             .SetParent<UbDcqcn>()
             .SetGroupName("UnifiedBus")
             .AddConstructor<UbSwitchDcqcn>()
-            .AddAttribute("QueueOccupancyMode",
-                          "Queue metric used by switch-side DCQCN marking. "
-                          "OUTPORT_BACKLOG = sum(VOQ[outport]) + egress[outport], which maps UB's "
-                          "split queue model to the congested out-port backlog seen by DCQCN. "
-                          "STAGING_ONLY = egress[outport] only. "
-                          "Legacy aliases TOTAL_OUTPORT and EGRESS_ONLY remain accepted.",
-                          EnumValue(QueueOccupancyMode::OUTPORT_BACKLOG),
-                          MakeEnumAccessor<UbSwitchDcqcn::QueueOccupancyMode>(
-                              &UbSwitchDcqcn::m_queueOccupancyMode),
-                          MakeEnumChecker(QueueOccupancyMode::OUTPORT_BACKLOG,
-                                          "OUTPORT_BACKLOG",
-                                          QueueOccupancyMode::TOTAL_OUTPORT,
-                                          "TOTAL_OUTPORT",
-                                          QueueOccupancyMode::STAGING_ONLY,
-                                          "STAGING_ONLY",
-                                          QueueOccupancyMode::EGRESS_ONLY,
-                                          "EGRESS_ONLY"))
             .AddAttribute("KminBytes",
                           "DCQCN minimum queue occupancy in bytes before FECN marking can start.",
                           UintegerValue(5 * 1024),
@@ -622,18 +591,13 @@ UbSwitchDcqcn::OnSwitchAttached(Ptr<UbSwitch> sw)
 }
 
 uint64_t
-UbSwitchDcqcn::GetTotalQueueOccupancyBytes(uint32_t outPort) const
+UbSwitchDcqcn::GetOutPortBacklogBytes(uint32_t outPort) const
 {
     NS_ASSERT_MSG(m_switch != nullptr, "UbSwitchDcqcn must bind to a switch before queue inspection");
 
     Ptr<Node> node = m_switch->GetObject<Node>();
     Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(outPort));
     uint64_t egressUsed = port != nullptr ? port->GetUbQueue()->GetCurrentBytes() : 0;
-    if (m_queueOccupancyMode == QueueOccupancyMode::STAGING_ONLY)
-    {
-        return egressUsed;
-    }
-
     uint64_t voqUsed = m_switch->GetQueueManager()->GetTotalOutPortBufferUsed(outPort);
     return voqUsed + egressUsed;
 }
@@ -653,16 +617,26 @@ UbSwitchDcqcn::MaybeMarkPacket(uint32_t outPort, Ptr<Packet> p)
         return;
     }
 
-    UbIpBasedNetworkHeader currentNetworkHeader;
-    p->PeekHeader(currentNetworkHeader);
-    if (currentNetworkHeader.GetMode() == DCQCN_FECN_MODE && currentNetworkHeader.GetFecn() != 0)
+    UbDatalinkPacketHeader dlPacketHeader;
+    UbIpBasedNetworkHeader networkHeader;
+    p->RemoveHeader(dlPacketHeader);
+    p->RemoveHeader(networkHeader);
+
+    const auto restoreHeaders = [&]() {
+        p->AddHeader(networkHeader);
+        p->AddHeader(dlPacketHeader);
+    };
+
+    if (networkHeader.GetMode() == DCQCN_FECN_MODE && networkHeader.GetFecn() != 0)
     {
+        restoreHeaders();
         return;
     }
 
-    const uint64_t totalQueueOccupancy = GetTotalQueueOccupancyBytes(outPort);
+    const uint64_t totalQueueOccupancy = GetOutPortBacklogBytes(outPort);
     if (totalQueueOccupancy <= m_kminBytes || m_pmax <= 0.0)
     {
+        restoreHeaders();
         return;
     }
 
@@ -676,20 +650,15 @@ UbSwitchDcqcn::MaybeMarkPacket(uint32_t outPort, Ptr<Packet> p)
 
     if (m_random->GetValue() > markProbability)
     {
+        restoreHeaders();
         return;
     }
-
-    UbDatalinkPacketHeader dlPacketHeader;
-    UbIpBasedNetworkHeader networkHeader;
-    p->RemoveHeader(dlPacketHeader);
-    p->RemoveHeader(networkHeader);
 
     networkHeader.SetMode(DCQCN_FECN_MODE);
     networkHeader.SetLocation(false);
     networkHeader.SetFecn(DCQCN_FECN_LEVEL_MARKED);
 
-    p->AddHeader(networkHeader);
-    p->AddHeader(dlPacketHeader);
+    restoreHeaders();
 
     utils::UbUtils::DcqcnMarkNotify(m_switch->GetObject<Node>()->GetId(),
                                     outPort,

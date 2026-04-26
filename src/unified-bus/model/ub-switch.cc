@@ -729,8 +729,8 @@ void UbSwitch::SendPacket(Ptr<Packet> packet, uint32_t inPort, uint32_t outPort,
 // packet headers at every scheduling/accounting step.
 void UbSwitch::SendControlFrame(Ptr<Packet> packet, uint32_t portId)
 {
-    NS_ASSERT_MSG(GetPacketType(packet) == UB_CONTROL_FRAME,
-                  "SendControlFrame expects a real UB control-credit packet");
+    NS_ABORT_MSG_IF(GetPacketType(packet) != UB_CONTROL_FRAME,
+                    "SendControlFrame expects a real UB control-credit packet");
     uint32_t priority = 0;
     SendPacket(packet, portId, portId, priority);
 }

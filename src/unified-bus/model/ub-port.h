@@ -126,6 +126,7 @@ public:
     Ptr<Channel> GetChannel(void) const override;
 
     Ptr<UbEgressQueue> GetUbQueue();
+    bool EnqueueToEgress(PacketEntry packetEntry);
 
     uint64_t GetTxBytes();
 

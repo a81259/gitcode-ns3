@@ -666,6 +666,38 @@ private:
 
 /**
  * \ingroup ub-header
+ * \brief UB CNP extended transport header
+ *
+ * 报文头格式：总计16字节
+ *      字节0:[ECN:2][Location:1][Reserved:5]
+ *      字节1-15: Reserved
+ */
+class UbCnpExtTph : public Header {
+public:
+    UbCnpExtTph();
+    virtual ~UbCnpExtTph();
+
+    static TypeId GetTypeId(void);
+    TypeId GetInstanceTypeId(void) const override;
+    void Print(std::ostream& os) const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    uint32_t GetSerializedSize(void) const override;
+
+    void SetEcn(uint8_t ecn);
+    uint8_t GetEcn() const;
+    void SetLocation(bool location);
+    bool GetLocation() const;
+
+private:
+    uint8_t m_ecn{0};
+    bool m_location{false};
+
+    static const uint32_t totalHeaderSize = 16;
+};
+
+/**
+ * \ingroup ub-header
  * \brief UB Transaction Header (TAH)
  *
  * 报文头格式：总计8字节 (64位)

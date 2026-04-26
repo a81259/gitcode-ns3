@@ -91,7 +91,7 @@ public:
                               uint32_t progressBytes);
 
     void EnqueueDcqcnCnp(uint8_t ecn, bool location);
-    Ptr<Packet> BuildDcqcnCnpForTest(uint8_t ecn, bool location) const;
+    Ptr<Packet> BuildDcqcnCnp(uint8_t ecn, bool location) const;
 
     /**
      * @brief Process Transport Acknowledgment message

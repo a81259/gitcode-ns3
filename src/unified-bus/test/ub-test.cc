@@ -508,42 +508,49 @@ public:
     }
 };
 
-class UbDcqcnCnpRawRoundTripTest : public TestCase
+class UbDcqcnCnpHeaderRoundTripTest : public TestCase
 {
 public:
-    UbDcqcnCnpRawRoundTripTest()
-        : TestCase("UnifiedBus - DCQCN CNP raw packing round-trips ECN and location")
+    UbDcqcnCnpHeaderRoundTripTest()
+        : TestCase("UnifiedBus - DCQCN CNP header round-trips ECN/location in spec layout")
     {
     }
 
     void DoRun() override
     {
-        const uint32_t packedRaw = PackDcqcnCnpRaw(0x3, true);
-        const uint32_t expectedRaw = 0xE0000000u;
-
-        NS_TEST_ASSERT_MSG_EQ(packedRaw,
-                              expectedRaw,
-                              "DCQCN CNP raw encoding should place ECN in bits 31:30 and location in bit 29");
-
-        UbCongestionExtTph cetphOut;
-        cetphOut.SetAckSequence(0x12345678);
-        cetphOut.SetRawBytes4to7(packedRaw);
+        UbCnpExtTph cnpOut;
+        cnpOut.SetEcn(0x3);
+        cnpOut.SetLocation(true);
 
         Ptr<Packet> packet = Create<Packet>();
-        packet->AddHeader(cetphOut);
+        packet->AddHeader(cnpOut);
 
-        UbCongestionExtTph cetphIn;
-        packet->RemoveHeader(cetphIn);
+        NS_TEST_ASSERT_MSG_EQ(packet->GetSize(),
+                              16u,
+                              "Spec-aligned CNP CETPH should occupy 16 bytes");
 
-        NS_TEST_ASSERT_MSG_EQ(cetphIn.GetAckSequence(),
-                              0x12345678u,
-                              "Serialization should preserve the common ACK sequence field");
-        NS_TEST_ASSERT_MSG_EQ(cetphIn.GetRawBytes4to7(),
-                              expectedRaw,
-                              "Serialization should preserve the DCQCN CNP raw high-bit layout");
-        const UbDcqcnCnpFields fields = UnpackDcqcnCnpRaw(cetphIn.GetRawBytes4to7());
-        NS_TEST_ASSERT_MSG_EQ(fields.ecn, 0x3u, "ECN bits should survive raw packing");
-        NS_TEST_ASSERT_MSG_EQ(fields.location, true, "Location bit should survive raw packing");
+        uint8_t serialized[16] = {};
+        packet->CopyData(serialized, sizeof(serialized));
+        const uint32_t word0 = (static_cast<uint32_t>(serialized[0]) << 24) |
+                               (static_cast<uint32_t>(serialized[1]) << 16) |
+                               (static_cast<uint32_t>(serialized[2]) << 8) |
+                               static_cast<uint32_t>(serialized[3]);
+        NS_TEST_ASSERT_MSG_EQ(word0,
+                              0xE0000000u,
+                              "CNP ECN/location bits should live in the first serialized word");
+        for (uint32_t i = 4; i < sizeof(serialized); ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(serialized[i],
+                                  0u,
+                                  "Remaining spec-reserved CNP CETPH bytes should serialize as zero");
+        }
+
+        UbCnpExtTph cnpIn;
+        packet->RemoveHeader(cnpIn);
+        NS_TEST_ASSERT_MSG_EQ(cnpIn.GetEcn(), 0x3u, "ECN bits should survive CNP header serialization");
+        NS_TEST_ASSERT_MSG_EQ(cnpIn.GetLocation(),
+                              true,
+                              "Location bit should survive CNP header serialization");
     }
 };
 
@@ -590,6 +597,134 @@ public:
         NS_TEST_ASSERT_MSG_NE(nth.GetFecn(),
                               0u,
                               "DCQCN should mark packet as soon as it enters congested outport backlog");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnSwitchNoMarkPreservesPacketHeadersTest : public TestCase
+{
+public:
+    UbDcqcnSwitchNoMarkPreservesPacketHeadersTest()
+        : TestCase("UnifiedBus - DCQCN switch preserves headers when enqueue does not mark")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(0));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(1));
+        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(0.0));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbSwitch> sw = topo.switch0->GetObject<UbSwitch>();
+        Ptr<Packet> packet = Create<Packet>(4096);
+
+        UbIpBasedNetworkHeader nth;
+        nth.SetMode(0);
+        nth.SetLocation(true);
+        nth.SetC(0x2a);
+        nth.SetI(1);
+        nth.SetHint(0x5b);
+        packet->AddHeader(nth);
+
+        UbDatalinkPacketHeader dl;
+        dl.SetConfig(static_cast<uint8_t>(UbDatalinkHeaderConfig::PACKET_IPV4));
+        dl.SetPacketVL(3);
+        dl.SetLoadBalanceMode(true);
+        dl.SetRoutingPolicy(true);
+        packet->AddHeader(dl);
+
+        const uint32_t originalSize = packet->GetSize();
+        std::vector<uint8_t> originalBytes(originalSize);
+        packet->CopyData(originalBytes.data(), originalBytes.size());
+
+        sw->SendPacket(packet,
+                       topo.switch0DevicePort->GetIfIndex(),
+                       topo.switch0CorePort->GetIfIndex(),
+                       3);
+
+        std::vector<uint8_t> restoredBytes(packet->GetSize());
+        packet->CopyData(restoredBytes.data(), restoredBytes.size());
+        const bool sameBytes = restoredBytes == originalBytes;
+        NS_TEST_ASSERT_MSG_EQ(sameBytes,
+                              true,
+                              "DCQCN no-mark path should restore packet bytes exactly");
+
+        packet->RemoveHeader(dl);
+        packet->RemoveHeader(nth);
+        NS_TEST_ASSERT_MSG_EQ(dl.GetConfig(),
+                              static_cast<uint8_t>(UbDatalinkHeaderConfig::PACKET_IPV4),
+                              "DCQCN no-mark path should preserve datalink config");
+        NS_TEST_ASSERT_MSG_EQ(dl.GetPacketVL(), 3u, "DCQCN no-mark path should preserve packet VL");
+        NS_TEST_ASSERT_MSG_EQ(dl.GetLoadBalanceMode(),
+                              true,
+                              "DCQCN no-mark path should preserve load-balance mode");
+        NS_TEST_ASSERT_MSG_EQ(dl.GetRoutingPolicy(),
+                              true,
+                              "DCQCN no-mark path should preserve routing policy");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetMode(), 0u, "DCQCN no-mark path should preserve NTH mode");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetLocation(),
+                              true,
+                              "DCQCN no-mark path should preserve NTH location");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetC(), 1u, "DCQCN no-mark path should preserve NTH C field");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetI(), 1u, "DCQCN no-mark path should preserve NTH I field");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetHint(), 0x5bu, "DCQCN no-mark path should preserve NTH hint");
+        NS_TEST_ASSERT_MSG_EQ(packet->GetSize(),
+                              4096u,
+                              "DCQCN no-mark path should preserve payload size");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnSwitchDoesNotRemarkMarkedFecnTest : public TestCase
+{
+public:
+    UbDcqcnSwitchDoesNotRemarkMarkedFecnTest()
+        : TestCase("UnifiedBus - DCQCN switch leaves already-marked FECN packets unchanged")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(0));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(1));
+        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(1.0));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbSwitch> sw = topo.switch0->GetObject<UbSwitch>();
+        Ptr<Packet> packet = Create<Packet>(4096);
+
+        UbIpBasedNetworkHeader nth;
+        nth.SetMode(0b100);
+        nth.SetLocation(true);
+        nth.SetFecn(0x2);
+        packet->AddHeader(nth);
+
+        UbDatalinkPacketHeader dl;
+        dl.SetConfig(static_cast<uint8_t>(UbDatalinkHeaderConfig::PACKET_IPV4));
+        dl.SetPacketVL(1);
+        packet->AddHeader(dl);
+
+        sw->SendPacket(packet,
+                       topo.switch0DevicePort->GetIfIndex(),
+                       topo.switch0CorePort->GetIfIndex(),
+                       1);
+
+        packet->RemoveHeader(dl);
+        packet->RemoveHeader(nth);
+        NS_TEST_ASSERT_MSG_EQ(nth.GetMode(), 0b100, "Marked packet should stay in FECN mode");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetLocation(), true, "Already-marked location bit should not be overwritten");
+        NS_TEST_ASSERT_MSG_EQ(nth.GetFecn(), 0x2u, "Already-marked FECN level should not be overwritten");
 
         Simulator::Destroy();
         Config::Reset();
@@ -682,6 +817,107 @@ public:
     }
 };
 
+class UbDcqcnCnpOpcodeIsValidTransportOpcodeTest : public TestCase
+{
+public:
+    UbDcqcnCnpOpcodeIsValidTransportOpcodeTest()
+        : TestCase("UnifiedBus - DCQCN CNP is a valid transport opcode")
+    {
+    }
+
+    void DoRun() override
+    {
+        UbTransportHeader header;
+        header.SetTPOpcode(TpOpcode::TP_OPCODE_CNP);
+        NS_TEST_ASSERT_MSG_EQ(header.IsValidOpcode(), true, "CNP opcode must pass transport header validation");
+    }
+};
+
+class UbAckWithoutCetphCarriesNoCetphHeaderTest : public TestCase
+{
+public:
+    UbAckWithoutCetphCarriesNoCetphHeaderTest()
+        : TestCase("UnifiedBus - ACK_WITHOUT_CETPH wire packet carries no CETPH header")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> rxTp =
+            topo.receiver->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionReceiverTpn);
+
+        Ptr<Packet> data = Create<Packet>(16);
+        UbFlowTag flowTag(kUrmaWriteRegressionTaskId, 16);
+        data->AddPacketTag(flowTag);
+
+        UbMAExtTah maHeader;
+        maHeader.SetLength(16);
+        data->AddHeader(maHeader);
+
+        UbTransactionHeader taHeader;
+        taHeader.SetTaOpcode(TaOpcode::TA_OPCODE_WRITE);
+        taHeader.SetIniTaSsn(7);
+        taHeader.SetIniRcId(0);
+        data->AddHeader(taHeader);
+
+        UbTransportHeader tpHeader;
+        tpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_RELIABLE_TA);
+        tpHeader.SetSrcTpn(kUrmaWriteRegressionSenderTpn);
+        tpHeader.SetDestTpn(kUrmaWriteRegressionReceiverTpn);
+        tpHeader.SetPsn(0);
+        data->AddHeader(tpHeader);
+
+        UdpHeader udpHeader;
+        data->AddHeader(udpHeader);
+        UbPort::AddIpv4Header(data, NodeIdToIp(topo.sender->GetId()), NodeIdToIp(topo.receiver->GetId()));
+
+        UbIpBasedNetworkHeader networkHeader;
+        data->AddHeader(networkHeader);
+        UbDataLink::GenPacketHeader(data,
+                                    false,
+                                    false,
+                                    kUrmaWriteRegressionPriority,
+                                    kUrmaWriteRegressionPriority,
+                                    false,
+                                    true,
+                                    UbDatalinkHeaderConfig::PACKET_IPV4);
+
+        rxTp->RecvDataPacket(data);
+        Ptr<Packet> ack = rxTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(ack, nullptr, "Receiver should enqueue an ACK packet");
+
+        UbDatalinkPacketHeader ackDlHeader;
+        UbIpBasedNetworkHeader ackNetworkHeader;
+        Ipv4Header ackIpv4Header;
+        UdpHeader ackUdpHeader;
+        UbTransportHeader ackTpHeader;
+        UbAckTransactionHeader ackTaHeader;
+
+        ack->RemoveHeader(ackDlHeader);
+        ack->RemoveHeader(ackNetworkHeader);
+        ack->RemoveHeader(ackIpv4Header);
+        ack->RemoveHeader(ackUdpHeader);
+        ack->RemoveHeader(ackTpHeader);
+        NS_TEST_ASSERT_MSG_EQ(ackTpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH),
+                              "Disabled congestion control should emit ACK without CETPH");
+
+        ack->RemoveHeader(ackTaHeader);
+        NS_TEST_ASSERT_MSG_EQ(ackTaHeader.GetTaOpcode(),
+                              static_cast<uint8_t>(TaOpcode::TA_OPCODE_TRANSACTION_ACK),
+                              "ACK_WITHOUT_CETPH should expose TA ACK immediately after TP header");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbDcqcnSenderCutsRateOnCnpTest : public TestCase
 {
 public:
@@ -707,7 +943,7 @@ public:
 
         UbCongestionExtTph cnp;
         cnp.SetAckSequence(0);
-        cnp.SetRawBytes4to7(PackDcqcnCnpRaw(0x1, false));
+        cnp.SetRawBytes4to7(static_cast<uint32_t>(0x1U) << 30);
 
         NS_TEST_ASSERT_MSG_EQ(cc->IsCcLimited(256), false, "Fresh sender should not be blocked");
         cc->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP, 0, cnp);
@@ -742,7 +978,7 @@ public:
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
         uint32_t before = txTp->GetPsnSndUnaForTest();
 
-        Ptr<Packet> cnpPacket = txTp->BuildDcqcnCnpForTest(0x1, false);
+        Ptr<Packet> cnpPacket = txTp->BuildDcqcnCnp(0x1, false);
         txTp->RecvTpAck(cnpPacket);
 
         NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
@@ -2391,6 +2627,12 @@ CreateSinglePortPfcFixture(FcType mode,
     return fixture;
 }
 
+int
+ConsumeEgressPacketForTest(Ptr<Packet>, uint32_t, uint32_t, Ptr<UbPort>)
+{
+    return 0;
+}
+
 UbMultiPortSwitchFixture
 CreateMultiPortSwitchFixture(FcType mode,
                              uint32_t portsNum,
@@ -3105,6 +3347,56 @@ class UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest : public TestCase
         NS_TEST_ASSERT_MSG_NE(pfcPacket,
                               nullptr,
                               "queue crossing the self-consistent paper dynamic boundary should emit PFC");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbQueueManagerTotalBufferedBytesTracksEgressTransferTest : public TestCase
+{
+  public:
+    UbQueueManagerTotalBufferedBytesTracksEgressTransferTest()
+        : TestCase("UnifiedBus - total buffered bytes keeps VOQ and egress occupancy consistent")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        auto fixture = CreateMultiPortSwitchFixture(FcType::NONE,
+                                                    /*portsNum*/ 2,
+                                                    /*reserveBytes*/ 0,
+                                                    /*sharedPoolBytes*/ 0,
+                                                    /*headroomPerPortBytes*/ 0,
+                                                    /*resumeGapBytes*/ 64,
+                                                    /*alphaShift*/ 0,
+                                                    {});
+
+        constexpr uint32_t kIngressPort = 0;
+        constexpr uint32_t kEgressPort = 1;
+        constexpr uint32_t kPriority = 1;
+        constexpr uint32_t kPacketBytes = 512;
+
+        fixture.sw->SendPacket(Create<Packet>(kPacketBytes), kIngressPort, kEgressPort, kPriority);
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetSwitchBufferOccupancy().total_buffered_bytes,
+                              static_cast<uint64_t>(kPacketBytes),
+                              "VOQ enqueue should contribute to total buffered bytes");
+
+        fixture.sw->GetAllocator()->AllocateNextPacket(fixture.ports[kEgressPort]);
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetSwitchBufferOccupancy().total_buffered_bytes,
+                              static_cast<uint64_t>(kPacketBytes),
+                              "moving a packet from VOQ to egress should preserve total buffered bytes");
+        NS_TEST_ASSERT_MSG_EQ(fixture.ports[kEgressPort]->GetUbQueue()->GetCurrentBytes(),
+                              static_cast<uint64_t>(kPacketBytes),
+                              "packet should now reside in the egress queue");
+
+        fixture.ports[kEgressPort]->SetFaultCallBack(MakeCallback(&ConsumeEgressPacketForTest));
+        fixture.ports[kEgressPort]->NotifyLinkUp();
+        fixture.ports[kEgressPort]->TriggerTransmit();
+        NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetSwitchBufferOccupancy().total_buffered_bytes,
+                              0u,
+                              "egress dequeue should release total buffered bytes");
 
         Simulator::Destroy();
         Config::Reset();
@@ -4218,6 +4510,55 @@ class UbQueueTraceCategoryGateTest : public TestCase
 namespace utils
 {
 
+class UbQueueSamplerEventRetentionTest : public TestCase
+{
+  public:
+    UbQueueSamplerEventRetentionTest()
+        : TestCase("UnifiedBus - queue sampler keeps only one pending event per port")
+    {
+    }
+
+    void DoRun() override
+    {
+        namespace fs = std::filesystem;
+
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const fs::path caseDir =
+            fs::temp_directory_path() / ("ub-queue-sampler-retention-" + uniqueSuffix);
+        const fs::path runlogDir = caseDir / "runlog";
+        std::error_code ec;
+        fs::remove_all(caseDir, ec);
+        ec.clear();
+        fs::create_directories(runlogDir, ec);
+        NS_TEST_ASSERT_MSG_EQ(ec.value(), 0, "Temporary runlog directory creation should succeed");
+
+        UbUtils::Get()->Destroy();
+        GlobalValue::Bind("UB_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_QUEUE_TRACE_ENABLE", BooleanValue(true));
+        GlobalValue::Bind("UB_QUEUE_SAMPLE_INTERVAL_NS", UintegerValue(10));
+        UbUtils::SetTracePathForTest(caseDir.string());
+
+        BuildLocalTpTopology();
+        UbUtils::Get()->TopoTraceConnect();
+        const std::size_t initialSamplerEvents = UbUtils::queue_sampler_events.size();
+        NS_TEST_ASSERT_MSG_NE(initialSamplerEvents,
+                              0u,
+                              "Queue sampler should track at least one switch port");
+
+        Simulator::Stop(NanoSeconds(95));
+        Simulator::Run();
+
+        NS_TEST_ASSERT_MSG_EQ(UbUtils::queue_sampler_events.size(),
+                              initialSamplerEvents,
+                              "Queue sampler should not retain historical tick EventIds");
+
+        Simulator::Destroy();
+        UbUtils::Get()->Destroy();
+        fs::remove_all(caseDir, ec);
+    }
+};
+
 class UbTraceFileConcurrencyTest : public TestCase
 {
   public:
@@ -4698,10 +5039,14 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbCaqmHostRttUsesSmoothedEstimateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchAttachDisabledCongestionControlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchAttachEnabledCongestionControlTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbDcqcnCnpRawRoundTripTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpHeaderRoundTripTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchMarksFecnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchNoMarkPreservesPacketHeadersTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAckWithoutCetphCarriesNoCetphHeaderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpOpcodeIsValidTransportOpcodeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchDoesNotRemarkMarkedFecnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSenderCutsRateOnCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpDoesNotAdvanceAckStateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnRecoveryTimerIncreasesRateTest(), TestCase::Duration::QUICK);
@@ -4722,6 +5067,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbAlgorithmTraceGateDefaultOffTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAlgorithmTraceCategoryGateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbQueueTraceCategoryGateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new utils::UbQueueSamplerEventRetentionTest(), TestCase::Duration::QUICK);
     AddTestCase(new utils::UbTraceFileConcurrencyTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbMpiRankExtractionHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSameMpiRankHelperTest(), TestCase::Duration::QUICK);
@@ -4741,6 +5087,8 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbQueueManagerPaperPfcDecisionApiTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcPaperDynamicModeIgnoresAlphaShiftForAdmissionTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerTotalBufferedBytesTracksEgressTransferTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbPfcForwardingUsesIngressPortConfigTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbFlowControlReleaseHookRunsAfterIngressDequeueTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest(), TestCase::Duration::QUICK);

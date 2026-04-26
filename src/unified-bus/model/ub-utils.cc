@@ -286,7 +286,7 @@ void UbUtils::Destroy()
 {
     for (auto& event : queue_sampler_events)
     {
-        event.Cancel();
+        event.second.Cancel();
     }
     queue_sampler_events.clear();
     queue_sampler_started = false;
@@ -399,12 +399,12 @@ void
 UbUtils::QueueSampleTick(uint32_t nodeId, uint32_t portId, uint32_t intervalNs)
 {
     QueueSampleNotify(nodeId, portId);
-    queue_sampler_events.push_back(
+    queue_sampler_events[{nodeId, portId}] =
         Simulator::Schedule(NanoSeconds(intervalNs),
                             &UbUtils::QueueSampleTick,
                             nodeId,
                             portId,
-                            intervalNs));
+                            intervalNs);
 }
 
 void
@@ -449,12 +449,12 @@ UbUtils::StartQueueSampler()
             {
                 continue;
             }
-            queue_sampler_events.push_back(
+            queue_sampler_events[{nodeId, portId}] =
                 Simulator::Schedule(interval,
                                     &UbUtils::QueueSampleTick,
                                     nodeId,
                                     portId,
-                                    intervalNs));
+                                    intervalNs);
         }
     }
 

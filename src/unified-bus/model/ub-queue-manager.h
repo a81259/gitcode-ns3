@@ -228,6 +228,8 @@ public:
     uint64_t GetQueueIngressTotalBytes(uint32_t inPort, uint32_t priority) const;
     uint64_t GetIngressControlBytes(uint32_t inPort, uint32_t priority) const;
     uint64_t GetOutPortControlBytes(uint32_t outPort, uint32_t priority) const;
+    void AddEgressBufferedBytes(uint32_t bytes);
+    void RemoveEgressBufferedBytes(uint32_t bytes);
 
 private:
     using DarrayU64 = std::vector<std::vector<uint64_t>>;
@@ -262,6 +264,9 @@ private:
     uint64_t m_totalHeadroomBytes {0};
     uint64_t m_totalReservedBytes {0};
     uint64_t m_sharedUsedBytes {0};
+    uint64_t m_totalVoqBufferedBytes {0};
+    uint64_t m_totalEgressBufferedBytes {0};
+    std::vector<uint64_t> m_totalOutPortVoqBufferedBytes;
     DarrayU64 m_hdrmBytes;    // [inPort][priority] headroom usage
     DarrayU64 m_ingressControlBytes; // [inPort][priority] control-frame occupancy outside data-plane admission
     DarrayU64 m_outPortControlBytes; // [outPort][priority] control-frame occupancy outside data-plane admission

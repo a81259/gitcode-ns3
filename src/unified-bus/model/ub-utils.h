@@ -37,6 +37,7 @@
 
 namespace utils {
 class UbTraceFileConcurrencyTest;
+class UbQueueSamplerEventRetentionTest;
 /**
  *  @brief UbUtils单例类
  */
@@ -207,6 +208,7 @@ public:
 
 private:
     friend class ::utils::UbTraceFileConcurrencyTest;
+    friend class ::utils::UbQueueSamplerEventRetentionTest;
 
     struct TraceFileState
     {
@@ -226,7 +228,7 @@ private:
     inline static uint64_t runtime_packet_drop_count = 0;
     inline static std::string runtime_packet_drop_reason;
     inline static bool queue_sampler_started = false;
-    inline static std::vector<ns3::EventId> queue_sampler_events;
+    inline static std::map<std::pair<uint32_t, uint32_t>, ns3::EventId> queue_sampler_events;
 
     ns3::GlobalValue g_fault_enable =
     ns3::GlobalValue("UB_FAULT_ENABLE", "Enable the fault injection module.", ns3::BooleanValue(false), ns3::MakeBooleanChecker());

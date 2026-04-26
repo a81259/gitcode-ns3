@@ -988,7 +988,7 @@ uint32_t UbTransportHeader::GetTpMsn() const
 // Check validity methods
 bool UbTransportHeader::IsValidOpcode() const
 {
-    return m_tpOpcode < static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP);
+    return m_tpOpcode <= static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP);
 }
 
 bool UbTransportHeader::IsValidNLP() const
@@ -1312,6 +1312,89 @@ void UbCongestionExtTph::SetRawBytes4to7(uint32_t rawValue)
 uint32_t UbCongestionExtTph::GetRawBytes4to7(void) const
 {
     return m_congestionFields.raw;
+}
+
+UbCnpExtTph::UbCnpExtTph() = default;
+
+UbCnpExtTph::~UbCnpExtTph() = default;
+
+TypeId
+UbCnpExtTph::GetTypeId(void)
+{
+    static TypeId tid = TypeId("ns3::UbCnpExtTph")
+                            .SetParent<Header>()
+                            .SetGroupName("UnifiedBus")
+                            .AddConstructor<UbCnpExtTph>();
+    return tid;
+}
+
+TypeId
+UbCnpExtTph::GetInstanceTypeId(void) const
+{
+    return GetTypeId();
+}
+
+void
+UbCnpExtTph::Print(std::ostream& os) const
+{
+    os << "UbCnpExtTph: Ecn=" << static_cast<uint32_t>(m_ecn) <<
+          " Location=" << m_location;
+}
+
+void
+UbCnpExtTph::Serialize(Buffer::Iterator start) const
+{
+    Buffer::Iterator i = start;
+    const uint32_t word0 =
+        (static_cast<uint32_t>(m_ecn & 0x3U) << 30) |
+        (static_cast<uint32_t>(m_location ? 1U : 0U) << 29);
+    i.WriteHtonU32(word0);
+    i.WriteHtonU32(0);
+    i.WriteHtonU32(0);
+    i.WriteHtonU32(0);
+}
+
+uint32_t
+UbCnpExtTph::Deserialize(Buffer::Iterator start)
+{
+    Buffer::Iterator i = start;
+    const uint32_t word0 = i.ReadNtohU32();
+    m_ecn = static_cast<uint8_t>((word0 >> 30) & 0x3U);
+    m_location = ((word0 >> 29) & 0x1U) != 0;
+    i.ReadNtohU32();
+    i.ReadNtohU32();
+    i.ReadNtohU32();
+    return GetSerializedSize();
+}
+
+uint32_t
+UbCnpExtTph::GetSerializedSize(void) const
+{
+    return totalHeaderSize;
+}
+
+void
+UbCnpExtTph::SetEcn(uint8_t ecn)
+{
+    m_ecn = ecn & 0x3U;
+}
+
+uint8_t
+UbCnpExtTph::GetEcn() const
+{
+    return m_ecn;
+}
+
+void
+UbCnpExtTph::SetLocation(bool location)
+{
+    m_location = location;
+}
+
+bool
+UbCnpExtTph::GetLocation() const
+{
+    return m_location;
 }
 
 /*
