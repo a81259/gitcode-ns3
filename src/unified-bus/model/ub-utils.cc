@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ub-utils.h"
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -14,11 +15,63 @@ using namespace ns3;
 
 namespace
 {
+struct LegacyNetworkAttributeKey
+{
+    const char* legacy;
+    const char* replacement;
+    const char* note;
+};
+
+constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys = {{
+    {"ns3::UbQueueManager::ResumeOffset",
+     "ns3::UbQueueManager::DynamicPfcResumeGapBytes",
+     "DynamicPfcResumeGapBytes is the current dynamic-PFC XON/XOFF resume gap."},
+    {"ns3::UbSwitch::EnableCBFC",
+     "ns3::UbSwitch::FlowControl \"CBFC\"",
+     "FlowControl now selects the CBFC/PFC policy directly."},
+    {"ns3::UbSwitch::EnablePFC",
+     "ns3::UbSwitch::FlowControl \"PFC_FIXED\" or \"PFC_DYNAMIC\"",
+     "FlowControl now selects the CBFC/PFC policy directly."},
+    {"ns3::UbApiThread::",
+     "ns3::UbLdstThread::",
+     "LD/ST thread attributes moved to the UbLdstThread TypeId."},
+}};
 
 std::string
 DisplayFilename(const std::string& filename)
 {
     return std::filesystem::path(filename).filename().string();
+}
+
+void
+ValidateLegacyNetworkAttributeKeys(const std::string& filename)
+{
+    std::ifstream file(filename.c_str());
+    NS_ASSERT_MSG(file.good(), "Can not open File: " << filename);
+
+    std::string line;
+    uint32_t lineNumber = 0;
+    while (std::getline(file, line))
+    {
+        ++lineNumber;
+        const auto firstNonSpace = line.find_first_not_of(" \t");
+        if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
+        {
+            continue;
+        }
+
+        for (const auto& key : kLegacyNetworkAttributeKeys)
+        {
+            if (line.find(key.legacy) == std::string::npos)
+            {
+                continue;
+            }
+
+            NS_FATAL_ERROR("Legacy network_attribute.txt key: "
+                           << key.legacy << " at " << filename << ":" << lineNumber
+                           << ". Use " << key.replacement << " instead. " << key.note);
+        }
+    }
 }
 
 bool
@@ -1600,6 +1653,7 @@ void UbUtils::SetComponentsAttribute(const string &filename)
     if (!file.good()) {
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
+    ValidateLegacyNetworkAttributeKeys(filename);
     Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
     Config::SetDefault("ns3::ConfigStore::FileFormat", StringValue("RawText"));
     Config::SetDefault("ns3::ConfigStore::Mode", StringValue("Load"));

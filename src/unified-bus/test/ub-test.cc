@@ -5730,6 +5730,50 @@ class UbQuickExampleOptionalTransportChannelSystemTest : public TestCase
     }
 };
 
+class UbQuickExampleLegacyNetworkAttributeHintSystemTest : public TestCase
+{
+  public:
+    UbQuickExampleLegacyNetworkAttributeHintSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example reports migration hint for legacy network attribute keys")
+    {
+    }
+
+    void DoRun() override
+    {
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const std::filesystem::path caseDir =
+            CopyCaseDirWithoutFile("scratch/2nodes_single-tp", "transport_channel.csv");
+        std::ofstream config(caseDir / "network_attribute.txt", std::ios::app);
+        config << "\ndefault ns3::UbQueueManager::ResumeOffset \"4096\"\n";
+        config.close();
+
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--stop-ms=1",
+                                               "",
+                                               caseDir);
+
+        std::error_code ec;
+        std::filesystem::remove_all(caseDir, ec);
+
+        NS_TEST_ASSERT_MSG_NE(status,
+                              0,
+                              "legacy network attribute key should reject the case before ConfigStore");
+        NS_TEST_ASSERT_MSG_NE(
+            output.find("Legacy network_attribute.txt key: ns3::UbQueueManager::ResumeOffset"),
+            std::string::npos,
+            "legacy key diagnostic should name the old key");
+        NS_TEST_ASSERT_MSG_NE(
+            output.find("Use ns3::UbQueueManager::DynamicPfcResumeGapBytes instead"),
+            std::string::npos,
+            "legacy key diagnostic should name the replacement key");
+        NS_TEST_ASSERT_MSG_EQ(
+            output.find("Could not set default value for ns3::UbQueueManager::ResumeOffset"),
+            std::string::npos,
+            "legacy key should be caught before the generic ConfigStore failure");
+    }
+};
+
 class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
 {
   public:
@@ -6110,6 +6154,8 @@ class UbQuickExampleSystemTestSuite : public TestSuite
         AddTestCase(new UbQuickExampleSameCasePathSystemTest(), TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleConflictingCasePathSystemTest(), TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleOptionalTransportChannelSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleLegacyNetworkAttributeHintSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleDropWithoutRetransFailsFastSystemTest(),
                     TestCase::Duration::QUICK);

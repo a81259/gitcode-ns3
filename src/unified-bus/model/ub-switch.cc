@@ -45,7 +45,9 @@ TypeId UbSwitch::GetTypeId (void)
         .AddConstructor<UbSwitch> ()
         .AddAttribute("FlowControl",
                       "Flow control mechanism (NONE, CBFC, CBFC_SHARED, PFC_FIXED, PFC_DYNAMIC, "
-                      "or PFC_DYNAMIC_PAPER). "
+                      "or PFC_DYNAMIC_PAPER). PFC_DYNAMIC_PAPER is the paper-style dynamic PFC "
+                      "mode used for DCQCN reproduction from \"Congestion Control for Large-Scale "
+                      "RDMA Deployments\" (SIGCOMM 2015). "
                       "CBFC and PFC modes are peer policies over the same ingress accounting model.",
                       EnumValue(FcType::CBFC),
                       MakeEnumAccessor<FcType>(&UbSwitch::m_flowControlType),

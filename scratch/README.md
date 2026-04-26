@@ -104,6 +104,35 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbApiLdst::*` (ThreadNum, LoadResponseSize, StoreRequestSize, QueuePriority)
   - `ns3::UbApiLdstThread::*` (StoreOutstanding, LoadOutstanding, LoadRequestSize, QueuePriority, UsePacketSpray, UseShortestPaths)
 
+### Upgrading copied cases
+
+If you copied an older `scratch/` case into your own workspace, check `network_attribute.txt` before running it against a newer build. Known legacy keys are rejected before ns-3 `ConfigStore` loads the file so the error points at the migration instead of a generic attribute failure.
+
+| Old key or behavior | Current form |
+|---------------------|--------------|
+| `default ns3::UbQueueManager::ResumeOffset "..."` | `default ns3::UbQueueManager::DynamicPfcResumeGapBytes "..."` |
+| `default ns3::UbSwitch::EnableCBFC "true"` | `default ns3::UbSwitch::FlowControl "CBFC"` |
+| `default ns3::UbSwitch::EnablePFC "true"` | Choose `default ns3::UbSwitch::FlowControl "PFC_FIXED"` or `"PFC_DYNAMIC"` |
+| `default ns3::UbApiThread::*` | `default ns3::UbLdstThread::*` |
+| Depend on old `CbfcRetCellGrainControlPacket` default | Set `default ns3::UbPort::CbfcRetCellGrainControlPacket "1"` explicitly to reproduce older behavior; current repo default is `32` |
+| Need `QueueTrace_*` files | Set `global UB_QUEUE_TRACE_ENABLE "true"` |
+| Need `PfcTrace_*` or `CbfcTrace_*` files | Set `global UB_FLOW_CONTROL_TRACE_ENABLE "true"` |
+| Need `Dcqcn*` or `Caqm*` algorithm traces | Set `global UB_CONGESTION_CONTROL_TRACE_ENABLE "true"` |
+
+Runs with `default ns3::UbTransportChannel::EnableRetrans "false"` now stop early when a packet is dropped. Fix the route/buffer/flow-control cause, or enable retransmission if the experiment intentionally allows loss recovery.
+
+### `PFC_DYNAMIC_PAPER`
+
+`PFC_DYNAMIC_PAPER` is a paper-reproduction mode for the DCQCN paper **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015). It is separate from the repo's default `PFC_DYNAMIC` mode.
+
+The current implementation uses:
+
+- `xoff = PaperDynamicPfcBeta * max(SharedPoolBytes - totalBufferedBytes, 0) / priorities`
+- `xon = max(xoff - 2 * UB_MTU_BYTE, 0)`
+- `totalBufferedBytes = VOQ backlog + egress queue backlog` across the switch
+
+Use `PFC_DYNAMIC_PAPER` when the experiment is explicitly trying to reproduce or compare against that paper-style dynamic PFC threshold. Use `PFC_DYNAMIC` for the repo's shared-pool dynamic PFC mode.
+
 Project-level `global` keys (defined as `GlobalValue` in code and read by UB):
 
 - `UB_FAULT_ENABLE` (bool) — If `true`, `fault.csv` must exist.
@@ -415,7 +444,7 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
   - `default ns3::UbQueueManager::HeadroomPerPortBytes "262144"`
   - `default ns3::UbQueueManager::AlphaShift "1"`
   - `default ns3::UbQueueManager::DynamicPfcResumeGapBytes "4096"`
-  - `default ns3::UbQueueManager::PaperDynamicPfcBeta "8"` (only used with `PFC_DYNAMIC_PAPER`)
+  - `default ns3::UbQueueManager::PaperDynamicPfcBeta "8"` (only used with `PFC_DYNAMIC_PAPER`, the paper-style mode for **"Congestion Control for Large-Scale RDMA Deployments"**)
 - Congestion control
   - `global UB_CC_ALGO "CAQM"`
   - `global UB_CC_ENABLED "false"`

@@ -119,6 +119,7 @@ Return to `openusim-plan-experiment` when:
 - Forgetting to set `graph.output_dir` to the case root, which leaves generated CSVs under a timestamped subdirectory instead of `{case_dir}/`.
 - Treating `custom-graph` as unsupported just because it is not a named topology family.
 - Writing unvalidated override keys into `network_attribute.txt` and discovering the mistake only at run time.
+- Writing legacy override keys such as `ns3::UbQueueManager::ResumeOffset`, `ns3::UbSwitch::EnableCBFC`, `ns3::UbSwitch::EnablePFC`, or `ns3::UbApiThread::*`; use the migration table in `spec-to-toolchain.md`.
 - Asking the user to preconfigure `transport_channel.csv` even though the default path should remain `on-demand`.
 - Requiring `transport_channel.csv` even when the chosen `transport_channel_mode` is `on-demand`.
 - Treating `--mtp-threads` as part of experiment intent instead of runtime execution.

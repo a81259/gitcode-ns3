@@ -1,7 +1,7 @@
 # Congestion Control and PFC Lessons
 
 <reference-hint>
-<use-when>Use this reference when the user asks why DCQCN did not hold queue low, how PFC interacts with ECN/CNP, or which PFC mode/parameters in this repo match a paper or experiment intent.</use-when>
+<use-when>Use this reference when discussing DCQCN queue spikes, PFC with ECN/CNP, or paper-style PFC parameters.</use-when>
 <focus>First-principles reasoning for ECN -> CNP -> rate-cut timing, PFC mode semantics, and the practical experiment rules that decide whether a run can complete.</focus>
 <keywords>DCQCN, ECN, CNP, PFC, CBFC, headroom, dynamic threshold, overshoot, retransmission</keywords>
 </reference-hint>
@@ -124,6 +124,8 @@ DCQCN 不是“交换机一 mark，发送端立刻降速”。
 
 ### `PFC_DYNAMIC_PAPER`
 
+`PFC_DYNAMIC_PAPER` 是为 DCQCN 论文 **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015) 做复现/对比时使用的 paper-style dynamic PFC 模式。
+
 paper-style dynamic 也是“共享池剩余量决定门限”，但公式不同：
 
 - `threshold = beta * max(SharedPoolBytes - globalOccupancyBytes, 0) / priorities`
@@ -137,6 +139,7 @@ paper-style dynamic 也是“共享池剩余量决定门限”，但公式不同
 - `global occupancy` 取整台 switch 上各出端口 VOQ backlog 加 egress queue backlog
 - `PFC_DYNAMIC_PAPER` admission 不再受旧 `AlphaShift` 门限主导
 - `PaperDynamicPfcBeta` 是 paper-style dynamic 的主配置量
+- 不要把它当成泛化默认动态 PFC；普通动态 PFC 实验优先用 `PFC_DYNAMIC`
 
 ## Shared Template For Comparing PFC Algorithms
 
@@ -211,6 +214,7 @@ paper-style dynamic 也是“共享池剩余量决定门限”，但公式不同
 
 其余要点：
 
+- 来源语义是 DCQCN 论文 **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015) 的 paper-style dynamic PFC 阈值复现
 - `2 * MTU` resume gap 是算法内置语义，不是现在这个模式的主调参数
 - 多优先级数会进入 paper threshold 公式
 - 当前 repo 默认按 `8` 个 priorities 计算 paper threshold

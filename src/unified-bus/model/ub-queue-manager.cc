@@ -157,7 +157,8 @@ TypeId UbQueueManager::GetTypeId(void)
         MakeUintegerAccessor(&UbQueueManager::m_dynamicPfcResumeGapBytes),
         MakeUintegerChecker<uint32_t>())
         .AddAttribute("PaperDynamicPfcBeta",
-        "Paper-style dynamic PFC beta. Threshold = beta * max(SharedPoolBytes - globalOccupancy, 0) / priorities.",
+        "Paper-style dynamic PFC beta for the DCQCN paper \"Congestion Control for Large-Scale RDMA Deployments\". "
+        "Threshold = beta * max(SharedPoolBytes - globalOccupancy, 0) / priorities.",
         UintegerValue(DEFAULT_PAPER_DYNAMIC_PFC_BETA),
         MakeUintegerAccessor(&UbQueueManager::m_paperDynamicPfcBeta),
         MakeUintegerChecker<uint32_t>());

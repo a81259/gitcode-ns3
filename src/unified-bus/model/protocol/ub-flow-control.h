@@ -98,6 +98,8 @@ public:
                            uint32_t priority) const override;
 };
 
+// Paper dynamic PFC mode for reproducing the threshold rule used with DCQCN in
+// "Congestion Control for Large-Scale RDMA Deployments" (SIGCOMM 2015).
 class UbPfcPaperDynamicDecisionHook : public UbPfcDecisionHook {
 public:
     static TypeId GetTypeId(void);

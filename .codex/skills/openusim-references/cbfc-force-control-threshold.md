@@ -1,7 +1,7 @@
 # CBFC Force-Control Threshold
 
 <reference-hint>
-<use-when>Use this reference when the user asks how to tune `CbfcCtrlCrdRtrThldCell`, `CbfcRetCellGrainControlPacket`, why CBFC should force a control frame, or how much pending returned credit the receiver may temporarily keep before sending `Crd_Ack Block`.</use-when>
+<use-when>Use this reference when tuning CBFC forced credit return, control-frame grain, or pending returned-credit retention.</use-when>
 <focus>How to interpret the CBFC forced control-frame threshold as a receiver-side pending-credit retention limit, why the control-packet grain must be considered together with the threshold, and how to choose a repo default that keeps control frames as a late fallback instead of the primary return path.</focus>
 <keywords>CBFC, CbfcCtrlCrdRtrThldCell, CbfcRetCellGrainControlPacket, credit return, control frame, Crd_Ack Block, threshold, tuning</keywords>
 </reference-hint>
