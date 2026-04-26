@@ -2,7 +2,9 @@
 
 **Language**: [English](RELEASE_NOTES_UB_en.md) | [中文](RELEASE_NOTES_UB.md)
 
-## Unreleased
+## Release 1.2.1
+
+**Release Date**: April 2026
 
 ### Features and Behavior Changes
 

@@ -2,8 +2,7 @@
 
 **Language**: [English](README_en.md) | [中文](README.md)
 
-> **[NEW] Version 1.2.0 Released (March 2026)** · Check [Release Notes](RELEASE_NOTES_UB.md) for major updates
-> **Development branch note**: DCQCN, `PFC_DYNAMIC_PAPER`, and copied `scratch` case migration notes are documented in [Unreleased](RELEASE_NOTES_UB_en.md#unreleased) and [scratch case upgrade notes](scratch/README.md#upgrading-copied-cases)
+> **[NEW] Version 1.2.1 Released (April 2026)** · See [Release Notes](RELEASE_NOTES_UB_en.md#release-121) for DCQCN, `PFC_DYNAMIC_PAPER`, and copied `scratch` case migration notes
 
 **Quick Start**: [QUICK_START_en.md](QUICK_START_en.md)
 

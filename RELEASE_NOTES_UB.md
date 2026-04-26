@@ -2,7 +2,9 @@
 
 **语言**: [English](RELEASE_NOTES_UB_en.md) | [中文](RELEASE_NOTES_UB.md)
 
-## Unreleased
+## Release 1.2.1
+
+**发布日期**: 2026 年 4 月
 
 ### 新特性与行为变化
 

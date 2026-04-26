@@ -2,8 +2,7 @@
 
 **语言**: [English](README_en.md) | [中文](README.md)
 
-> **[NEW] 2026/03 版本 1.2.0 已发布** · 查看 [发布说明](RELEASE_NOTES_UB.md) 了解主要改动
-> **当前开发版提示**：DCQCN / `PFC_DYNAMIC_PAPER` / 旧 `scratch` 用例迁移说明见 [Unreleased](RELEASE_NOTES_UB.md#unreleased) 和 [scratch 用例升级说明](scratch/README.md#upgrading-copied-cases)
+> **[NEW] 2026/04 版本 1.2.1 已发布** · 查看 [发布说明](RELEASE_NOTES_UB.md#release-121) 了解 DCQCN、`PFC_DYNAMIC_PAPER` 与旧 `scratch` 用例迁移说明
 
 **快速开始**: [QUICK_START.md](QUICK_START.md)
 
