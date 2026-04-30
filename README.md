@@ -2,11 +2,11 @@
 
 **语言**: [English](README_en.md) | [中文](README.md)
 
-> **[NEW] 2026/04 版本 1.2.1 已发布** · 查看 [发布说明](RELEASE_NOTES_UB.md#release-121) 了解 DCQCN、`PFC_DYNAMIC_PAPER` 与旧 `scratch` 用例迁移说明
+> 🎉 **[NEW] 2026/04 版本 1.2.1 已发布** · 本次更新完成拥塞控制、流量控制统一 hook 架构重构，现已支持 DCQCN 与 C-AQM 拥塞控制算法，以及 CBFC 与 PFC 流量控制算法；更多细节见 [发布说明](RELEASE_NOTES_UB.md#release-121)
 
-**快速开始**: [QUICK_START.md](QUICK_START.md)
+🚀 **快速开始**: [QUICK_START.md](QUICK_START.md)
 
-**UB 配置驱动入口**: 参见 [scratch/README.md](scratch/README.md)
+🧩 **UB 配置驱动入口**: 参见 [scratch/README.md](scratch/README.md)
 
 > 本项目基于 ns-3.44 构建。详细的平台支持、安装步骤、系统要求及编译选项，请参阅 [ns-3.44 文档](https://www.nsnam.org/releases/ns-3-44/documentation/)、[安装指南](https://www.nsnam.org/docs/release/3.44/installation/singlehtml/) 及 [ns-3.44 源码](https://gitlab.com/nsnam/ns-3-dev/-/tree/ns-3.44?ref_type=tags)。
 >
@@ -82,8 +82,8 @@
     </tr>
     <tr>
       <td>拥塞控制</td>
-  <td>RTP 拥塞控制机制、C-AQM</td>
-      <td>LDCP、DCQCN 算法、CTP 拥塞控制机制</td>
+      <td>RTP 拥塞控制机制、C-AQM、DCQCN</td>
+      <td>LDCP、CTP 拥塞控制机制</td>
     </tr>
     <tr>
       <td>负载均衡</td>
@@ -113,8 +113,8 @@
     </tr>
     <tr>
       <td>拥塞标记</td>
-  <td>基于包头 CC 域段的 C-AQM 标记模式</td>
-      <td>FECN / FECN_RTT 标记模式</td>
+      <td>基于包头 CC 域段的 C-AQM 标记模式、DCQCN FECN 标记模式</td>
+      <td>FECN_RTT 标记模式</td>
     </tr>
     <tr>
       <td align="center" rowspan="3">数据链路层</td>
@@ -130,7 +130,7 @@
     <tr>
       <td>信用流控</td>
   <td>CBFC（独占信用 / 共享信用）、PFC（固定阈值 / 动态阈值）</td>
-  <td>控制面的信用初始化行为、信用共享模式</td>
+      <td>控制面的信用初始化行为、用户自定义信用共享策略</td>
     </tr>
   </tbody>
 </table>
@@ -189,7 +189,7 @@ UB 模块是基于灵衢基础规范实现的仿真组件：
 - **Queue Manager** (`ub-queue-manager.*`) - 缓冲区管理模块，影响负载均衡、流量控制、排队、丢包等行为
 - **Routing Process** (`ub-routing-process.*`) - 路由表模块，实现了路由表的管理与查询功能
 - **Congestion Control** (`ub-congestion-control.*`) - 拥塞控制算法框架模块
-- **C-AQM 算法** (`ub-caqm.*`) - C-AQM 拥塞控制算法实现
+- **拥塞控制算法** (`ub-caqm.*`, `ub-dcqcn.*`) - C-AQM 与 DCQCN 拥塞控制算法实现
 - **Flow Control** (`ub-flow-control.*`) - 流量控制框架模块
 - **故障注入模块** (`ub-fault.*`) - 用于在特定流量过程中注入丢包率、高时延、拥塞程度、错包、闪断、降 lane 等故障参数
 
@@ -206,17 +206,17 @@ UB 模块是基于灵衢基础规范实现的仿真组件：
 - **性能监控**：全面的性能指标收集和分析
 
 #### 协议栈建模
-- **UB 协议栈**：支持从物理层到应用层的完整协议栈建模
+- **UB 协议栈**：支持数据链路层、网络层、传输层、事务层和功能层建模
 - **内存语义**：实现基于 Load/Store 的内存语义行为建模
 - **消息语义**：实现基于 URMA 的消息语义行为建模
 - **原生多路径**：通过 TP/TP Group 协议机制实现原生多路径支持
 
 #### 协议算法支持
 - **流量控制**：实现基于信用的流量控制（CBFC 独占/共享信用）和基于优先级的流量控制（PFC 固定阈值/动态阈值）
-- **拥塞控制**：实现拥塞控制算法常用的网侧标记、接收端回复、发送端响应框架，支持 C-AQM 算法
+- **拥塞控制**：实现拥塞控制算法常用的网侧标记、接收端回复、发送端响应框架，支持 C-AQM 与 DCQCN 算法
 - **路由策略**：支持最短路由、绕路策略，支持包喷洒、ECMP 等负载均衡策略
-- **QoS 支持**：提供端到端 QoS 支持，当前支持 SP 策略
-- **交换仲裁**：模块化实现 UB Switch 的交换仲裁机制建模，当前支持基于优先级的 SP 调度
+- **QoS 支持**：提供端到端 QoS 支持，当前支持 SP 与 DWRR 调度策略
+- **交换仲裁**：模块化实现 UB Switch 的交换仲裁机制建模，当前支持 SP 与 DWRR 调度
 
 ### 3. 脚本工具集
 

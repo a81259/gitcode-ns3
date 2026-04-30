@@ -8,14 +8,18 @@
 
 ### 新特性与行为变化
 
+- 完成拥塞控制、流量控制统一 hook 架构重构。拥塞控制算法通过 `OnSender*`、`OnSwitch*`、`OnReceiver*`、`OnTpAttached` 等 hook 接入发送端、交换机和接收端事件；流量控制算法通过 `OnIngress*`、`OnEgress*`、`OnControlFrameReceived`、`OnDataPacketReceived` 等 hook 接入口入队、出队、控制帧和数据信用事件。用户新增算法时，可复用现有拓扑、队列、trace 与配置文件路径，把算法逻辑集中在对应算法类和必要枚举/配置项里，减少对交换机、传输层和 case 模板的侵入式修改。当前内置支持 DCQCN 与 C-AQM 拥塞控制算法，以及 CBFC 与 PFC 流量控制算法。
 - 新增 RTP 侧 DCQCN 支持，并新增 `PFC_DYNAMIC_PAPER` 作为 DCQCN 论文 **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015) 的 paper-style dynamic PFC 阈值复现模式。
 - `ub-quick-example` 在 `EnableRetrans=false` 且发生丢包时会提前停止，并提示检查路由、缓冲区和流控配置，避免无恢复能力的运行继续产生不可解释结果。
 
 ### 兼容性与迁移
 
+- 本版本继续收拢旧 `scratch` 用例迁移路径，把常见旧配置项转换为运行前诊断提示，便于复制旧 case 后定位需要修改的参数。
 - `network_attribute.txt` 现在会在 `ConfigStore` 前检查已知旧 key，并输出迁移提示。已知迁移包括：`ns3::UbQueueManager::ResumeOffset` → `ns3::UbQueueManager::DynamicPfcResumeGapBytes`，`ns3::UbSwitch::EnableCBFC/EnablePFC` → `ns3::UbSwitch::FlowControl`，`ns3::UbApiThread::*` → `ns3::UbLdstThread::*`。
 - 如果旧 case 依赖旧的 `CbfcRetCellGrainControlPacket=1` 行为，请在 `network_attribute.txt` 里显式设置该值；当前 repo 默认值为 `32`。
 - 细粒度 trace 文件由新开关控制：`UB_QUEUE_TRACE_ENABLE`、`UB_FLOW_CONTROL_TRACE_ENABLE`、`UB_CONGESTION_CONTROL_TRACE_ENABLE`。旧 case 不写这些开关可以继续运行，但不会自动生成对应的 `QueueTrace_*`、`PfcTrace_*`、`CbfcTrace_*`、`Dcqcn*` 或 `Caqm*` 文件。
+
+---
 
 ## Release 1.2.0
 

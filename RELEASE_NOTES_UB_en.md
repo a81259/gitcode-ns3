@@ -8,14 +8,18 @@
 
 ### Features and Behavior Changes
 
+- Completed the unified hook architecture for congestion control and flow control. Congestion-control algorithms plug into sender, switch, and receiver events through hooks such as `OnSender*`, `OnSwitch*`, `OnReceiver*`, and `OnTpAttached`; flow-control algorithms plug into ingress, egress, control-frame, and data-credit events through hooks such as `OnIngress*`, `OnEgress*`, `OnControlFrameReceived`, and `OnDataPacketReceived`. Users can add custom algorithms while reusing the existing topology, queue, trace, and case configuration paths, keeping most algorithm logic inside the corresponding algorithm classes and required enum/config entries instead of making invasive changes to switch, transport, or case-template code. The current implementation supports DCQCN and C-AQM congestion control, plus CBFC and PFC flow control.
 - Added RTP-side DCQCN support, plus `PFC_DYNAMIC_PAPER` as the paper-style dynamic PFC threshold reproduction mode for the DCQCN paper **"Congestion Control for Large-Scale RDMA Deployments"** (SIGCOMM 2015).
 - `ub-quick-example` now stops early when `EnableRetrans=false` and a packet is dropped, with guidance to check routing, buffer, and flow-control settings instead of continuing a run that has no recovery path.
 
 ### Compatibility and Migration
 
+- This release keeps copied `scratch` case migration in the release notes, with runtime diagnostics for common legacy configuration keys.
 - `network_attribute.txt` is now scanned for known legacy keys before `ConfigStore` loads it, so copied cases get a migration hint. Known migrations include `ns3::UbQueueManager::ResumeOffset` -> `ns3::UbQueueManager::DynamicPfcResumeGapBytes`, `ns3::UbSwitch::EnableCBFC/EnablePFC` -> `ns3::UbSwitch::FlowControl`, and `ns3::UbApiThread::*` -> `ns3::UbLdstThread::*`.
 - If an older case depends on the previous `CbfcRetCellGrainControlPacket=1` behavior, set that value explicitly in `network_attribute.txt`; the current repo default is `32`.
 - Fine-grained trace files are controlled by new switches: `UB_QUEUE_TRACE_ENABLE`, `UB_FLOW_CONTROL_TRACE_ENABLE`, and `UB_CONGESTION_CONTROL_TRACE_ENABLE`. Older cases that omit them still run, but they do not automatically produce the corresponding `QueueTrace_*`, `PfcTrace_*`, `CbfcTrace_*`, `Dcqcn*`, or `Caqm*` files.
+
+---
 
 ## Release 1.2.0
 

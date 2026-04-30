@@ -2,11 +2,11 @@
 
 **Language**: [English](README_en.md) | [中文](README.md)
 
-> **[NEW] Version 1.2.1 Released (April 2026)** · See [Release Notes](RELEASE_NOTES_UB_en.md#release-121) for DCQCN, `PFC_DYNAMIC_PAPER`, and copied `scratch` case migration notes
+> 🎉 **[NEW] Version 1.2.1 Released (April 2026)** · This update completes the unified hook architecture refactor for congestion control and flow control, with support for DCQCN and C-AQM congestion control plus CBFC and PFC flow control; see [Release Notes](RELEASE_NOTES_UB_en.md#release-121) for details
 
-**Quick Start**: [QUICK_START_en.md](QUICK_START_en.md)
+🚀 **Quick Start**: [QUICK_START_en.md](QUICK_START_en.md)
 
-**UB Config-Driven Entry**: See [scratch/README.md](scratch/README.md)
+🧩 **UB Config-Driven Entry**: See [scratch/README.md](scratch/README.md)
 
 ## Project Overview
 
@@ -78,8 +78,8 @@ The **typical simulation functionalities** supported by this project are shown i
     </tr>
     <tr>
       <td>Congestion Control</td>
-      <td>RTP congestion control mechanism, CAQM</td>
-      <td>LDCP, DCQCN algorithm, CTP congestion control mechanism</td>
+      <td>RTP congestion control mechanism, CAQM, DCQCN</td>
+      <td>LDCP, CTP congestion control mechanism</td>
     </tr>
     <tr>
       <td>Load Balancing</td>
@@ -109,8 +109,8 @@ The **typical simulation functionalities** supported by this project are shown i
     </tr>
     <tr>
       <td>Congestion Notification</td>
-      <td>CAQM marking mode based on header CC field</td>
-      <td>FECN / FECN_RTT marking modes</td>
+      <td>CAQM marking mode based on header CC field, DCQCN FECN marking mode</td>
+      <td>FECN_RTT marking mode</td>
     </tr>
     <tr>
       <td align="center" rowspan="3">Data Link Layer</td>
@@ -126,7 +126,7 @@ The **typical simulation functionalities** supported by this project are shown i
     <tr>
       <td>Credit Flow Control</td>
       <td>CBFC (exclusive / shared-credit), PFC (fixed / dynamic thresholds)</td>
-      <td>Control plane credit initialization behavior, credit sharing mode</td>
+      <td>Control plane credit initialization behavior, user-customizable credit sharing policies</td>
     </tr>
   </tbody>
 </table>
@@ -183,7 +183,7 @@ The UB module is a simulation component implemented based on the UB Base Specifi
 - **Queue Manager** (`ub-queue-manager.*`) - Buffer management module, affecting load balancing, flow control, queuing, packet dropping, and other behaviors
 - **Routing Process** (`ub-routing-process.*`) - Routing module, implementing routing table management and query functionality
 - **Congestion Control** (`ub-congestion-control.*`) - Framework module for congestion control algorithms
-- **CAQM Algorithm** (`ub-caqm.*`) - C-AQM congestion control algorithm implementation
+- **Congestion Control Algorithms** (`ub-caqm.*`, `ub-dcqcn.*`) - C-AQM and DCQCN congestion control algorithm implementations
 - **Flow Control** (`ub-flow-control.*`) - Flow control framework module
 - **Fault Injection Module** (`ub-fault.*`) - Applies fault-related parameters (e.g., packet loss rate, high latency, congestion levels, packet errors, transient disconnections, lane reduction) to specific traffic flows
 
@@ -207,10 +207,10 @@ The UB module is a simulation component implemented based on the UB Base Specifi
 
 #### Protocol Algorithm Support
 - **Flow Control**: Implements credit-based flow control (CBFC exclusive / shared-credit) and priority-based flow control (PFC fixed / dynamic thresholds)
-- **Congestion Control**: Implements the framework of the well-known congestion control loop, including network-side marking, receiver response, sender response, and congestion control algorithms; supports the C-AQM algorithm
+- **Congestion Control**: Implements the framework of the well-known congestion control loop, including network-side marking, receiver response, sender response, and congestion control algorithms; supports C-AQM and DCQCN
 - **Routing Policies**: Supports shortest-path routing and bypass strategies; supports packet spraying, ECMP, and other load balancing mechanisms
-- **QoS Support**: Provides end-to-end QoS support, currently supporting the SP traffic scheduling policy
-- **Switch Arbitration**: Modular implementation of the UB Switch arbitration mechanism, currently supporting priority-based SP scheduling
+- **QoS Support**: Provides end-to-end QoS support, currently supporting SP and DWRR scheduling policies
+- **Switch Arbitration**: Modular implementation of the UB Switch arbitration mechanism, currently supporting SP and DWRR scheduling
 
 ### 3. Script Toolset
 
