@@ -2,7 +2,10 @@
 
 **Language**: [English](README_en.md) | [中文](README.md)
 
-> 🎉 **[NEW] Version 1.2.1 Released (April 2026)** · This update completes the unified hook architecture refactor for congestion control and flow control, with support for DCQCN and C-AQM congestion control plus CBFC and PFC flow control; see [Release Notes](RELEASE_NOTES_UB_en.md#release-121) for details
+<p align="center">
+  🎉 <strong>[NEW] Version 1.2.1 Released (April 2026)</strong> 🎉<br>
+  This update completes the unified hook architecture refactor for congestion control and flow control, with support for DCQCN and C-AQM congestion control plus CBFC and PFC flow control; see <a href="RELEASE_NOTES_UB_en.md#release-121">Release Notes</a> for details
+</p>
 
 🚀 **Quick Start**: [QUICK_START_en.md](QUICK_START_en.md)
 

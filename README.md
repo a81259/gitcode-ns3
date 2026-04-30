@@ -2,7 +2,10 @@
 
 **语言**: [English](README_en.md) | [中文](README.md)
 
-> 🎉 **[NEW] 2026/04 版本 1.2.1 已发布** · 本次更新完成拥塞控制、流量控制统一 hook 架构重构，现已支持 DCQCN 与 C-AQM 拥塞控制算法，以及 CBFC 与 PFC 流量控制算法；更多细节见 [发布说明](RELEASE_NOTES_UB.md#release-121)
+<p align="center">
+  🎉 <strong>[NEW] 2026/04 版本 1.2.1 已发布</strong> 🎉<br>
+  本次更新完成拥塞控制、流量控制统一 hook 架构重构，现已支持 DCQCN 与 C-AQM 拥塞控制算法，以及 CBFC 与 PFC 流量控制算法；更多细节见 <a href="RELEASE_NOTES_UB.md#release-121">发布说明</a>
+</p>
 
 🚀 **快速开始**: [QUICK_START.md](QUICK_START.md)
 
