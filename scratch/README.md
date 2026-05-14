@@ -96,7 +96,8 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
 - Transport behavior (`ns3::UbTransportChannel`):
   - `UsePacketSpray` (bool)
   - `UseShortestPaths` (bool)
-  - `EnableRetrans`, `InitialRTO`, `MaxRetransAttempts`, `RetransExponentFactor`, `DefaultMaxWqeSegNum`, `DefaultMaxInflightPacketSize`, `TpOooThreshold`
+  - `EnableRetrans`, `InitialRTO`, `MaxRetransAttempts`, `RetransExponentFactor`, `DefaultMaxWqeSegNum`, `DefaultMaxInflightPacketSize`
+  - `RetransmissionMode`, `TpOooThreshold`, `SelectiveAckBitmapBits`, `EnableFastSelectiveRetrans`
 - Allocator:
   - `ns3::UbSwitchAllocator::AllocationTime` (Time)
 - App & API LD/ST knobs:
@@ -120,6 +121,33 @@ If you copied an older `scratch/` case into your own workspace, check `network_a
 | Need `Dcqcn*` or `Caqm*` algorithm traces | Set `global UB_CONGESTION_CONTROL_TRACE_ENABLE "true"` |
 
 Runs with `default ns3::UbTransportChannel::EnableRetrans "false"` now stop early when a packet is dropped. Fix the route/buffer/flow-control cause, or enable retransmission if the experiment intentionally allows loss recovery.
+
+The existing default retransmission algorithm remains GoBackN when
+`RetransmissionMode` is omitted. To opt into UB RTP selective retransmission in a
+case file, keep the configuration at the protocol level:
+
+```text
+default ns3::UbTransportChannel::EnableRetrans "true"
+default ns3::UbTransportChannel::RetransmissionMode "SELECTIVE"
+```
+
+`SelectiveAckBitmapBits` defaults to `0`, which means AUTO. AUTO chooses the
+smallest SAETPH-supported feedback width covering `min(TpOooThreshold, 1024)`.
+`TpOooThreshold` is the endpoint out-of-order receive evidence capacity in PSNs;
+it is not a private receive-buffer implementation name. `EnableFastSelectiveRetrans`
+defaults to `false` and should generally stay disabled when packet-spray or other
+multipath routing may reorder packets. For a controlled non-reordering experiment,
+advanced settings may be written explicitly:
+
+```text
+default ns3::UbTransportChannel::SelectiveAckBitmapBits "64"
+default ns3::UbTransportChannel::EnableFastSelectiveRetrans "true"
+```
+
+`SelectiveRetransmitNotify` is an ns-3 `TraceSource` on `UbTransportChannel`
+for manual `TraceConnect` observers. It reports node id, TPN, PSN, and payload
+bytes when a queued selective retransmission packet is emitted; it is not written
+to the default runlog files by the existing global trace switches.
 
 ### `PFC_DYNAMIC_PAPER`
 
