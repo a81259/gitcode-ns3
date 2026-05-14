@@ -136,6 +136,11 @@ enum class TpOpcode : uint8_t {
     TP_OPCODE_CNP = 0x8                 // CNP拥塞通知包
 };
 
+enum class UbRetransmissionMode : uint8_t {
+    GBN = 0,
+    SELECTIVE = 1,
+};
+
 // 定义NLP常量，便于使用
 enum class NextLayerProtocol : uint8_t {
     NLP_TAH = 0x0,      // TAH (事务头)

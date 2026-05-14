@@ -43,6 +43,13 @@ public:
     // 发送端发包，更新数据
     virtual void OnSenderDataPacketSent(uint32_t psn, uint32_t size) {}
 
+    // 发送端重传包，更新不会把重传当成新数据的发送侧控制状态
+    virtual void OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size)
+    {
+        (void)psn;
+        (void)size;
+    }
+
     // 交换机在包进入目标出端口 backlog 时进行处理
     virtual void OnSwitchPostEnqueue(uint32_t inPort, uint32_t outPort, Ptr<Packet> p) {}
 
@@ -74,6 +81,20 @@ public:
         (void)psn;
         (void)header;
         (void)opcode;
+    }
+
+    // 发送端收到选择性ACK反馈，用于处理TPSACK/TPSACK-CC的重传与拥塞控制联动
+    virtual void OnSenderSelectiveAck(TpOpcode opcode,
+                                      uint32_t cumulativePsn,
+                                      const UbSelectiveAckExtTph& saetph,
+                                      const UbCongestionExtTph* cetph,
+                                      uint32_t retransmitBytes)
+    {
+        (void)opcode;
+        (void)cumulativePsn;
+        (void)saetph;
+        (void)cetph;
+        (void)retransmitBytes;
     }
 
     // 发送端TP在发送工作清空后进入空闲态

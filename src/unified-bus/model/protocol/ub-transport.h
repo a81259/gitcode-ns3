@@ -4,7 +4,9 @@
 
 #include <map>
 #include <queue>
+#include <deque>
 #include <utility>
+#include <vector>
 #include "ns3/object.h"
 #include "ns3/packet.h"
 #include "ns3/ipv4-address.h"
@@ -38,6 +40,8 @@ public:
      * @return TypeId
      */
     static TypeId GetTypeId(void);
+    static bool IsTransportResponseOpcode(TpOpcode opcode);
+    static bool IsTransportResponseOpcode(uint8_t opcode);
 
     /**
      * @brief Constructor for UbTransportChannel
@@ -251,11 +255,22 @@ public:
     uint32_t GetActiveSendSegmentCount() const;
 
     Ptr<UbCongestionControl> GetCongestionCtrlForTest() const { return m_congestionCtrl; }
+    void SetCongestionControlForTest(Ptr<UbCongestionControl> cc) { m_congestionCtrl = cc; }
     void EnqueueAckForTest(Ptr<Packet> p) { m_ackQ.push(p); }
     void EnqueueCnpForTest(Ptr<Packet> p) { m_cnpQ.push(p); }
     Ptr<Packet> GetNextPacketForTest() { return GetNextPacket(); }
+    uint32_t GetPendingAckCountForTest() const { return static_cast<uint32_t>(m_ackQ.size()); }
+    Ptr<Packet> PopAckForTest() { return GetNextPacket(); }
     uint32_t GetPendingCnpCountForTest() const { return static_cast<uint32_t>(m_cnpQ.size()); }
     uint32_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
+    void SetPsnSndUnaForTest(uint64_t psn) { m_psnSndUna = psn; }
+    bool ResolveSelectiveAckBitmapBitsForTest(uint32_t& bits) const;
+    void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t logicalBytes);
+    uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
+    uint32_t GetRawSelectiveRetransmissionQueueCountForTest() const;
+    bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
+    bool HasRetainedPsnForTest(uint64_t psn) const;
+    uint32_t GetPsnRetransmitCountForTest(uint64_t psn) const;
 private:
     struct InboundTaUnitState
     {
@@ -272,6 +287,18 @@ private:
         uint32_t taskId{0};
     };
 
+    struct SentPsnState
+    {
+        Ptr<Packet> packet;
+        uint32_t payloadBytes{0};
+        uint32_t logicalBytes{0};
+        Ptr<UbWqeSegment> segment;
+        bool acknowledged{false};
+        bool selectivelyReportedMissing{false};
+        bool retransmitPending{false};
+        uint32_t retransmitCount{0};
+    };
+
     void DoDispose() override;
 
     Ptr<UbTransaction> GetTransaction();
@@ -281,6 +308,28 @@ private:
                                            uint32_t payloadBytes,
                                            uint32_t taskId);
     bool ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment) const;
+    bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;
+    uint32_t GetSelectiveAckBitmapBits() const;
+    bool HasReceiveGap() const;
+    uint64_t GetSelectiveAckBase() const;
+    uint64_t GetCumulativeAckPsn() const;
+    UbSelectiveAckExtTph BuildSelectiveAckHeader(uint64_t ackBase) const;
+    TpOpcode GetResponseOpcode(bool selectiveAck) const;
+    void RetainSentPsn(uint64_t psn,
+                       Ptr<Packet> packet,
+                       uint32_t payloadBytes,
+                       uint32_t logicalBytes,
+                       Ptr<UbWqeSegment> segment);
+    void MarkPsnAcked(uint64_t psn);
+    void AcknowledgeCumulativePsn(uint64_t ackPsn);
+    void AdvanceSendUnaFromAckState();
+    std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+                                                             const UbSelectiveAckExtTph& saetph);
+    bool QueueSelectiveRetransmission(uint64_t psn);
+    void CompactSelectiveRetransmissionQueue();
+    bool HasPendingSelectiveRetransmission() const;
+    uint32_t GetNextSelectiveRetransmissionSize() const;
+    uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;
@@ -290,6 +339,7 @@ private:
     TracedCallback<uint32_t, uint32_t, uint32_t> m_traceWqeSegmentCompletesNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
                    uint32_t, PacketType, uint32_t, uint32_t, UbPacketTraceTag> m_tpRecvNotify;
+    TracedCallback<uint32_t, uint32_t, uint64_t, uint32_t> m_traceSelectiveRetransmit;
 
     void FirstPacketSendsNotify(uint32_t nodeId, uint32_t taskId, uint32_t mTpn,
                                 uint32_t mDstTpn, uint32_t tpMsn, uint32_t mPsnSndNxt, uint32_t mSport);
@@ -323,6 +373,8 @@ private:
     std::vector<Ptr<UbWqeSegment>> m_remoteRequest; // FIFO
     std::map<std::pair<uint32_t, uint32_t>, InboundTaUnitState> m_inboundTaUnits;
     std::map<uint64_t, BufferedInboundPacket> m_bufferedInboundPackets;
+    std::map<uint64_t, SentPsnState> m_sentPsnState;
+    std::deque<uint64_t> m_selectiveRetransmitQ;
 
     // Queue parameters
     uint32_t m_maxQueueSize;
@@ -336,6 +388,8 @@ private:
     uint64_t        m_psnSndNxt = 0;      // TP层下一个待发送的包序号
     uint64_t        m_psnSndUna = 0;      // TP层未确认的最小包序号
     uint64_t        m_psnRecvNxt { 0 };   // TP层记录最大顺序包序号
+    uint64_t        m_maxRcvPsn { 0 };
+    bool            m_hasReceivedAnyPsn { false };
     uint64_t        m_tpMsnCnt {0};       // TP层总计获取的消息(WQE Segment)计数
     uint64_t        m_tpPsnCnt {0};       // TP层总计获取的数据包个数计数
     static constexpr uint32_t DEFAULT_OOO_THRESHOLD = 2048;
@@ -359,6 +413,9 @@ private:
     EventId m_retransEvent{};        //!< Retransmission event
     Time m_rto;                      //!< Retransmit timeout 25600ns
     uint16_t m_retransAttemptsLeft ; // 剩余的重传次数
+    UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
+    uint32_t m_selectiveAckBitmapBits{0};
+    bool m_enableFastSelectiveRetrans{false};
 
     // Callback functions
     IngressQueueType m_ingressQueueType = IngressQueueType::TP; // Transport channel queue type (TP)

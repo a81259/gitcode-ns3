@@ -43,6 +43,7 @@ public:
                                                             uint32_t psnEnd) override;
     TpOpcode GetAckOpcode() const override;
     void OnSenderDataPacketSent(uint32_t psn, uint32_t size) override;
+    void OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size) override;
     void OnSenderCongestionNotification(TpOpcode opcode,
                                         uint32_t psn,
                                         UbCongestionExtTph header) override;
@@ -50,6 +51,7 @@ public:
 
     DataRate GetCurrentRateForTest() const { return m_currentRate; }
     DataRate GetTargetRateForTest() const { return m_targetRate; }
+    Time GetNextAvailableSendTimeForTest() const { return m_nextAvailableSendTime; }
     void ApplySyntheticCnpForTest();
 
 private:

@@ -53,6 +53,8 @@ public:
     static TypeId GetTypeId(void);
 
     Time GetRttForTest() const { return m_rtt; }
+    uint32_t GetInflightForTest() const { return m_inFlight; }
+    uint32_t GetDataByteSentForTest() const { return m_dataByteSent; }
     void ApplyRttSampleForTest(Time sample);
 
     // 初始化
@@ -81,10 +83,16 @@ public:
     void OnSenderCongestionNotification(TpOpcode opcode,
                                         uint32_t psn,
                                         UbCongestionExtTph header) override;
+    void OnSenderSelectiveAck(TpOpcode opcode,
+                              uint32_t cumulativePsn,
+                              const UbSelectiveAckExtTph& saetph,
+                              const UbCongestionExtTph* cetph,
+                              uint32_t retransmitBytes) override;
 
 private:
     void StateReset();
     void UpdateRttEstimate(Time sample);
+    void ApplySenderCetphFeedback(uint32_t psn, const UbCongestionExtTph& header);
 
     void DoDispose() override;
 
