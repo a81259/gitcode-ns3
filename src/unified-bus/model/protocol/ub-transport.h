@@ -5,6 +5,8 @@
 #include <map>
 #include <queue>
 #include <deque>
+#include <limits>
+#include <string>
 #include <utility>
 #include <vector>
 #include "ns3/object.h"
@@ -325,11 +327,21 @@ private:
     void AdvanceSendUnaFromAckState();
     std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
                                                              const UbSelectiveAckExtTph& saetph);
+    std::vector<uint64_t> GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+                                                         const UbSelectiveAckExtTph& saetph) const;
     bool QueueSelectiveRetransmission(uint64_t psn);
     void CompactSelectiveRetransmissionQueue();
     bool HasPendingSelectiveRetransmission() const;
+    bool CanSendSelectiveRetransmission() const;
     uint32_t GetNextSelectiveRetransmissionSize() const;
     uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
+    void PrepareGbnRetransmissionFromPsn(uint64_t psn);
+    bool IsSelectiveMarkPsnEnabled() const;
+    bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
+                                                     const UbSelectiveAckExtTph& saetph) const;
+    void EnterSelectiveMarkPsnRetransPhase();
+    void FinishSelectiveMarkPsnRetransPhaseIfDone();
+    void MaybeMarkFirstNewSelectivePacket(uint64_t psn);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;
@@ -338,7 +350,7 @@ private:
     TracedCallback<uint32_t, uint32_t, uint32_t> m_traceWqeSegmentSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t> m_traceWqeSegmentCompletesNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
-                   uint32_t, PacketType, uint32_t, uint32_t, UbPacketTraceTag> m_tpRecvNotify;
+                   uint32_t, PacketType, uint32_t, uint32_t, std::string, UbPacketTraceTag> m_tpRecvNotify;
     TracedCallback<uint32_t, uint32_t, uint64_t, uint32_t> m_traceSelectiveRetransmit;
 
     void FirstPacketSendsNotify(uint32_t nodeId, uint32_t taskId, uint32_t mTpn,
@@ -352,7 +364,7 @@ private:
     void WqeSegmentSendsNotify(uint32_t nodeId, uint32_t taskId, uint32_t taSsn);
     void WqeSegmentCompletesNotify(uint32_t nodeId, uint32_t taskId, uint32_t taSsn);
     void TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint32_t dst, uint32_t srcTpn, uint32_t dstTpn,
-                      PacketType type, uint32_t size, uint32_t taskId, UbPacketTraceTag traceTag);
+                      PacketType type, uint32_t size, uint32_t taskId, std::string ackInfo, UbPacketTraceTag traceTag);
     // Node and controller references
     uint32_t m_nodeId;
 
@@ -390,6 +402,7 @@ private:
     uint64_t        m_psnRecvNxt { 0 };   // TP层记录最大顺序包序号
     uint64_t        m_maxRcvPsn { 0 };
     bool            m_hasReceivedAnyPsn { false };
+    uint64_t        m_lastGbnNakPsn { std::numeric_limits<uint64_t>::max() };
     uint64_t        m_tpMsnCnt {0};       // TP层总计获取的消息(WQE Segment)计数
     uint64_t        m_tpPsnCnt {0};       // TP层总计获取的数据包个数计数
     static constexpr uint32_t DEFAULT_OOO_THRESHOLD = 2048;
@@ -416,6 +429,13 @@ private:
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     uint32_t m_selectiveAckBitmapBits{0};
     bool m_enableFastSelectiveRetrans{false};
+    bool m_enableSelectiveMarkPsn{false};
+    bool m_selectiveMarkPsnRetransPhase{false};
+    bool m_selectiveMarkPsnAwaitingFirstNew{true};
+    bool m_selectiveMarkPsnValid{false};
+    uint64_t m_selectiveMarkPsn{0};
+    bool m_lastFirstSelectiveRtxPsnValid{false};
+    uint64_t m_lastFirstSelectiveRtxPsn{0};
 
     // Callback functions
     IngressQueueType m_ingressQueueType = IngressQueueType::TP; // Transport channel queue type (TP)

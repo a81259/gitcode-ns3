@@ -3648,6 +3648,7 @@ class UbUrmaReadMultiSliceRequestPacketSemanticsTest : public TestCase
                                     PacketType type,
                                     uint32_t payloadBytes,
                                     uint32_t taskId,
+                                    std::string,
                                     UbPacketTraceTag)
     {
         if (type != PacketType::PACKET || taskId != kUrmaReadMultiPacketTaskId)

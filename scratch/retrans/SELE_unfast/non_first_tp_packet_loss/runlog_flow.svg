@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1260" viewBox="0 0 1500 1260">
+<defs>
+<marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L9,4.5 L0,9 z" fill="#111111"/>
+</marker>
+<marker id="arrow-purple" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L12,6 L0,12 z" fill="#6941C6"/>
+</marker>
+<marker id="arrow-red" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L9,4.5 L0,9 z" fill="#ff1f1f"/>
+</marker>
+<marker id="axis-arrow" markerWidth="12" markerHeight="12" refX="6" refY="10" orient="auto">
+<path d="M1,1 L11,1 L6,11 z" fill="#111111"/>
+</marker>
+</defs>
+<rect x="0" y="0" width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,"Noto Sans CJK SC","Microsoft YaHei",sans-serif;}</style>
+<text x="390" y="55" font-size="32" text-anchor="middle" fill="#111111">TP Sender</text>
+<text x="1120" y="55" font-size="32" text-anchor="middle" fill="#111111">TP Receiver</text>
+<line x1="390" y1="85" x2="390" y2="1140" stroke="#111111" stroke-width="1.4" marker-end="url(#axis-arrow)"/>
+<line x1="1120" y1="85" x2="1120" y2="1140" stroke="#111111" stroke-width="1.4" marker-end="url(#axis-arrow)"/>
+<path d="M 352 309 C 332 309 332 327 332 345 L 332 485.0 C 332 497.0 320 505.0 307 505.0 C 320 505.0 332 513.0 332 525.0 L 332 665 C 332 683 332 701 352 701" fill="none" stroke="#4f7fc9" stroke-width="2"/>
+<text x="240" y="513.0" font-size="30" fill="#4f7fc9">RTO</text>
+<text x="226" y="543.0" font-size="14" fill="#4f7fc9">25600ns</text>
+<text x="42" y="301" font-size="14" fill="#4f7fc9">start: TPACK PSN=0 arrived @ 316ns</text>
+<text x="42" y="723" font-size="14" fill="#4f7fc9">timeout @ 25916ns; retrans DATA PSN=1 @ 25918ns</text>
+<path d="M 290 701 C 270 701 270 719 270 737 L 270 771.0 C 270 783.0 258 791.0 245 791.0 C 258 791.0 270 799.0 270 811.0 L 270 845 C 270 863 270 881 290 881" fill="none" stroke="#4f7fc9" stroke-width="2"/>
+<text x="178" y="799.0" font-size="30" fill="#4f7fc9">RTO</text>
+<text x="164" y="829.0" font-size="14" fill="#4f7fc9">51200ns</text>
+<text x="42" y="693" font-size="14" fill="#4f7fc9">start: timeout @ 25916ns</text>
+<text x="42" y="903" font-size="14" fill="#4f7fc9">timeout @ 77116ns; retrans DATA PSN=1 @ 77117ns</text>
+<line x1="390" y1="145" x2="1120" y2="267" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="390" y1="165" x2="798" y2="233" stroke="#ff1f1f" stroke-width="1.7" marker-end="url(#arrow-red)"/>
+<line x1="390" y1="195" x2="1120" y2="341" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="390" y1="215" x2="1120" y2="415" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="390" y1="235" x2="1120" y2="489" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1120" y1="277" x2="390" y2="309" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1120" y1="351" x2="390" y2="383" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1120" y1="425" x2="390" y2="457" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1120" y1="499" x2="390" y2="531" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="390" y1="701" x2="798" y2="843" stroke="#ff1f1f" stroke-width="1.7" marker-end="url(#arrow-red)"/>
+<line x1="390" y1="881" x2="1120" y2="913" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1120" y1="923" x2="390" y2="955" stroke="#111111" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="382" y1="145" x2="398" y2="145" stroke="#667085" stroke-width="1"/>
+<text x="372" y="150" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">11ns</text>
+<line x1="1112" y1="267" x2="1128" y2="267" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="272" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">251ns</text>
+<line x1="382" y1="165" x2="398" y2="165" stroke="#667085" stroke-width="1"/>
+<text x="372" y="170" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">17ns</text>
+<line x1="382" y1="195" x2="398" y2="195" stroke="#667085" stroke-width="1"/>
+<text x="372" y="200" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">22ns</text>
+<line x1="1112" y1="341" x2="1128" y2="341" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="346" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">419ns</text>
+<line x1="382" y1="215" x2="398" y2="215" stroke="#667085" stroke-width="1"/>
+<text x="372" y="220" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">27ns</text>
+<line x1="1112" y1="415" x2="1128" y2="415" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="420" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">586ns</text>
+<line x1="382" y1="235" x2="398" y2="235" stroke="#667085" stroke-width="1"/>
+<text x="372" y="240" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">33ns</text>
+<line x1="1112" y1="489" x2="1128" y2="489" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="494" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">752ns</text>
+<line x1="1112" y1="277" x2="1128" y2="277" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="282" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">252ns</text>
+<line x1="382" y1="309" x2="398" y2="309" stroke="#667085" stroke-width="1"/>
+<text x="372" y="314" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">316ns</text>
+<line x1="1112" y1="351" x2="1128" y2="351" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="356" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">420ns</text>
+<line x1="382" y1="383" x2="398" y2="383" stroke="#667085" stroke-width="1"/>
+<text x="372" y="388" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">485ns</text>
+<line x1="1112" y1="425" x2="1128" y2="425" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="430" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">587ns</text>
+<line x1="382" y1="457" x2="398" y2="457" stroke="#667085" stroke-width="1"/>
+<text x="372" y="462" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">652ns</text>
+<line x1="1112" y1="499" x2="1128" y2="499" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="504" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">753ns</text>
+<line x1="382" y1="531" x2="398" y2="531" stroke="#667085" stroke-width="1"/>
+<text x="372" y="536" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">819ns</text>
+<line x1="382" y1="701" x2="398" y2="701" stroke="#667085" stroke-width="1"/>
+<text x="372" y="706" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">25918ns</text>
+<line x1="382" y1="881" x2="398" y2="881" stroke="#667085" stroke-width="1"/>
+<text x="372" y="886" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">77117ns</text>
+<line x1="1112" y1="913" x2="1128" y2="913" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="918" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">77357ns</text>
+<line x1="1112" y1="923" x2="1128" y2="923" stroke="#667085" stroke-width="1"/>
+<text x="1138" y="928" text-anchor="start" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">77358ns</text>
+<line x1="382" y1="955" x2="398" y2="955" stroke="#667085" stroke-width="1"/>
+<text x="372" y="960" text-anchor="end" font-size="14" fill="#667085" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif">77423ns</text>
+<g transform="translate(638.2,186.5) rotate(9.49)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">psn=0</text>
+</g>
+<text x="812" y="241" font-size="34" font-weight="700" fill="#ff1f1f">X</text>
+<text x="840" y="239" font-size="14" fill="#ff1f1f">drop</text>
+<g transform="translate(561.4,193.6) rotate(9.46)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#ff1f1f" stroke="white" stroke-width="5" paint-order="stroke fill">psn=1</text>
+</g>
+<g transform="translate(638.2,244.6) rotate(11.31)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">psn=2</text>
+</g>
+<g transform="translate(696.6,299.0) rotate(15.32)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">psn=3</text>
+</g>
+<g transform="translate(638.2,321.4) rotate(19.19)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">psn=4</text>
+</g>
+<g transform="translate(784.2,291.7) rotate(-2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="17" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">ACK(PSN=0)</text>
+</g>
+<g transform="translate(711.2,368.9) rotate(-2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="15" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">SACK(PSN=0,MAX=2,BM=101)</text>
+</g>
+<g transform="translate(755.0,441.0) rotate(-2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="15" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">SACK(PSN=0,MAX=3,BM=1011)</text>
+</g>
+<g transform="translate(711.2,516.9) rotate(-2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="15" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">SACK(PSN=0,MAX=4,BM=10111)</text>
+</g>
+<text x="812" y="851" font-size="34" font-weight="700" fill="#ff1f1f">X</text>
+<text x="840" y="849" font-size="14" fill="#ff1f1f">drop</text>
+<g transform="translate(561.4,760.6) rotate(19.19)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#ff1f1f" stroke="white" stroke-width="5" paint-order="stroke fill">psn=1</text>
+</g>
+<g transform="translate(638.2,891.9) rotate(2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="18" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">psn=1</text>
+</g>
+<g transform="translate(784.2,937.7) rotate(-2.51)">
+<text x="0" y="-7" text-anchor="middle" font-size="17" font-family="Arial, Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-style="italic" fill="#111111" stroke="white" stroke-width="5" paint-order="stroke fill">ACK(PSN=4)</text>
+</g>
+<text x="750" y="1215" font-size="32" text-anchor="middle" fill="#111111" font-weight="700">相似图 6-27  SELE_unfast/non_first_tp_packet_loss</text>
+</svg>

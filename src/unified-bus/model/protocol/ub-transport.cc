@@ -13,6 +13,7 @@
 #include "ns3/ub-utils.h"
 
 #include <array>
+#include <sstream>
 #include <stdexcept>
 
 using namespace utils;
@@ -150,6 +151,45 @@ MakeSelectiveAckBitmapBitsChecker()
     return Ptr<const AttributeChecker>(checker, false);
 }
 
+std::string
+FormatSimpleAckInfo(const char* ackType, uint64_t psn)
+{
+    std::ostringstream oss;
+    oss << ackType << "(PSN=" << psn << ")";
+    return oss.str();
+}
+
+std::string
+FormatSelectiveAckInfo(const UbTransportHeader& tpHeader, const UbSelectiveAckExtTph& saetph)
+{
+    const uint64_t ackBase = tpHeader.GetPsn();
+    const uint64_t maxRcvPsn = saetph.GetMaxRcvPsn();
+    const uint32_t bitmapBits = saetph.GetBitmapBitCount();
+    uint32_t visibleBits = bitmapBits;
+    if (maxRcvPsn >= ackBase) {
+        visibleBits = static_cast<uint32_t>(std::min<uint64_t>(bitmapBits, maxRcvPsn - ackBase + 1));
+    }
+
+    std::ostringstream bitmap;
+    bitmap << '[';
+    for (uint32_t i = 0; i < visibleBits; ++i) {
+        if (i > 0) {
+            bitmap << ',';
+        }
+        bitmap << (saetph.GetBitmapBit(i) ? '1' : '0');
+    }
+    bitmap << ']';
+
+    std::ostringstream oss;
+    oss << "TPSACK(PSN=" << ackBase
+        << ",MaxRcvPSN=" << maxRcvPsn
+        << ",BitmapSize=" << bitmapBits
+        << ",BitmapRange=[" << ackBase << ','
+        << (visibleBits == 0 ? ackBase : ackBase + visibleBits - 1) << ']'
+        << ",Bitmap=" << bitmap.str() << ")";
+    return oss.str();
+}
+
 } // namespace
 
 TypeId UbTransportChannel::GetTypeId(void)
@@ -207,9 +247,14 @@ TypeId UbTransportChannel::GetTypeId(void)
                       MakeUintegerAccessor(&UbTransportChannel::m_selectiveAckBitmapBits),
                       MakeSelectiveAckBitmapBitsChecker())
         .AddAttribute("EnableFastSelectiveRetrans",
-                      "Trigger selective retransmission immediately on TPSACK instead of waiting for RTO.",
+                      "Trigger fast retransmission immediately on TPNAK/TPSACK instead of waiting for RTO.",
                       BooleanValue(false),
                       MakeBooleanAccessor(&UbTransportChannel::m_enableFastSelectiveRetrans),
+                      MakeBooleanChecker())
+        .AddAttribute("EnableSelectiveMarkPsn",
+                      "Enable MarkPSN phase control for selective retransmission with fast retransmit.",
+                      BooleanValue(false),
+                      MakeBooleanAccessor(&UbTransportChannel::m_enableSelectiveMarkPsn),
                       MakeBooleanChecker())
         .AddAttribute("UsePacketSpray",
                       "Enable per-packet ECMP/packet spray across multiple paths.",
@@ -267,6 +312,7 @@ UbTransportChannel::IsTransportResponseOpcode(uint8_t opcode)
 {
     return opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH) ||
            opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
+           opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH) ||
            opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH) ||
            opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH) ||
            opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_CNP);
@@ -334,11 +380,12 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         return p;
     }
 
-    while (!m_selectiveRetransmitQ.empty()) {
+    while (CanSendSelectiveRetransmission()) {
         const uint64_t psn = m_selectiveRetransmitQ.front();
         auto it = m_sentPsnState.find(psn);
         if (it == m_sentPsnState.end() || it->second.acknowledged || it->second.packet == nullptr) {
             m_selectiveRetransmitQ.pop_front();
+            FinishSelectiveMarkPsnRetransPhaseIfDone();
             continue;
         }
         const uint32_t logicalBytes = it->second.logicalBytes == 0 ? UB_MTU_BYTE : it->second.logicalBytes;
@@ -348,15 +395,21 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         }
         m_selectiveRetransmitQ.pop_front();
         it->second.retransmitPending = false;
+        if (IsSelectiveMarkPsnEnabled() && it->second.retransmitCount == 0) {
+            m_lastFirstSelectiveRtxPsn = psn;
+            m_lastFirstSelectiveRtxPsnValid = true;
+        }
         it->second.retransmitCount++;
         m_congestionCtrl->OnSenderRetransmissionPacketSent(static_cast<uint32_t>(psn), logicalBytes);
         m_traceSelectiveRetransmit(m_nodeId, m_tpn, psn, it->second.payloadBytes);
         Ptr<Packet> retransmission = it->second.packet->Copy();
+        FinishSelectiveMarkPsnRetransPhaseIfDone();
         if (!IsEmpty()) {
             m_headArrivalTime = Simulator::Now();
         }
         return retransmission;
     }
+    FinishSelectiveMarkPsnRetransPhaseIfDone();
 
     if (m_wqeSegmentVector.empty()) {
         NS_LOG_DEBUG("No WQE segments available to send");
@@ -421,6 +474,7 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         }
 
         Ptr<Packet> p = GenDataPacket(currentSegment, payloadSize, wireLengthBytes, progressBytes);
+        MaybeMarkFirstNewSelectivePacket(m_psnSndNxt);
         if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
             RetainSentPsn(m_psnSndNxt, p, payloadSize, progressBytes, currentSegment);
         }
@@ -570,7 +624,8 @@ uint32_t UbTransportChannel::GetNextPacketSize()
     if (!m_ackQ.empty()) {
         return m_ackQ.front()->GetSize();
     }
-    const uint32_t selectiveRetransmissionSize = GetNextSelectiveRetransmissionSize();
+    const uint32_t selectiveRetransmissionSize =
+        CanSendSelectiveRetransmission() ? GetNextSelectiveRetransmissionSize() : 0;
     if (selectiveRetransmissionSize > 0) {
         return selectiveRetransmissionSize;
     }
@@ -999,6 +1054,30 @@ UbTransportChannel::CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& 
     return missingPsns;
 }
 
+std::vector<uint64_t>
+UbTransportChannel::GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+                                                   const UbSelectiveAckExtTph& saetph) const
+{
+    const uint64_t ackBase = tpHeader.GetPsn();
+    const uint32_t bitmapBits = saetph.GetBitmapBitCount();
+    const uint64_t representedEnd = ackBase + bitmapBits - 1;
+    const uint64_t lastCandidate = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
+    const bool baseIsMissingEvidence = ackBase == 0 && !saetph.GetBitmapBit(0);
+    const uint64_t firstCandidate = baseIsMissingEvidence ? 0 : ackBase + 1;
+    std::vector<uint64_t> missingPsns;
+
+    for (uint64_t psn = firstCandidate; psn <= lastCandidate; ++psn) {
+        const uint32_t offset = static_cast<uint32_t>(psn - ackBase);
+        if (!saetph.GetBitmapBit(offset)) {
+            missingPsns.push_back(psn);
+        }
+        if (psn == UINT64_MAX) {
+            break;
+        }
+    }
+    return missingPsns;
+}
+
 bool
 UbTransportChannel::QueueSelectiveRetransmission(uint64_t psn)
 {
@@ -1038,6 +1117,15 @@ UbTransportChannel::HasPendingSelectiveRetransmission() const
     return false;
 }
 
+bool
+UbTransportChannel::CanSendSelectiveRetransmission() const
+{
+    if (!HasPendingSelectiveRetransmission()) {
+        return false;
+    }
+    return !IsSelectiveMarkPsnEnabled() || m_selectiveMarkPsnRetransPhase;
+}
+
 uint32_t
 UbTransportChannel::GetNextSelectiveRetransmissionSize() const
 {
@@ -1060,6 +1148,74 @@ UbTransportChannel::GetNextSelectiveRetransmissionLogicalBytes() const
         }
     }
     return 0;
+}
+
+bool
+UbTransportChannel::IsSelectiveMarkPsnEnabled() const
+{
+    return m_enableSelectiveMarkPsn &&
+           m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
+           m_enableFastSelectiveRetrans;
+}
+
+bool
+UbTransportChannel::SelectiveAckReportsReceivedAtOrAboveMarkPsn(
+    const UbTransportHeader& tpHeader,
+    const UbSelectiveAckExtTph& saetph) const
+{
+    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnValid) {
+        return false;
+    }
+
+    const uint64_t ackBase = tpHeader.GetPsn();
+    const uint32_t bitmapBits = saetph.GetBitmapBitCount();
+    const uint64_t representedEnd = ackBase + bitmapBits - 1;
+    const uint64_t visibleEnd = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
+
+    for (uint64_t psn = ackBase; psn <= visibleEnd; ++psn) {
+        const uint32_t offset = static_cast<uint32_t>(psn - ackBase);
+        if (psn >= m_selectiveMarkPsn && saetph.GetBitmapBit(offset)) {
+            return true;
+        }
+        if (psn == UINT64_MAX) {
+            break;
+        }
+    }
+    return false;
+}
+
+void
+UbTransportChannel::EnterSelectiveMarkPsnRetransPhase()
+{
+    if (!IsSelectiveMarkPsnEnabled()) {
+        return;
+    }
+    m_selectiveMarkPsnRetransPhase = true;
+}
+
+void
+UbTransportChannel::FinishSelectiveMarkPsnRetransPhaseIfDone()
+{
+    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnRetransPhase) {
+        return;
+    }
+    if (HasPendingSelectiveRetransmission()) {
+        return;
+    }
+    m_selectiveMarkPsnRetransPhase = false;
+    m_selectiveMarkPsnAwaitingFirstNew = true;
+    m_selectiveMarkPsnValid = false;
+}
+
+void
+UbTransportChannel::MaybeMarkFirstNewSelectivePacket(uint64_t psn)
+{
+    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnAwaitingFirstNew) {
+        return;
+    }
+    m_selectiveMarkPsn = psn;
+    m_selectiveMarkPsnValid = true;
+    m_selectiveMarkPsnAwaitingFirstNew = false;
 }
 
 /**
@@ -1095,6 +1251,7 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                           opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
     const bool hasSaetph = opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
                            opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
+    const bool isTpnak = opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH;
 
     UbCongestionExtTph CETPH;
     if (hasCetph) {
@@ -1113,14 +1270,60 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
         }
     }
     p->RemoveHeader(AckTaHeader); // 处理接收包信息
+    if (isTpnak) {
+        const uint64_t nakPsn = TpHeader.GetPsn();
+        NS_LOG_DEBUG("[Transport channel] Recv tpnak."
+                  << " PacketUid: " << p->GetUid()
+                  << " Tpn: " << m_tpn
+                  << " Psn: " << nakPsn
+                  << " PacketType: Nak"
+                  << " Src: " << m_src
+                  << " Dst: " << m_dest
+                  << " PacketSize: " << p->GetSize());
+        if (m_pktTraceEnabled) {
+            UbFlowTag flowTag;
+            p->PeekPacketTag(flowTag);
+            UbPacketTraceTag traceTag;
+            p->PeekPacketTag(traceTag);
+            TpRecvNotify(p->GetUid(), nakPsn, m_dest, m_src, m_dstTpn, m_tpn,
+                         PacketType::NAK, p->GetSize(), flowTag.GetFlowId(),
+                         FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
+        }
+        if (m_isRetransEnable &&
+            m_retransmissionMode == UbRetransmissionMode::GBN &&
+            m_enableFastSelectiveRetrans &&
+            nakPsn >= m_psnSndUna &&
+            nakPsn < m_psnSndNxt) {
+            PrepareGbnRetransmissionFromPsn(nakPsn);
+            Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+            port->TriggerTransmit();
+        }
+        return;
+    }
     if (hasCetph && !hasSaetph) {
         m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
                                                          TpHeader.GetPsn(),
                                                          CETPH);
     }
+    if (hasSaetph && m_pktTraceEnabled) {
+        UbFlowTag flowTag;
+        p->PeekPacketTag(flowTag);
+        UbPacketTraceTag traceTag;
+        p->PeekPacketTag(traceTag);
+        TpRecvNotify(p->GetUid(), TpHeader.GetPsn(), m_dest, m_src, m_dstTpn, m_tpn,
+                     PacketType::SACK, p->GetSize(), flowTag.GetFlowId(),
+                     FormatSelectiveAckInfo(TpHeader, SAETPH), traceTag);
+    }
 
     const uint64_t previousSndUna = m_psnSndUna;
     if (hasSaetph) {
+        const std::vector<uint64_t> allMissingPsns =
+            GetMissingPsnsFromSelectiveAck(TpHeader, SAETPH);
+        const bool enterMarkPsnRetransPhase =
+            SelectiveAckReportsReceivedAtOrAboveMarkPsn(TpHeader, SAETPH);
+        if (enterMarkPsnRetransPhase) {
+            EnterSelectiveMarkPsnRetransPhase();
+        }
         if (SAETPH.GetBitmapBit(0)) {
             AcknowledgeCumulativePsn(TpHeader.GetPsn());
         }
@@ -1139,13 +1342,20 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                                                retransmitBytes);
         bool queuedFastRetransmission = false;
         if (m_enableFastSelectiveRetrans) {
-            for (uint64_t psn : missingPsns) {
+            const std::vector<uint64_t>& candidatePsns =
+                IsSelectiveMarkPsnEnabled() ? allMissingPsns : missingPsns;
+            for (uint64_t psn : candidatePsns) {
+                if (IsSelectiveMarkPsnEnabled() && !m_selectiveMarkPsnRetransPhase) {
+                    continue;
+                }
                 queuedFastRetransmission =
                     QueueSelectiveRetransmission(psn) || queuedFastRetransmission;
             }
         }
         AdvanceSendUnaFromAckState();
-        if (queuedFastRetransmission && !m_congestionCtrl->IsCcLimited(GetNextSelectiveRetransmissionLogicalBytes())) {
+        if (queuedFastRetransmission &&
+            CanSendSelectiveRetransmission() &&
+            !m_congestionCtrl->IsCcLimited(GetNextSelectiveRetransmissionLogicalBytes())) {
             Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
             port->TriggerTransmit();
         }
@@ -1176,13 +1386,14 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                   << " Src: " << m_src
                   << " Dst: " << m_dest
                   << " PacketSize: " << p->GetSize());
-        if (m_pktTraceEnabled) {
+        if (m_pktTraceEnabled && !hasSaetph) {
             UbFlowTag flowTag;
             p->PeekPacketTag(flowTag);
             UbPacketTraceTag traceTag;
             p->PeekPacketTag(traceTag);
             TpRecvNotify(p->GetUid(), m_psnSndUna - 1, m_dest, m_src, m_dstTpn, m_tpn,
-                         PacketType::ACK, p->GetSize(), flowTag.GetFlowId(), traceTag);
+                         PacketType::ACK, p->GetSize(), flowTag.GetFlowId(),
+                         FormatSimpleAckInfo("TPACK", TpHeader.GetPsn()), traceTag);
         }
         // 收到有效ack后更新rto和超时重传次数为初始值，关闭超时事件并重新设定超时事件
         if (m_isRetransEnable) {
@@ -1346,9 +1557,52 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         UbPacketTraceTag traceTag;
         p->PeekPacketTag(traceTag);
         TpRecvNotify(p->GetUid(), psn, m_dest, m_src, m_dstTpn, m_tpn,
-                     PacketType::PACKET, p->GetSize(), flowTag.GetFlowId(), traceTag);
+                     PacketType::PACKET, p->GetSize(), flowTag.GetFlowId(), "", traceTag);
     }
     ackp->AddPacketTag(flowTag);
+    if (m_retransmissionMode == UbRetransmissionMode::GBN &&
+        m_enableFastSelectiveRetrans &&
+        psn > m_psnRecvNxt) {
+        const uint64_t nakPsn = m_psnRecvNxt;
+        if (m_lastGbnNakPsn == nakPsn) {
+            NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
+                         << nakPsn << "}");
+            return;
+        }
+
+        m_lastGbnNakPsn = nakPsn;
+        TpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH);
+        TpHeader.SetRspSt(0);
+        TpHeader.SetRspInfo(0);
+        TpHeader.SetPsn(static_cast<uint32_t>(nakPsn));
+        TpHeader.SetSrcTpn(m_tpn);
+        TpHeader.SetDestTpn(m_dstTpn);
+        AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+        AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
+        AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
+        ackp->AddHeader(AckTaHeader);
+        ackp->AddHeader(TpHeader);
+        ackp->AddHeader(udpHeader);
+        UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());
+        ackp->AddHeader(NetworkHeader);
+        UbDataLink::GenPacketHeader(ackp, false, true, pktHeader.GetCreditTargetVL(), pktHeader.GetPacketVL(),
+            0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
+        if (m_ackQ.empty()) {
+            m_headArrivalTime = Simulator::Now();
+        }
+        m_ackQ.push(ackp);
+        NS_LOG_DEBUG("[Transport channel] Send tpnak. "
+                  << " PacketUid: "  << ackp->GetUid()
+                  << " Tpn: " << m_tpn
+                  << " Psn: " << nakPsn
+                  << " PacketType: Nak"
+                  << " Src: " << m_src
+                  << " Dst: " << m_dest
+                  << " PacketSize: " << ackp->GetSize());
+        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+        port->TriggerTransmit();
+        return;
+    }
     if (TpHeader.GetLastPacket()) {
         // 尾包被接收
         LastPacketReceivesNotify(m_nodeId, TpHeader.GetSrcTpn(), TpHeader.GetDestTpn(), TpHeader.GetTpMsn(),
@@ -1475,6 +1729,10 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             if (m_psnRecvNxt > oldRecvNxt) {
                 NS_LOG_DEBUG("Updated m_psnRecvNxt from " << oldRecvNxt
                             << " to " << m_psnRecvNxt);
+                if (m_lastGbnNakPsn != std::numeric_limits<uint64_t>::max() &&
+                    m_psnRecvNxt > m_lastGbnNakPsn) {
+                    m_lastGbnNakPsn = std::numeric_limits<uint64_t>::max();
+                }
                 // 手动右移 bitset
                 uint32_t shiftCount = m_psnRecvNxt - oldRecvNxt;
                 RightShiftBitset(shiftCount);
@@ -1549,6 +1807,32 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
 }
 
+void
+UbTransportChannel::PrepareGbnRetransmissionFromPsn(uint64_t psn)
+{
+    if (psn < m_psnSndUna || psn >= m_psnSndNxt) {
+        return;
+    }
+
+    m_psnSndNxt = psn;
+    for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
+        Ptr<UbWqeSegment> currentSegment = m_wqeSegmentVector[i];
+        const uint64_t segmentStart = currentSegment->GetPsnStart();
+        const uint64_t segmentEnd = segmentStart + currentSegment->GetPsnSize();
+        if (segmentEnd <= psn) {
+            continue;
+        }
+        if (segmentStart <= psn) {
+            const uint32_t resetSentBytes = (psn - segmentStart) * UB_MTU_BYTE;
+            currentSegment->ResetSentBytes(resetSentBytes);
+        } else {
+            currentSegment->ResetSentBytes();
+        }
+        NS_LOG_INFO("GBN fast retransmit,taskId: " << currentSegment->GetTaskId()
+                    << " psn: " << m_psnSndNxt);
+    }
+}
+
 void UbTransportChannel::ReTxTimeout()
 {
     m_retransAttemptsLeft--;
@@ -1558,6 +1842,7 @@ void UbTransportChannel::ReTxTimeout()
     NS_ASSERT_MSG (m_retransAttemptsLeft > 0, "Avaliable retransmission attempts exhausted.");
     // 重传逻辑
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
+        EnterSelectiveMarkPsnRetransPhase();
         for (auto& [psn, state] : m_sentPsnState) {
             if (!state.acknowledged && !state.retransmitPending) {
                 state.retransmitPending = true;
@@ -1569,21 +1854,7 @@ void UbTransportChannel::ReTxTimeout()
         port->TriggerTransmit();
         return;
     }
-    m_psnSndNxt = m_psnSndUna; // 将发送指针回退到未确认的包
-    // 重置已发送字节数
-    for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
-        Ptr<UbWqeSegment> currentSegment = m_wqeSegmentVector[i];
-        if (currentSegment->GetPsnStart() <= m_psnSndUna) {
-            if (currentSegment->GetPsnStart() + currentSegment->GetPsnSize() > m_psnSndUna) {
-                uint32_t  resetSentBytes =  (m_psnSndUna - currentSegment->GetPsnStart()) * UB_MTU_BYTE;
-                currentSegment->ResetSentBytes(resetSentBytes); // 重置已发送字节数到未被确认的地方
-                NS_LOG_INFO("Packet Retransmits,taskId: " << currentSegment->GetTaskId() << " psn: " << m_psnSndNxt);
-            }
-        } else {
-            currentSegment->ResetSentBytes(); // 整个wqeSegment都未被确认，全重置已发送字节数
-            NS_LOG_INFO("Packet Retransmits,taskId: " << currentSegment->GetTaskId() << " psn: " << m_psnSndNxt);
-        }
-    }
+    PrepareGbnRetransmissionFromPsn(m_psnSndUna);
 
     // 重新发送
     m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
@@ -1688,7 +1959,7 @@ bool UbTransportChannel::IsEmpty()
     if (!m_ackQ.empty()) {
         return false;
     }
-    if (HasPendingSelectiveRetransmission()) {
+    if (CanSendSelectiveRetransmission()) {
         return false;
     }
     if (m_wqeSegmentVector.empty()) {
@@ -1705,7 +1976,7 @@ bool UbTransportChannel::IsLimited()
     if (!m_ackQ.empty()) {
         return false;
     }
-    if (HasPendingSelectiveRetransmission()) {
+    if (CanSendSelectiveRetransmission()) {
         const uint32_t logicalBytes = GetNextSelectiveRetransmissionLogicalBytes();
         if (m_congestionCtrl->IsCcLimited(logicalBytes == 0 ? UB_MTU_BYTE : logicalBytes)) {
             m_sendWindowLimited = true;
@@ -1766,9 +2037,10 @@ void UbTransportChannel::WqeSegmentCompletesNotify(uint32_t nodeId, uint32_t tas
 
 void UbTransportChannel::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint32_t dst,
                                       uint32_t srcTpn, uint32_t dstTpn, PacketType type,
-                                      uint32_t size, uint32_t taskId, UbPacketTraceTag traceTag)
+                                      uint32_t size, uint32_t taskId, std::string ackInfo,
+                                      UbPacketTraceTag traceTag)
 {
-    m_tpRecvNotify(packetUid, psn, src, dst, srcTpn, dstTpn, type, size, taskId, traceTag);
+    m_tpRecvNotify(packetUid, psn, src, dst, srcTpn, dstTpn, type, size, taskId, ackInfo, traceTag);
 }
 
 // ==========================================================================

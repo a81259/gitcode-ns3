@@ -1,0 +1,2 @@
+ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,comment
+sele_unfast_tail_tpack_loss,true,0,3,1,reverse,TPACK,any,true,1,drop the tail TPACK once

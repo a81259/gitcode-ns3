@@ -621,7 +621,8 @@ inline string UbUtils::Among(string s, string ts)
 }
 
 void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint32_t dst, uint32_t srcTpn,
-                           uint32_t dstTpn, PacketType type, uint32_t size, uint32_t taskId, UbPacketTraceTag traceTag)
+                           uint32_t dstTpn, PacketType type, uint32_t size, uint32_t taskId,
+                           std::string ackInfo, UbPacketTraceTag traceTag)
 {
     const char* pktType = "CONTROL";
     switch (type) {
@@ -631,13 +632,23 @@ void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint3
     case PacketType::ACK:
         pktType = "ACK";
         break;
+    case PacketType::NAK:
+        pktType = "NAK";
+        break;
+    case PacketType::SACK:
+        pktType = "SACK";
+        break;
     case PacketType::CONTROL_FRAME:
         break;
     }
 
     std::ostringstream oss;
     oss << "Uid:" << packetUid << " Psn:" << psn << " Src:" << src << " Dst:" << dst << " SrcTpn:" << srcTpn
-        << " DstTpn:" << dstTpn << " Type:" << pktType << " Size:" << size << " TaskId:" << taskId << '\n';
+        << " DstTpn:" << dstTpn << " Type:" << pktType;
+    if (!ackInfo.empty()) {
+        oss << " AckInfo:" << ackInfo;
+    }
+    oss << " Size:" << size << " TaskId:" << taskId << '\n';
     for (uint32_t i = 0; i < traceTag.GetTraceLenth(); i++) {
         uint32_t node = traceTag.GetNodeTrace(i);
         PortTrace trace = traceTag.GetPortTrace(node);
@@ -669,7 +680,8 @@ void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint3
         }
     }
     string info = oss.str();
-    string fileName = trace_path + "runlog/AllPacketTrace_" + pktType + "_node_" + to_string(src) + ".tr";
+    const char* fileType = (type == PacketType::NAK || type == PacketType::SACK) ? "ACK" : pktType;
+    string fileName = trace_path + "runlog/AllPacketTrace_" + fileType + "_node_" + to_string(src) + ".tr";
     PrintTraceInfoNoTs(fileName, info);
 }
 
@@ -683,6 +695,12 @@ void UbUtils::LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst, Pac
         break;
     case PacketType::ACK:
         pktType = "ACK";
+        break;
+    case PacketType::NAK:
+        pktType = "NAK";
+        break;
+    case PacketType::SACK:
+        pktType = "SACK";
         break;
     case PacketType::CONTROL_FRAME:
         break;
@@ -722,7 +740,8 @@ void UbUtils::LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst, Pac
         }
     }
     string info = oss.str();
-    string fileName = trace_path + "runlog/AllPacketTrace_" + pktType + "_node_" + to_string(src) + ".tr";
+    const char* fileType = (type == PacketType::NAK || type == PacketType::SACK) ? "ACK" : pktType;
+    string fileName = trace_path + "runlog/AllPacketTrace_" + fileType + "_node_" + to_string(src) + ".tr";
     PrintTraceInfoNoTs(fileName, info);
 }
 

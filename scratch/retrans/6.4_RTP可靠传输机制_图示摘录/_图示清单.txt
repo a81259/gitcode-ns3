@@ -1,0 +1,17 @@
+图 6-16 PSN 区间图	PDF页码:165	文件:图 6-16 PSN 区间图.png
+图 6-17 PSN 使用示例	PDF页码:165	文件:图 6-17 PSN 使用示例.png
+图 6-18 GoBackN 重传-配合快速重传，首次TP Packet 丢失传输流程	PDF页码:170	文件:图 6-18 GoBackN 重传-配合快速重传，首次TP Packet 丢失传输流程.png
+图 6-19 GoBackN 重传-配合快速重传，非首次TP Packet 丢失传输流程	PDF页码:171	文件:图 6-19 GoBackN 重传-配合快速重传，非首次TP Packet 丢失传输流程.png
+图 6-20 GoBackN 重传-配合快速重传，尾TP Packet 丢失传输流程	PDF页码:172	文件:图 6-20 GoBackN 重传-配合快速重传，尾TP Packet 丢失传输流程.png
+图 6-21 GoBackN 重传-配合快速重传，TPACK 丢失传输流程	PDF页码:173	文件:图 6-21 GoBackN 重传-配合快速重传，TPACK 丢失传输流程.png
+图 6-22 GoBackN 重传-配合快速重传，尾TPACK 丢失传输流程	PDF页码:173	文件:图 6-22 GoBackN 重传-配合快速重传，尾TPACK 丢失传输流程.png
+图 6-23 GoBackN 重传-配合快速重传，TPNAK 丢失传输流程	PDF页码:174	文件:图 6-23 GoBackN 重传-配合快速重传，TPNAK 丢失传输流程.png
+图 6-24 GoBackN 重传-无快速重传，首次检测到TP Packet 乱序（丢包未实际发生）传输流程	PDF页码:176	文件:图 6-24 GoBackN 重传-无快速重传，首次检测到TP Packet 乱序（丢包未实际发生）传输流程.png
+图 6-25 GoBackN 重传-无快速重传，首次检测到TP Packet 乱序（丢包实际发生）传输流程	PDF页码:177	文件:图 6-25 GoBackN 重传-无快速重传，首次检测到TP Packet 乱序（丢包实际发生）传输流程.png
+图 6-26 选择性重传-配合快速重传，首次TP Packet 丢失传输流程	PDF页码:181	文件:图 6-26 选择性重传-配合快速重传，首次TP Packet 丢失传输流程.png
+图 6-27 选择性重传-配合快速重传，非首次TP Packet（无MarkPSN 机制）丢失传输流程	PDF页码:182	文件:图 6-27 选择性重传-配合快速重传，非首次TP Packet（无MarkPSN 机制）丢失传输流程.png
+图 6-28 选择性重传-配合快速重传，非首次TP Packet（使用MarkPSN 机制）丢失传输流程	PDF页码:183	文件:图 6-28 选择性重传-配合快速重传，非首次TP Packet（使用MarkPSN 机制）丢失传输流程.png
+图 6-29 选择性重传-配合快速重传，尾TP Packet 丢失传输流程	PDF页码:184	文件:图 6-29 选择性重传-配合快速重传，尾TP Packet 丢失传输流程.png
+图 6-30 选择性重传-配合快速重传，TPSACK 丢失传输流程	PDF页码:185	文件:图 6-30 选择性重传-配合快速重传，TPSACK 丢失传输流程.png
+图 6-31 选择性重传-无快速重传，首次TP Packet 丢失（丢包未实际发生）传输流程	PDF页码:186	文件:图 6-31 选择性重传-无快速重传，首次TP Packet 丢失（丢包未实际发生）传输流程.png
+图 6-32 选择性重传-无快速重传，首次TP Packet 丢失（丢包实际发生）传输流程	PDF页码:187	文件:图 6-32 选择性重传-无快速重传，首次TP Packet 丢失（丢包实际发生）传输流程.png

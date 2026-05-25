@@ -1,0 +1,2 @@
+ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,comment
+sele_unfast_first_tp_packet_loss,true,0,2,1,forward,DATA,1,any,1,drop PSN 1 once and wait for RTO

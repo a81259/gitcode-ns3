@@ -392,7 +392,7 @@ private:
 
     static void TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint32_t dst, uint32_t srcTpn,
                              uint32_t dstTpn, ns3::PacketType type, uint32_t size, uint32_t taskId,
-                             ns3::UbPacketTraceTag traceTag);
+                             std::string ackInfo, ns3::UbPacketTraceTag traceTag);
 
     static void LdstRecvNotify(uint32_t packetUid,
                                uint32_t src,

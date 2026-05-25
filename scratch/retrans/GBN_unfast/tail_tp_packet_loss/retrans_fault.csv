@@ -1,0 +1,3 @@
+ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,comment
+gbn_unfast_tail_tp_packet_loss_m_plus_2,true,0,2,1,forward,DATA,2,any,1,drop PSN m+2 once
+gbn_unfast_tail_tp_packet_loss_m_plus_3,true,0,2,1,forward,DATA,3,true,1,drop tail PSN m+3 once

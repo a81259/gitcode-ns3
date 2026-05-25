@@ -1,0 +1,2 @@
+ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,comment
+gbn_fast_non_first_tp_packet_loss,true,0,2,1,forward,DATA,1,any,2,drop original PSN 1 and its first retransmission
