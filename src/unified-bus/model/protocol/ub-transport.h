@@ -290,11 +290,30 @@ public:
     void SetSelectiveMarkPsnEnable(bool enable);
     bool GetSelectiveMarkPsnEnable() const;
     uint64_t GetPsnSndUna() const;
+    void SetPsnSndUna(uint64_t psn);
     uint64_t GetPsnSndNxt() const;
     void SetPsnSndNxt(uint64_t psn);
     uint64_t GetPsnRecvNxt() const;
     void ResetSegmentSendProgressFromPsn(uint64_t psn);
     void TriggerTransportTransmit();
+    bool IsCcLimitedForRetransmission(uint32_t logicalBytes) const;
+    void SetSendWindowLimited(bool limited);
+    void OnSelectiveRetransmissionPacketSent(uint64_t psn,
+                                             uint32_t logicalBytes,
+                                             uint32_t payloadBytes);
+    void OnSenderSelectiveAck(TpOpcode opcode,
+                              uint64_t psn,
+                              const UbSelectiveAckExtTph& saetph,
+                              const UbCongestionExtTph* cetph,
+                              uint32_t retransmitBytes);
+    bool IsSelectiveMarkPsnEnabledForRetrans() const;
+    void FinishSelectiveMarkPsnRetransPhaseIfDoneForRetrans();
+    bool IsSelectiveMarkPsnRetransPhaseActiveForRetrans() const;
+    void RecordFirstSelectiveRetransmissionForRetrans(uint64_t psn);
+    bool SelectiveAckReportsReceivedAtOrAboveMarkPsnForRetrans(
+        const UbTransportHeader& tpHeader,
+        const UbSelectiveAckExtTph& saetph) const;
+    void EnterSelectiveMarkPsnRetransPhaseForRetrans();
 private:
     struct InboundTaUnitState
     {
@@ -309,18 +328,6 @@ private:
         uint32_t logicalBytes{0};
         uint32_t payloadBytes{0};
         uint32_t taskId{0};
-    };
-
-    struct SentPsnState
-    {
-        Ptr<Packet> packet;
-        uint32_t payloadBytes{0};
-        uint32_t logicalBytes{0};
-        Ptr<UbWqeSegment> segment;
-        bool acknowledged{false};
-        bool selectivelyReportedMissing{false};
-        bool retransmitPending{false};
-        uint32_t retransmitCount{0};
     };
 
     void DoDispose() override;
@@ -339,24 +346,6 @@ private:
     uint64_t GetCumulativeAckPsn() const;
     UbSelectiveAckExtTph BuildSelectiveAckHeader(uint64_t ackBase) const;
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
-    void RetainSentPsn(uint64_t psn,
-                       Ptr<Packet> packet,
-                       uint32_t payloadBytes,
-                       uint32_t logicalBytes,
-                       Ptr<UbWqeSegment> segment);
-    void MarkPsnAcked(uint64_t psn);
-    void AcknowledgeCumulativePsn(uint64_t ackPsn);
-    void AdvanceSendUnaFromAckState();
-    std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
-                                                             const UbSelectiveAckExtTph& saetph);
-    std::vector<uint64_t> GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
-                                                         const UbSelectiveAckExtTph& saetph) const;
-    bool QueueSelectiveRetransmission(uint64_t psn);
-    void CompactSelectiveRetransmissionQueue();
-    bool HasPendingSelectiveRetransmission() const;
-    bool CanSendSelectiveRetransmission() const;
-    uint32_t GetNextSelectiveRetransmissionSize() const;
-    uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
     bool IsSelectiveMarkPsnEnabled() const;
     bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
                                                      const UbSelectiveAckExtTph& saetph) const;
@@ -406,8 +395,6 @@ private:
     std::vector<Ptr<UbWqeSegment>> m_remoteRequest; // FIFO
     std::map<std::pair<uint32_t, uint32_t>, InboundTaUnitState> m_inboundTaUnits;
     std::map<uint64_t, BufferedInboundPacket> m_bufferedInboundPackets;
-    std::map<uint64_t, SentPsnState> m_sentPsnState;
-    std::deque<uint64_t> m_selectiveRetransmitQ;
 
     // Queue parameters
     uint32_t m_maxQueueSize;

@@ -6,16 +6,21 @@
 #include "ns3/nstime.h"
 #include "ns3/ub-datatype.h"
 #include "ns3/ub-header.h"
+#include "ns3/packet.h"
 
 #include <cstdint>
+#include <deque>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace ns3 {
 
 class UbTransportChannel;
 class UbRetransController;
+class UbWqeSegment;
 
 struct UbRetransAckResult
 {
@@ -64,6 +69,65 @@ private:
     uint64_t m_lastNakPsn{std::numeric_limits<uint64_t>::max()};
 };
 
+class UbSelectiveRetransStrategy : public UbRetransStrategy
+{
+public:
+    explicit UbSelectiveRetransStrategy(UbRetransController& controller);
+
+    void RetainSentPsn(uint64_t psn,
+                       Ptr<Packet> packet,
+                       uint32_t payloadBytes,
+                       uint32_t logicalBytes,
+                       Ptr<UbWqeSegment> segment);
+    void MarkPsnAcked(uint64_t psn);
+    void AcknowledgeCumulativePsn(uint64_t ackPsn);
+    void AdvanceSendUnaFromAckState();
+    std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+                                                             const UbSelectiveAckExtTph& saetph);
+    std::vector<uint64_t> GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+                                                         const UbSelectiveAckExtTph& saetph) const;
+    bool QueueRetransmission(uint64_t psn);
+    void CompactRetransmissionQueue();
+    Ptr<Packet> TryGetNextRetransmissionPacket();
+    UbRetransTimeoutResult OnTimeout();
+    UbRetransAckResult OnTransportResponse(const UbTransportHeader& tpHeader,
+                                           TpOpcode opcode,
+                                           const UbSelectiveAckExtTph& saetph,
+                                           const UbCongestionExtTph* cetph);
+    UbRetransAckResult OnCumulativeAck(const UbTransportHeader& tpHeader);
+    bool HasPendingRetransmission() const;
+    bool CanSendRetransmission() const;
+    uint32_t GetNextRetransmissionSize() const;
+    uint32_t GetNextRetransmissionLogicalBytes() const;
+    uint32_t GetRetainedLogicalBytes(uint64_t psn) const;
+
+    uint32_t GetPendingRetransmissionCountForTest() const;
+    uint32_t GetRawRetransmissionQueueCountForTest() const;
+    bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
+    bool HasRetainedPsnForTest(uint64_t psn) const;
+    uint32_t GetPsnRetransmitCountForTest(uint64_t psn) const;
+    void Clear();
+
+private:
+    struct SentPsnState
+    {
+        Ptr<Packet> packet;
+        uint32_t payloadBytes{0};
+        uint32_t logicalBytes{0};
+        Ptr<UbWqeSegment> segment;
+        bool acknowledged{false};
+        bool selectivelyReportedMissing{false};
+        bool retransmitPending{false};
+        uint32_t retransmitCount{0};
+    };
+
+    void RetireAckedStateBeforeSendUna();
+
+    UbRetransController& m_controller;
+    std::map<uint64_t, SentPsnState> m_sentPsnState;
+    std::deque<uint64_t> m_selectiveRetransmitQ;
+};
+
 class UbRetransController
 {
 public:
@@ -107,6 +171,22 @@ public:
                                            const UbSelectiveAckExtTph* saetph,
                                            const UbCongestionExtTph* cetph);
     UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
+    void OnNewDataPacketSent(uint64_t psn,
+                             Ptr<Packet> packet,
+                             uint32_t payloadBytes,
+                             uint32_t logicalBytes,
+                             Ptr<UbWqeSegment> segment);
+    Ptr<Packet> TryGetNextRetransmissionPacket();
+    bool HasPendingSelectiveRetransmission() const;
+    bool CanSendSelectiveRetransmission() const;
+    uint32_t GetNextSelectiveRetransmissionSize() const;
+    uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
+    uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
+    uint32_t GetRawSelectiveRetransmissionQueueCountForTest() const;
+    bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
+    bool HasRetainedPsnForTest(uint64_t psn) const;
+    uint32_t GetPsnRetransmitCountForTest(uint64_t psn) const;
+    void ClearRetainedState();
     void ClearNakSuppressionIfGapClosed(uint64_t recvNext);
     UbTransportChannel& GetTransport();
     const UbTransportChannel& GetTransport() const;
@@ -116,6 +196,7 @@ private:
 
     UbTransportChannel& m_transport;
     std::unique_ptr<UbGbnRetransStrategy> m_gbn;
+    std::unique_ptr<UbSelectiveRetransStrategy> m_selective;
     EventId m_retransEvent{};
     Time m_initialRto;
     Time m_rto;
