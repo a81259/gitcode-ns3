@@ -6,7 +6,6 @@
 #include <map>
 #include <queue>
 #include <deque>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -290,6 +289,12 @@ public:
     bool GetFastRetransEnable() const;
     void SetSelectiveMarkPsnEnable(bool enable);
     bool GetSelectiveMarkPsnEnable() const;
+    uint64_t GetPsnSndUna() const;
+    uint64_t GetPsnSndNxt() const;
+    void SetPsnSndNxt(uint64_t psn);
+    uint64_t GetPsnRecvNxt() const;
+    void ResetSegmentSendProgressFromPsn(uint64_t psn);
+    void TriggerTransportTransmit();
 private:
     struct InboundTaUnitState
     {
@@ -352,7 +357,6 @@ private:
     bool CanSendSelectiveRetransmission() const;
     uint32_t GetNextSelectiveRetransmissionSize() const;
     uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
-    void PrepareGbnRetransmissionFromPsn(uint64_t psn);
     bool IsSelectiveMarkPsnEnabled() const;
     bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
                                                      const UbSelectiveAckExtTph& saetph) const;
@@ -419,7 +423,6 @@ private:
     uint64_t        m_psnRecvNxt { 0 };   // TP层记录最大顺序包序号
     uint64_t        m_maxRcvPsn { 0 };
     bool            m_hasReceivedAnyPsn { false };
-    uint64_t        m_lastGbnNakPsn { std::numeric_limits<uint64_t>::max() };
     uint64_t        m_tpMsnCnt {0};       // TP层总计获取的消息(WQE Segment)计数
     uint64_t        m_tpPsnCnt {0};       // TP层总计获取的数据包个数计数
     static constexpr uint32_t DEFAULT_OOO_THRESHOLD = 2048;

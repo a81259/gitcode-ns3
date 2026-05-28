@@ -408,6 +408,37 @@ UbTransportChannel::GetSelectiveMarkPsnEnable() const
     return m_retrans->GetSelectiveMarkPsnEnable();
 }
 
+uint64_t
+UbTransportChannel::GetPsnSndUna() const
+{
+    return m_psnSndUna;
+}
+
+uint64_t
+UbTransportChannel::GetPsnSndNxt() const
+{
+    return m_psnSndNxt;
+}
+
+void
+UbTransportChannel::SetPsnSndNxt(uint64_t psn)
+{
+    m_psnSndNxt = psn;
+}
+
+uint64_t
+UbTransportChannel::GetPsnRecvNxt() const
+{
+    return m_psnRecvNxt;
+}
+
+void
+UbTransportChannel::TriggerTransportTransmit()
+{
+    Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+    port->TriggerTransmit();
+}
+
 /**
  * @brief Constructor for UbTransportChannel
  */
@@ -1392,14 +1423,12 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                          PacketType::NAK, p->GetSize(), flowTag.GetFlowId(),
                          FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
         }
-        if (m_isRetransEnable &&
-            m_retransmissionMode == UbRetransmissionMode::GBN &&
-            m_enableFastRetrans &&
-            nakPsn >= m_psnSndUna &&
-            nakPsn < m_psnSndNxt) {
-            PrepareGbnRetransmissionFromPsn(nakPsn);
-            Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-            port->TriggerTransmit();
+        if (m_isRetransEnable) {
+            const UbRetransAckResult ackResult =
+                m_retrans->OnTransportResponse(TpHeader, opcode, nullptr, nullptr);
+            if (ackResult.triggerTransmit) {
+                TriggerTransportTransmit();
+            }
         }
         return;
     }
@@ -1668,18 +1697,15 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
                      PacketType::PACKET, p->GetSize(), flowTag.GetFlowId(), "", traceTag);
     }
     ackp->AddPacketTag(flowTag);
-    if (m_retransmissionMode == UbRetransmissionMode::GBN &&
-        m_enableFastRetrans &&
-        psn > m_psnRecvNxt) {
-        const uint64_t nakPsn = m_psnRecvNxt;
-        if (m_lastGbnNakPsn == nakPsn) {
-            NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
-                         << nakPsn << "}");
-            return;
-        }
-
-        m_lastGbnNakPsn = nakPsn;
-        TpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH);
+    const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(psn);
+    if (receiveDecision.suppressResponse) {
+        NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
+                     << receiveDecision.responsePsn << "}");
+        return;
+    }
+    if (receiveDecision.shouldNak) {
+        const uint64_t nakPsn = receiveDecision.responsePsn;
+        TpHeader.SetTPOpcode(receiveDecision.responseOpcode);
         TpHeader.SetRspSt(0);
         TpHeader.SetRspInfo(0);
         TpHeader.SetPsn(static_cast<uint32_t>(nakPsn));
@@ -1707,8 +1733,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
                   << " Src: " << m_src
                   << " Dst: " << m_dest
                   << " PacketSize: " << ackp->GetSize());
-        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-        port->TriggerTransmit();
+        TriggerTransportTransmit();
         return;
     }
     if (TpHeader.GetLastPacket()) {
@@ -1841,10 +1866,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             if (m_psnRecvNxt > oldRecvNxt) {
                 NS_LOG_DEBUG("Updated m_psnRecvNxt from " << oldRecvNxt
                             << " to " << m_psnRecvNxt);
-                if (m_lastGbnNakPsn != std::numeric_limits<uint64_t>::max() &&
-                    m_psnRecvNxt > m_lastGbnNakPsn) {
-                    m_lastGbnNakPsn = std::numeric_limits<uint64_t>::max();
-                }
+                m_retrans->ClearNakSuppressionIfGapClosed(m_psnRecvNxt);
                 // 手动右移 bitset
                 uint32_t shiftCount = m_psnRecvNxt - oldRecvNxt;
                 RightShiftBitset(shiftCount);
@@ -1920,13 +1942,8 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
 }
 
 void
-UbTransportChannel::PrepareGbnRetransmissionFromPsn(uint64_t psn)
+UbTransportChannel::ResetSegmentSendProgressFromPsn(uint64_t psn)
 {
-    if (psn < m_psnSndUna || psn >= m_psnSndNxt) {
-        return;
-    }
-
-    m_psnSndNxt = psn;
     for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
         Ptr<UbWqeSegment> currentSegment = m_wqeSegmentVector[i];
         const uint64_t segmentStart = currentSegment->GetPsnStart();
@@ -1960,16 +1977,11 @@ void UbTransportChannel::ReTxTimeout()
                 m_selectiveRetransmitQ.push_back(psn);
             }
         }
-        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-        port->TriggerTransmit();
+        TriggerTransportTransmit();
         return;
     }
     if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-        // GBN mode + RTO: go back to the oldest unacknowledged PSN and retransmit from there.
-        PrepareGbnRetransmissionFromPsn(m_psnSndUna);
-
-        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-        port->TriggerTransmit();
+        TriggerTransportTransmit();
         return;
     }
     NS_ASSERT_MSG(false, "Unknown retransmission mode.");

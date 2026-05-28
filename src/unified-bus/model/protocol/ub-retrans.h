@@ -8,11 +8,14 @@
 #include "ns3/ub-header.h"
 
 #include <cstdint>
+#include <limits>
+#include <memory>
 #include <optional>
 
 namespace ns3 {
 
 class UbTransportChannel;
+class UbRetransController;
 
 struct UbRetransAckResult
 {
@@ -43,6 +46,22 @@ class UbRetransStrategy
 {
 public:
     virtual ~UbRetransStrategy() = default;
+};
+
+class UbGbnRetransStrategy : public UbRetransStrategy
+{
+public:
+    explicit UbGbnRetransStrategy(UbRetransController& controller);
+
+    void PrepareRetransmissionFromPsn(uint64_t psn);
+    bool HandleTpNak(uint64_t nakPsn);
+    UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
+    UbRetransTimeoutResult OnTimeout();
+    void ClearNakSuppressionIfGapClosed(uint64_t recvNext);
+
+private:
+    UbRetransController& m_controller;
+    uint64_t m_lastNakPsn{std::numeric_limits<uint64_t>::max()};
 };
 
 class UbRetransController
@@ -83,11 +102,20 @@ public:
     void CancelTimer();
     UbRetransTimeoutResult OnTimeout();
     bool HasTimerRunning() const;
+    UbRetransAckResult OnTransportResponse(const UbTransportHeader& tph,
+                                           TpOpcode opcode,
+                                           const UbSelectiveAckExtTph* saetph,
+                                           const UbCongestionExtTph* cetph);
+    UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
+    void ClearNakSuppressionIfGapClosed(uint64_t recvNext);
+    UbTransportChannel& GetTransport();
+    const UbTransportChannel& GetTransport() const;
 
 private:
     void ScheduleTimeout();
 
     UbTransportChannel& m_transport;
+    std::unique_ptr<UbGbnRetransStrategy> m_gbn;
     EventId m_retransEvent{};
     Time m_initialRto;
     Time m_rto;

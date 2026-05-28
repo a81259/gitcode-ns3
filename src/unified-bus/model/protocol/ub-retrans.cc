@@ -7,9 +7,91 @@
 
 namespace ns3 {
 
+UbGbnRetransStrategy::UbGbnRetransStrategy(UbRetransController& controller)
+    : m_controller(controller)
+{
+}
+
+void
+UbGbnRetransStrategy::PrepareRetransmissionFromPsn(uint64_t psn)
+{
+    UbTransportChannel& transport = m_controller.GetTransport();
+    if (psn < transport.GetPsnSndUna() || psn >= transport.GetPsnSndNxt()) {
+        return;
+    }
+
+    transport.SetPsnSndNxt(psn);
+    transport.ResetSegmentSendProgressFromPsn(psn);
+}
+
+bool
+UbGbnRetransStrategy::HandleTpNak(uint64_t nakPsn)
+{
+    if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::GBN ||
+        !m_controller.GetFastRetransEnable()) {
+        return false;
+    }
+
+    const UbTransportChannel& transport = m_controller.GetTransport();
+    if (nakPsn < transport.GetPsnSndUna() || nakPsn >= transport.GetPsnSndNxt()) {
+        return false;
+    }
+
+    PrepareRetransmissionFromPsn(nakPsn);
+    return true;
+}
+
+UbRetransReceiveDecision
+UbGbnRetransStrategy::OnDataPacketReceived(uint64_t psn)
+{
+    UbRetransReceiveDecision decision;
+    if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::GBN ||
+        !m_controller.GetFastRetransEnable()) {
+        return decision;
+    }
+
+    const uint64_t nakPsn = m_controller.GetTransport().GetPsnRecvNxt();
+    if (psn <= nakPsn) {
+        return decision;
+    }
+    if (m_lastNakPsn == nakPsn) {
+        decision.suppressResponse = true;
+        decision.responsePsn = nakPsn;
+        return decision;
+    }
+
+    m_lastNakPsn = nakPsn;
+    decision.shouldNak = true;
+    decision.responsePsn = nakPsn;
+    decision.responseOpcode = TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH;
+    return decision;
+}
+
+UbRetransTimeoutResult
+UbGbnRetransStrategy::OnTimeout()
+{
+    UbRetransTimeoutResult result;
+    if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::GBN) {
+        return result;
+    }
+
+    PrepareRetransmissionFromPsn(m_controller.GetTransport().GetPsnSndUna());
+    result.triggerTransmit = true;
+    return result;
+}
+
+void
+UbGbnRetransStrategy::ClearNakSuppressionIfGapClosed(uint64_t recvNext)
+{
+    if (m_lastNakPsn != std::numeric_limits<uint64_t>::max() && recvNext > m_lastNakPsn) {
+        m_lastNakPsn = std::numeric_limits<uint64_t>::max();
+    }
+}
+
 UbRetransController::UbRetransController(UbTransportChannel& transport)
     : m_transport(transport)
 {
+    m_gbn = std::make_unique<UbGbnRetransStrategy>(*this);
 }
 
 UbRetransController::~UbRetransController()
@@ -169,6 +251,9 @@ UbRetransController::OnTimeout()
     m_rto = NanoSeconds(rto);
     NS_ASSERT_MSG(m_retransAttemptsLeft > 0, "Avaliable retransmission attempts exhausted.");
     ScheduleTimeout();
+    if (m_retransmissionMode == UbRetransmissionMode::GBN) {
+        return m_gbn->OnTimeout();
+    }
     UbRetransTimeoutResult result;
     result.triggerTransmit = true;
     return result;
@@ -178,6 +263,48 @@ bool
 UbRetransController::HasTimerRunning() const
 {
     return !m_retransEvent.IsExpired();
+}
+
+UbRetransAckResult
+UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
+                                         TpOpcode opcode,
+                                         const UbSelectiveAckExtTph* saetph,
+                                         const UbCongestionExtTph* cetph)
+{
+    (void)saetph;
+    (void)cetph;
+    UbRetransAckResult result;
+    if (opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH) {
+        result.triggerTransmit = m_gbn->HandleTpNak(tph.GetPsn());
+    }
+    return result;
+}
+
+UbRetransReceiveDecision
+UbRetransController::OnDataPacketReceived(uint64_t psn)
+{
+    if (m_retransmissionMode == UbRetransmissionMode::GBN) {
+        return m_gbn->OnDataPacketReceived(psn);
+    }
+    return {};
+}
+
+void
+UbRetransController::ClearNakSuppressionIfGapClosed(uint64_t recvNext)
+{
+    m_gbn->ClearNakSuppressionIfGapClosed(recvNext);
+}
+
+UbTransportChannel&
+UbRetransController::GetTransport()
+{
+    return m_transport;
+}
+
+const UbTransportChannel&
+UbRetransController::GetTransport() const
+{
+    return m_transport;
 }
 
 } // namespace ns3
