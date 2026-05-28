@@ -95,6 +95,11 @@ public:
                                            const UbSelectiveAckExtTph& saetph,
                                            const UbCongestionExtTph* cetph);
     UbRetransAckResult OnCumulativeAck(const UbTransportHeader& tpHeader);
+    bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;
+    uint32_t GetSelectiveAckBitmapBits() const;
+    uint64_t GetSelectiveAckBase() const;
+    UbSelectiveAckExtTph BuildSelectiveAckHeader(uint64_t ackBase) const;
+    UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
     bool HasPendingRetransmission() const;
     bool CanSendRetransmission() const;
     uint32_t GetNextRetransmissionSize() const;
@@ -171,6 +176,8 @@ public:
                                            const UbSelectiveAckExtTph* saetph,
                                            const UbCongestionExtTph* cetph);
     UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
+    bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;
+    UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
     void OnNewDataPacketSent(uint64_t psn,
                              Ptr<Packet> packet,
                              uint32_t payloadBytes,

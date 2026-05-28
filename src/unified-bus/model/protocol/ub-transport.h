@@ -314,6 +314,12 @@ public:
         const UbTransportHeader& tpHeader,
         const UbSelectiveAckExtTph& saetph) const;
     void EnterSelectiveMarkPsnRetransPhaseForRetrans();
+    uint32_t GetPsnOooThresholdForRetrans() const;
+    bool HasReceiveGapForRetrans() const;
+    uint64_t GetCumulativeAckPsnForRetrans() const;
+    bool ReceiveWindowContainsForRetrans(uint64_t psn) const;
+    uint64_t GetMaxRcvPsnForRetrans() const;
+    TpOpcode GetResponseOpcodeForRetrans(bool selectiveAck) const;
 private:
     struct InboundTaUnitState
     {
@@ -339,12 +345,7 @@ private:
                                            uint32_t payloadBytes,
                                            uint32_t taskId);
     bool ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment) const;
-    bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;
-    uint32_t GetSelectiveAckBitmapBits() const;
-    bool HasReceiveGap() const;
-    uint64_t GetSelectiveAckBase() const;
     uint64_t GetCumulativeAckPsn() const;
-    UbSelectiveAckExtTph BuildSelectiveAckHeader(uint64_t ackBase) const;
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
     bool IsSelectiveMarkPsnEnabled() const;
     bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
@@ -429,7 +430,6 @@ private:
     bool m_isRetransEnable{true};
     std::unique_ptr<UbRetransController> m_retrans;
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
-    uint32_t m_selectiveAckBitmapBits{0};
     bool m_enableFastRetrans{false}; // GBN TPNAK fast retransmission and SELECTIVE TPSACK fast retransmission switch.
     bool m_enableSelectiveMarkPsn{false};
     bool m_selectiveMarkPsnRetransPhase{false};

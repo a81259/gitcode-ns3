@@ -12,7 +12,6 @@
 #include "ns3/ub-transport.h"
 #include "ns3/ub-utils.h"
 
-#include <array>
 #include <sstream>
 #include <stdexcept>
 
@@ -373,7 +372,6 @@ void
 UbTransportChannel::SetSelectiveAckBitmapBits(uint32_t bits)
 {
     m_retrans->SetSelectiveAckBitmapBits(bits);
-    m_selectiveAckBitmapBits = bits;
 }
 
 uint32_t
@@ -984,48 +982,7 @@ bool UbTransportChannel::ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment)
 bool
 UbTransportChannel::ResolveSelectiveAckBitmapBitsForTest(uint32_t& bits) const
 {
-    return ResolveSelectiveAckBitmapBits(bits);
-}
-
-bool
-UbTransportChannel::ResolveSelectiveAckBitmapBits(uint32_t& bits) const
-{
-    if (m_selectiveAckBitmapBits != 0)
-    {
-        if (!UbSelectiveAckExtTph::IsSupportedBitmapBitCount(m_selectiveAckBitmapBits))
-        {
-            return false;
-        }
-        bits = m_selectiveAckBitmapBits;
-        return true;
-    }
-
-    const uint32_t usefulWindow = std::min<uint32_t>(m_psnOooThreshold, 1024);
-    if (usefulWindow == 0)
-    {
-        return false;
-    }
-
-    const std::array<uint32_t, 5> supportedBits = {64, 128, 256, 512, 1024};
-    for (uint32_t candidate : supportedBits)
-    {
-        if (candidate >= usefulWindow)
-        {
-            bits = candidate;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-uint32_t
-UbTransportChannel::GetSelectiveAckBitmapBits() const
-{
-    uint32_t bits = 0;
-    const bool resolved = ResolveSelectiveAckBitmapBits(bits);
-    NS_ASSERT_MSG(resolved, "Invalid selective ACK bitmap configuration");
-    return bits;
+    return m_retrans->ResolveSelectiveAckBitmapBits(bits);
 }
 
 uint64_t
@@ -1036,37 +993,6 @@ UbTransportChannel::GetCumulativeAckPsn() const
         return 0;
     }
     return m_psnRecvNxt - 1;
-}
-
-bool
-UbTransportChannel::HasReceiveGap() const
-{
-    return m_hasReceivedAnyPsn && m_maxRcvPsn >= m_psnRecvNxt;
-}
-
-uint64_t
-UbTransportChannel::GetSelectiveAckBase() const
-{
-    return GetCumulativeAckPsn();
-}
-
-UbSelectiveAckExtTph
-UbTransportChannel::BuildSelectiveAckHeader(uint64_t ackBase) const
-{
-    UbSelectiveAckExtTph header;
-    header.SetBitmapBitCount(GetSelectiveAckBitmapBits());
-    header.SetMaxRcvPsn(static_cast<uint32_t>(m_maxRcvPsn));
-
-    const uint32_t bitmapBits = header.GetBitmapBitCount();
-    const uint64_t maxEvidencePsn = std::min<uint64_t>(m_maxRcvPsn, ackBase + bitmapBits - 1);
-    for (uint64_t psn = ackBase; psn <= maxEvidencePsn; ++psn)
-    {
-        if (psn < m_psnRecvNxt || m_recvPsnWindow.Contains(psn))
-        {
-            header.SetBitmapBit(static_cast<uint32_t>(psn - ackBase), true);
-        }
-    }
-    return header;
 }
 
 TpOpcode
@@ -1083,6 +1009,42 @@ UbTransportChannel::GetResponseOpcode(bool selectiveAck) const
         return TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
     }
     return TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH;
+}
+
+uint32_t
+UbTransportChannel::GetPsnOooThresholdForRetrans() const
+{
+    return m_psnOooThreshold;
+}
+
+bool
+UbTransportChannel::HasReceiveGapForRetrans() const
+{
+    return m_hasReceivedAnyPsn && m_maxRcvPsn >= m_psnRecvNxt;
+}
+
+uint64_t
+UbTransportChannel::GetCumulativeAckPsnForRetrans() const
+{
+    return GetCumulativeAckPsn();
+}
+
+bool
+UbTransportChannel::ReceiveWindowContainsForRetrans(uint64_t psn) const
+{
+    return m_recvPsnWindow.Contains(psn);
+}
+
+uint64_t
+UbTransportChannel::GetMaxRcvPsnForRetrans() const
+{
+    return m_maxRcvPsn;
+}
+
+TpOpcode
+UbTransportChannel::GetResponseOpcodeForRetrans(bool selectiveAck) const
+{
+    return GetResponseOpcode(selectiveAck);
 }
 
 void
@@ -1540,24 +1502,29 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             TpHeader.GetPsn(), m_dport);
     }
     if (IsRepeatPacket(psn)) {
-        const bool selectiveAck =
-            m_retransmissionMode == UbRetransmissionMode::SELECTIVE && HasReceiveGap();
-        uint32_t selectiveAckBits = 0;
-        if (selectiveAck && !ResolveSelectiveAckBitmapBits(selectiveAckBits))
+        const UbRetransReceiveDecision decision =
+            m_retrans->BuildReceiveDecisionForCurrentState();
+        if (decision.suppressResponse)
         {
-            NS_LOG_WARN("Suppressing duplicate-packet TPSACK because SelectiveAckBitmapBits cannot be resolved");
+            if (decision.selectiveAck)
+            {
+                NS_LOG_WARN("Suppressing duplicate-packet TPSACK because SelectiveAckBitmapBits cannot be resolved");
+            }
             return;
         }
 
-        const uint64_t ackPsn = selectiveAck ? GetSelectiveAckBase() : GetCumulativeAckPsn();
+        const bool selectiveAck = decision.selectiveAck;
+        const uint64_t ackPsn = decision.responsePsn;
+        const TpOpcode responseOpcode = selectiveAck ? decision.responseOpcode
+                                                     : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
         UbSelectiveAckExtTph SAETPH;
         if (selectiveAck)
         {
-            SAETPH = BuildSelectiveAckHeader(ackPsn);
+            NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
+                          "SELECTIVE receive decision requires SAETPH.");
+            SAETPH = *decision.selectiveAckHeader;
         }
 
-        const TpOpcode responseOpcode =
-            selectiveAck ? GetResponseOpcode(true) : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
         TpHeader.SetTPOpcode(responseOpcode);
         TpHeader.SetRspSt(0);
         TpHeader.SetRspInfo(0);
@@ -1673,24 +1640,28 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             }
         }
     }
-    const bool selectiveAck =
-        m_retransmissionMode == UbRetransmissionMode::SELECTIVE && HasReceiveGap();
-    uint32_t selectiveAckBits = 0;
-    if (selectiveAck && !ResolveSelectiveAckBitmapBits(selectiveAckBits))
+    const UbRetransReceiveDecision decision = m_retrans->BuildReceiveDecisionForCurrentState();
+    if (decision.suppressResponse)
     {
-        NS_LOG_WARN("Suppressing TPSACK because SelectiveAckBitmapBits cannot be resolved");
+        if (decision.selectiveAck)
+        {
+            NS_LOG_WARN("Suppressing TPSACK because SelectiveAckBitmapBits cannot be resolved");
+        }
         return;
     }
 
-    const uint64_t ackPsn = selectiveAck ? GetSelectiveAckBase() : GetCumulativeAckPsn();
+    const bool selectiveAck = decision.selectiveAck;
+    const uint64_t ackPsn = decision.responsePsn;
     UbSelectiveAckExtTph SAETPH;
     if (selectiveAck)
     {
-        SAETPH = BuildSelectiveAckHeader(ackPsn);
+        NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
+                      "SELECTIVE receive decision requires SAETPH.");
+        SAETPH = *decision.selectiveAckHeader;
     }
 
     NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << ackPsn << " node: " << m_src);
-    TpHeader.SetTPOpcode(GetResponseOpcode(selectiveAck));
+    TpHeader.SetTPOpcode(decision.responseOpcode);
     TpHeader.SetRspSt(0);
     TpHeader.SetRspInfo(0);
     CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);

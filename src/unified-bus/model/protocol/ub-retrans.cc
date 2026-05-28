@@ -6,6 +6,7 @@
 #include "ns3/ub-transport.h"
 
 #include <algorithm>
+#include <array>
 
 namespace ns3 {
 
@@ -431,6 +432,108 @@ UbSelectiveRetransStrategy::OnCumulativeAck(const UbTransportHeader& tpHeader)
     return result;
 }
 
+bool
+UbSelectiveRetransStrategy::ResolveSelectiveAckBitmapBits(uint32_t& bits) const
+{
+    const uint32_t configuredBits = m_controller.GetSelectiveAckBitmapBitsConfig();
+    if (configuredBits != 0)
+    {
+        if (!UbSelectiveAckExtTph::IsSupportedBitmapBitCount(configuredBits))
+        {
+            return false;
+        }
+        bits = configuredBits;
+        return true;
+    }
+
+    const uint32_t usefulWindow =
+        std::min<uint32_t>(m_controller.GetTransport().GetPsnOooThresholdForRetrans(), 1024);
+    if (usefulWindow == 0)
+    {
+        return false;
+    }
+
+    const std::array<uint32_t, 5> supportedBits = {64, 128, 256, 512, 1024};
+    for (uint32_t candidate : supportedBits)
+    {
+        if (candidate >= usefulWindow)
+        {
+            bits = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+uint32_t
+UbSelectiveRetransStrategy::GetSelectiveAckBitmapBits() const
+{
+    uint32_t bits = 0;
+    const bool resolved = ResolveSelectiveAckBitmapBits(bits);
+    NS_ASSERT_MSG(resolved, "Invalid selective ACK bitmap configuration");
+    return bits;
+}
+
+uint64_t
+UbSelectiveRetransStrategy::GetSelectiveAckBase() const
+{
+    return m_controller.GetTransport().GetCumulativeAckPsnForRetrans();
+}
+
+UbSelectiveAckExtTph
+UbSelectiveRetransStrategy::BuildSelectiveAckHeader(uint64_t ackBase) const
+{
+    const UbTransportChannel& transport = m_controller.GetTransport();
+    UbSelectiveAckExtTph header;
+    header.SetBitmapBitCount(GetSelectiveAckBitmapBits());
+    header.SetMaxRcvPsn(static_cast<uint32_t>(transport.GetMaxRcvPsnForRetrans()));
+
+    const uint32_t bitmapBits = header.GetBitmapBitCount();
+    const uint64_t maxEvidencePsn =
+        std::min<uint64_t>(transport.GetMaxRcvPsnForRetrans(), ackBase + bitmapBits - 1);
+    for (uint64_t psn = ackBase; psn <= maxEvidencePsn; ++psn)
+    {
+        if (psn < transport.GetPsnRecvNxt() || transport.ReceiveWindowContainsForRetrans(psn))
+        {
+            header.SetBitmapBit(static_cast<uint32_t>(psn - ackBase), true);
+        }
+        if (psn == UINT64_MAX)
+        {
+            break;
+        }
+    }
+    return header;
+}
+
+UbRetransReceiveDecision
+UbSelectiveRetransStrategy::BuildReceiveDecisionForCurrentState() const
+{
+    const UbTransportChannel& transport = m_controller.GetTransport();
+    UbRetransReceiveDecision decision;
+    decision.shouldAck = true;
+
+    if (!transport.HasReceiveGapForRetrans())
+    {
+        decision.responsePsn = transport.GetCumulativeAckPsnForRetrans();
+        decision.responseOpcode = transport.GetResponseOpcodeForRetrans(false);
+        return decision;
+    }
+
+    uint32_t selectiveAckBits = 0;
+    decision.selectiveAck = true;
+    decision.responsePsn = GetSelectiveAckBase();
+    if (!ResolveSelectiveAckBitmapBits(selectiveAckBits))
+    {
+        decision.suppressResponse = true;
+        return decision;
+    }
+
+    decision.responseOpcode = transport.GetResponseOpcodeForRetrans(true);
+    decision.selectiveAckHeader = BuildSelectiveAckHeader(decision.responsePsn);
+    return decision;
+}
+
 void
 UbSelectiveRetransStrategy::RetireAckedStateBeforeSendUna()
 {
@@ -700,6 +803,27 @@ UbRetransController::OnDataPacketReceived(uint64_t psn)
         return m_gbn->OnDataPacketReceived(psn);
     }
     return {};
+}
+
+bool
+UbRetransController::ResolveSelectiveAckBitmapBits(uint32_t& bits) const
+{
+    return m_selective->ResolveSelectiveAckBitmapBits(bits);
+}
+
+UbRetransReceiveDecision
+UbRetransController::BuildReceiveDecisionForCurrentState() const
+{
+    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE)
+    {
+        return m_selective->BuildReceiveDecisionForCurrentState();
+    }
+
+    UbRetransReceiveDecision decision;
+    decision.shouldAck = true;
+    decision.responsePsn = m_transport.GetCumulativeAckPsnForRetrans();
+    decision.responseOpcode = m_transport.GetResponseOpcodeForRetrans(false);
+    return decision;
 }
 
 void
