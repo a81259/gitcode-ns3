@@ -1,69 +1,66 @@
-# UB Transport Retransmission Refactor Design
+# UB 传输层重传重构设计
 
-## Goal
+## 目标
 
-Refactor RTP retransmission logic out of `ub-transport.cc` into a dedicated
-`ub-retrans.h/.cc` module under `src/unified-bus/model/protocol/`.
+将 RTP 重传逻辑从 `ub-transport.cc` 中拆出，放到
+`src/unified-bus/model/protocol/` 下独立的 `ub-retrans.h/.cc` 模块中。
 
-The refactor should keep existing external behavior and ns-3 attributes stable
-while making `UbTransportChannel` focus on common transport flow:
+本次重构需要保持现有对外行为和 ns-3 Attribute 配置方式稳定，同时让
+`UbTransportChannel` 更专注于传输层公共流程：
 
-- packet parsing and packet construction
-- ACK/CNP queues
-- WQE segment scheduling and completion
-- receive buffering and transaction completion
-- trace callbacks
-- congestion control integration points
-- port transmit triggering
+- packet 解析和 packet 构造
+- ACK/CNP 队列
+- WQE segment 调度和完成
+- 接收缓存和事务完成
+- trace 回调
+- 拥塞控制集成点
+- 端口发送触发
 
-The new retransmission module owns retransmission policy, RTO management, and
-mode-specific retransmission state.
+新的重传模块负责重传策略、RTO 管理，以及不同重传模式专属的状态。
 
-## Specification Context
+## 规范背景
 
-UB Base Specification 2.0.1 section 6.4.2 defines retransmission as two axes:
+UB Base Specification 2.0.1 的 6.4.2 节将重传机制拆成两条轴：
 
-- retransmission scope: GoBackN or selective retransmission
-- trigger mode: fast retransmission or timeout retransmission
+- 重传范围：GoBackN 或选择性重传
+- 触发方式：快速重传或超时重传
 
-Timeout retransmission is mandatory. Fast retransmission is optional. When both
-are enabled, timeout retransmission is the fallback for cases such as tail data
-packet loss, tail ACK/SACK loss, or lost negative/selective feedback.
+超时重传是必须启用的机制，快速重传是可选机制。两者同时启用时，超时重传作为快速重传的兜底机制，用于处理尾 data packet 丢失、尾 ACK/SACK 丢失、负反馈或选择性反馈丢失等场景。
 
-The refactor should preserve these four effective operating modes:
+重构后需要保持以下四种有效工作模式：
 
 - GBN with fast retransmission
 - GBN without fast retransmission
 - selective retransmission with fast retransmission
 - selective retransmission without fast retransmission
 
-Selective retransmission with fast retransmission may also enable MarkPSN. The
-MarkPSN state must move out of `UbTransportChannel`.
+选择性重传配合快速重传时，还可以启用 MarkPSN。MarkPSN 状态必须从
+`UbTransportChannel` 中移出。
 
-## New Files
+## 新增文件
 
-Add:
+新增：
 
 - `src/unified-bus/model/protocol/ub-retrans.h`
 - `src/unified-bus/model/protocol/ub-retrans.cc`
 
-Update:
+更新：
 
 - `src/unified-bus/CMakeLists.txt`
 
-The public header list should include `model/protocol/ub-retrans.h` only if
-tests or other modules need to include retransmission types directly. Otherwise
-it can remain an internal model header included by `ub-transport.h/.cc`.
+只有当测试或其它模块需要直接 include 重传类型时，才需要把
+`model/protocol/ub-retrans.h` 加入 public header 列表。否则它可以作为内部 model header，由
+`ub-transport.h/.cc` include。
 
-## High-Level Architecture
+## 高层架构
 
-`UbTransportChannel` owns one retransmission controller:
+`UbTransportChannel` 持有一个重传控制器：
 
 ```cpp
 std::unique_ptr<UbRetransController> m_retrans;
 ```
 
-The retransmission module contains:
+重传模块包含：
 
 ```cpp
 class UbRetransController;
@@ -72,67 +69,61 @@ class UbGbnRetransStrategy;
 class UbSelectiveRetransStrategy;
 ```
 
-`UbRetransController` is the stable integration point used by
-`UbTransportChannel`. It owns common retransmission configuration and RTO state,
-selects the active strategy, and delegates mode-specific behavior.
+`UbRetransController` 是 `UbTransportChannel` 使用的稳定集成入口。它持有通用重传配置和 RTO 状态，选择当前生效的策略，并把不同模式下的行为分发给具体 strategy。
 
-`UbRetransStrategy` is the abstract mode interface. `UbGbnRetransStrategy` and
-`UbSelectiveRetransStrategy` implement GBN and selective behavior.
+`UbRetransStrategy` 是模式接口。`UbGbnRetransStrategy` 和
+`UbSelectiveRetransStrategy` 分别实现 GBN 和选择性重传行为。
 
-The controller may hold a reference to `UbTransportChannel`, but access should
-go through narrow transport methods. The retransmission module should not become
-a second transport implementation that freely edits unrelated channel state.
+controller 可以持有 `UbTransportChannel` 的引用，但访问 transport 状态时应通过窄接口完成。重传模块不应变成第二个 transport 实现，也不应随意修改与重传无关的 channel 状态。
 
-## State Ownership
+## 状态归属
 
-Move these common retransmission fields from `UbTransportChannel` to
-`UbRetransController`:
+以下通用重传字段从 `UbTransportChannel` 移到 `UbRetransController`：
 
-- retransmission enabled flag
-- initial RTO
-- current RTO
-- max retransmission attempts
-- remaining retransmission attempts
-- retransmission exponent factor
-- retransmission timer event
-- retransmission mode
-- fast retransmission flag
-- selective ACK bitmap configuration
-- selective MarkPSN enable flag
+- 是否启用重传
+- 初始 RTO
+- 当前 RTO
+- 最大重传次数
+- 剩余重传次数
+- 重传指数退避因子
+- 重传 timer event
+- 重传模式
+- 是否启用快速重传
+- 选择性 ACK bitmap 配置
+- 是否启用 selective MarkPSN
 
-Move these selective-only fields to `UbSelectiveRetransStrategy`:
+以下 selective-only 字段移到 `UbSelectiveRetransStrategy`：
 
 - sent PSN state map
 - selective retransmission queue
-- per-PSN ACK/missing/retransmit counters
-- MarkPSN retransmission phase flag
-- MarkPSN awaiting-first-new flag
-- MarkPSN validity and value
-- last first selective retransmission PSN validity and value
+- 每个 PSN 的 ACK、missing、retransmit 计数状态
+- MarkPSN retransmission phase 标记
+- MarkPSN awaiting-first-new 标记
+- MarkPSN 是否有效以及 MarkPSN 值
+- last first selective retransmission PSN 是否有效以及对应值
 
-Move this GBN-only field to `UbGbnRetransStrategy`:
+以下 GBN-only 字段移到 `UbGbnRetransStrategy`：
 
 - last GBN NAK PSN suppression state
 
-Keep these common transport fields in `UbTransportChannel`:
+以下公共传输字段保留在 `UbTransportChannel`：
 
-- send and receive PSN cursors
-- highest received PSN
-- received-any-PSN flag
-- receive bitmap/window
+- 发送和接收 PSN 游标
+- 已接收的最大 PSN
+- 是否已经收到过 PSN
+- 接收 bitmap/window
 - buffered inbound packet map
 - WQE segment vector
-- ACK and CNP queues
-- congestion control object
-- trace sources and trace helpers
+- ACK 和 CNP 队列
+- congestion control 对象
+- trace sources 和 trace helpers
 - transaction completion helpers
 
-These fields participate in normal transport send/receive behavior, not only
-retransmission.
+这些字段不只服务重传，也参与正常 transport 发送、接收和事务完成流程。
 
-## Controller Interface
+## Controller 接口
 
-The controller should provide high-level methods that match transport events:
+controller 提供与 transport 事件对应的高层接口：
 
 ```cpp
 class UbRetransController
@@ -165,12 +156,11 @@ public:
 };
 ```
 
-The exact signatures may change during implementation, but the direction should
-hold: transport reports events, retransmission returns decisions.
+实现时可以根据代码需要调整具体函数签名，但方向需要保持一致：transport 上报事件，重传模块返回决策。
 
-## Result Types
+## 返回结果类型
 
-Use small result structures instead of long parameter lists.
+使用小型结果结构体，避免函数参数列表过长。
 
 ```cpp
 struct UbRetransAckResult
@@ -198,13 +188,11 @@ struct UbRetransTimeoutResult
 };
 ```
 
-`UbTransportChannel` applies these decisions by doing the actual packet
-construction, queue insertion, trace calls, timer interactions, and port trigger.
+`UbTransportChannel` 根据这些 decision 执行真正的 packet 构造、入队、trace、timer 交互和端口触发。
 
-## Transport Flow After Refactor
+## 重构后的 Transport 流程
 
-`GetNextPacket()` should keep the control packet priority and delegate only
-retransmission packet selection:
+`GetNextPacket()` 保留控制包优先级，只把重传包选择交给重传模块：
 
 ```cpp
 SendCnpIfAny();
@@ -217,15 +205,14 @@ if (Ptr<Packet> p = m_retrans->TryGetNextRetransmissionPacket()) {
 return TrySendNewDataPacket();
 ```
 
-After a new data packet is generated and accepted by congestion control:
+新 data packet 生成并通过拥塞控制后：
 
 ```cpp
 m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes, segment);
 m_retrans->StartTimerIfNeeded();
 ```
 
-`RecvTpAck()` should parse the response and delegate mode-specific ACK/SACK/NAK
-semantics:
+`RecvTpAck()` 负责解析 response，然后把 ACK/SACK/NAK 的模式相关语义交给重传模块：
 
 ```cpp
 UbRetransAckResult result =
@@ -234,8 +221,7 @@ UbRetransAckResult result =
 ApplyAckProgress(result);
 ```
 
-`RecvDataPacket()` should parse headers and track common receive state, then ask
-the retransmission module what response, if any, is required:
+`RecvDataPacket()` 负责解析 header 并维护公共接收状态，然后询问重传模块是否需要回复应答：
 
 ```cpp
 UbRetransReceiveDecision decision =
@@ -245,69 +231,65 @@ ApplyReceiveDecision(decision);
 MaybeQueueTransportResponse(decision);
 ```
 
-`ReTxTimeout()` can become a thin forwarding method:
+`ReTxTimeout()` 可以变成很薄的转发函数：
 
 ```cpp
 m_retrans->OnTimeout();
 ```
 
-The controller owns backoff, attempt accounting, rescheduling, and transmit
-trigger decisions.
+RTO 的退避、重传次数统计、重新调度、是否触发发送，都由 controller 负责。
 
-## Strategy Responsibilities
+## Strategy 职责
 
 ### GBN Strategy
 
-`UbGbnRetransStrategy` handles:
+`UbGbnRetransStrategy` 负责：
 
-- TPNAK processing on the sender
-- GBN fast retransmission from the NAK PSN
-- RTO retransmission from `SndUna`
-- receiver-side out-of-order handling
-- repeated TPNAK suppression
-- clearing TPNAK suppression after the receive gap closes
+- sender 侧 TPNAK 处理
+- 从 NAK PSN 开始的 GBN 快速重传
+- 从 `SndUna` 开始的 RTO 重传
+- receiver 侧乱序处理
+- 重复 TPNAK 抑制
+- 接收 gap 关闭后清理 TPNAK 抑制状态
 
-It should not build full ACK packets. It should return a receive decision that
-asks transport to queue TPACK or TPNAK.
+它不构造完整 ACK packet，只返回接收决策，要求 transport 去排队 TPACK 或 TPNAK。
 
 ### Selective Strategy
 
-`UbSelectiveRetransStrategy` handles:
+`UbSelectiveRetransStrategy` 负责：
 
-- retaining sent packet copies for retransmission
-- TPSACK processing on the sender
-- cumulative ACK updates from TPACK or TPSACK
-- missing PSN collection from SAETPH
-- selective retransmission queue management
-- duplicate queue suppression
-- per-PSN retransmit counters
-- sparse retransmission packet selection
-- RTO queueing of outstanding unacknowledged PSNs
-- selective ACK bitmap construction for receiver responses
-- MarkPSN phase transitions
+- 保留已发送 packet 副本用于重传
+- sender 侧 TPSACK 处理
+- 从 TPACK 或 TPSACK 更新累计 ACK 状态
+- 根据 SAETPH 收集缺失 PSN
+- 选择性重传队列管理
+- 重复入队抑制
+- 每个 PSN 的重传计数
+- 稀疏重传 packet 选择
+- RTO 时把 outstanding 且未 ACK 的 PSN 放入重传队列
+- receiver 侧 selective ACK bitmap 构造
+- MarkPSN 阶段切换
 
-It owns `SentPsnState` and the MarkPSN state machine.
+它拥有 `SentPsnState` 和 MarkPSN 状态机。
 
-## Attribute Compatibility
+## Attribute 兼容性
 
-External ns-3 attributes should remain on `UbTransportChannel` with the same
-names. Their storage moves to `UbRetransController`.
+对外 ns-3 attributes 仍挂在 `UbTransportChannel` 上，名字保持不变。内部存储迁移到
+`UbRetransController`。
 
-For attributes that previously used direct member accessors, use transport
-getter/setter forwarding methods:
+对于原来直接绑定成员变量的 attribute，改成 transport getter/setter 转发：
 
 ```cpp
 MakeBooleanAccessor(&UbTransportChannel::SetRetransEnable,
                     &UbTransportChannel::GetRetransEnable)
 ```
 
-The setter forwards to `m_retrans->SetEnable(...)`; the getter forwards to
-`m_retrans->GetEnable()`. Existing config files and command-line overrides keep
-working.
+setter 转发到 `m_retrans->SetEnable(...)`，getter 转发到
+`m_retrans->GetEnable()`。现有配置文件和命令行覆盖方式保持可用。
 
-## Functions To Move
+## 函数迁移清单
 
-Move or rewrite these from `ub-transport.cc/.h` into `ub-retrans.cc/.h`:
+将以下内容从 `ub-transport.cc/.h` 移动或重写到 `ub-retrans.cc/.h`：
 
 - `SentPsnState`
 - `ResolveSelectiveAckBitmapBits`
@@ -334,34 +316,29 @@ Move or rewrite these from `ub-transport.cc/.h` into `ub-retrans.cc/.h`:
 - `MaybeMarkFirstNewSelectivePacket`
 - RTO event scheduling and backoff logic
 
-Keep or create these in `UbTransportChannel` as common helpers:
+在 `UbTransportChannel` 中保留或新增这些公共 helper：
 
-- data packet generation
-- response packet construction and queue insertion
-- inbound TA packet tracking
-- WQE segment completion
+- data packet 生成
+- response packet 构造和入队
+- inbound TA packet 跟踪
+- WQE segment 完成
 - trace notification helpers
-- congestion control object ownership
-- port lookup and transmit trigger wrapper
+- congestion control 对象归属
+- port 查找和 transmit trigger wrapper
 
-## Error Handling
+## 错误处理
 
-Unknown retransmission modes should remain assertion failures.
+未知 retransmission mode 保持 assertion failure。
 
-Malformed TPSACK parsing should remain in transport packet parsing because it is
-header decoding, not retransmission policy.
+Malformed TPSACK 解析仍留在 transport packet parsing 里，因为这是 header decoding，不是重传策略。
 
-Invalid selective ACK bitmap configuration should be checked inside the
-controller or selective strategy. If invalid, the receive decision should
-suppress TPSACK in the same way current code does, preserving behavior.
+非法 selective ACK bitmap 配置由 controller 或 selective strategy 检查。如果配置非法，receive decision 应按当前行为抑制 TPSACK，保持行为兼容。
 
-Exhausted retransmission attempts should preserve the current assertion behavior
-initially. Later work may replace this with the spec-defined TP Channel error
-reporting path.
+重传次数耗尽时，第一阶段保持当前 assertion 行为。后续可以再替换为规范定义的 TP Channel error reporting 路径。
 
-## Testing
+## 测试
 
-Run the existing focused tests around:
+优先运行现有聚焦测试：
 
 - selective receiver TPSACK for receive gap
 - selective receiver returning to TPACK after gap closes
@@ -372,47 +349,43 @@ Run the existing focused tests around:
 - default GBN out-of-order silence
 - GBN fast TPNAK behavior
 
-Then run the retransmission scenario families:
+然后运行重传场景族：
 
 - `GBN_fast`
 - `GBN_unfast`
 - `SELE_fast`
 - `SELE_unfast`
 
-If new direct unit tests are added, prioritize logic with minimal packet setup:
+如果新增直接单测，优先覆盖少依赖完整 packet 构造的状态逻辑：
 
 - selective missing PSN queue deduplication
 - MarkPSN phase transitions
 - GBN TPNAK-triggered send cursor rollback
 - RTO backoff and attempt accounting
 
-## Migration Plan
+## 迁移计划
 
-Implement in small behavior-preserving steps:
+按小步、行为保持的方式实施：
 
-1. Add `ub-retrans.h/.cc` and CMake entries with no behavior change.
-2. Introduce `UbRetransController` and attribute forwarding while keeping old
-   logic active.
-3. Move RTO state and timeout handling into the controller.
-4. Move GBN TPNAK/RTO logic into `UbGbnRetransStrategy`.
-5. Move selective sent-PSN state, retransmission queue, and TPSACK processing
-   into `UbSelectiveRetransStrategy`.
-6. Move MarkPSN state into `UbSelectiveRetransStrategy`.
-7. Simplify `GetNextPacket`, `RecvTpAck`, `RecvDataPacket`, and `ReTxTimeout`
-   to common flow plus controller calls.
-8. Remove obsolete state and test-only accessors from `UbTransportChannel`, or
-   forward test accessors to the controller where tests still need them.
+1. 添加 `ub-retrans.h/.cc` 和 CMake entries，不改变行为。
+2. 引入 `UbRetransController` 和 attribute forwarding，同时保留旧逻辑生效。
+3. 将 RTO 状态和 timeout handling 移入 controller。
+4. 将 GBN TPNAK/RTO 逻辑移入 `UbGbnRetransStrategy`。
+5. 将 selective sent-PSN state、retransmission queue 和 TPSACK processing 移入
+   `UbSelectiveRetransStrategy`。
+6. 将 MarkPSN 状态移入 `UbSelectiveRetransStrategy`。
+7. 简化 `GetNextPacket`、`RecvTpAck`、`RecvDataPacket` 和 `ReTxTimeout`，使其变为公共流程加 controller 调用。
+8. 删除 `UbTransportChannel` 中过时的状态和 test-only accessors；仍被测试需要的 accessor 转发到 controller。
 
-## Risks
+## 风险
 
-The highest-risk areas are:
+风险最高的区域是：
 
-- ns-3 attribute initialization order versus controller construction
-- packet copy lifetime for selective retransmission
-- RTO timer cancellation during flow completion and object disposal
-- preserving congestion-control callback timing
-- preserving trace output formatting and packet type classification
-- test-only accessors that currently read private transport state
+- ns-3 attribute 初始化顺序和 controller 构造时机
+- selective retransmission 的 packet copy 生命周期
+- flow 完成和 object disposal 时的 RTO timer 取消
+- 拥塞控制 callback 时机保持不变
+- trace 输出格式和 packet type 分类保持不变
+- 当前直接读取 transport private state 的 test-only accessors
 
-Mitigation: keep public attributes and trace names stable, move one behavior
-group at a time, and run focused tests after each migration phase.
+缓解方式：保持 public attributes 和 trace 名字稳定，一次只迁移一组行为，并在每个迁移阶段后运行聚焦测试。
