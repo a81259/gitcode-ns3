@@ -2,6 +2,7 @@
 #ifndef UB_TRANSPORT_H
 #define UB_TRANSPORT_H
 
+#include <memory>
 #include <map>
 #include <queue>
 #include <deque>
@@ -18,6 +19,7 @@
 #include "ns3/timer.h"
 #include "ns3/ub-congestion-control.h"
 #include "ns3/ub-queue-manager.h"
+#include "ns3/ub-retrans.h"
 #include "ns3/ub-tag.h"
 namespace ns3 {
 
@@ -273,6 +275,21 @@ public:
     bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
     bool HasRetainedPsnForTest(uint64_t psn) const;
     uint32_t GetPsnRetransmitCountForTest(uint64_t psn) const;
+
+    void SetInitialRto(Time rto);
+    Time GetInitialRto() const;
+    void SetMaxRetransAttempts(uint16_t attempts);
+    uint16_t GetMaxRetransAttempts() const;
+    void SetRetransExponentFactor(uint16_t factor);
+    uint16_t GetRetransExponentFactor() const;
+    void SetRetransmissionMode(UbRetransmissionMode mode);
+    UbRetransmissionMode GetRetransmissionMode() const;
+    void SetSelectiveAckBitmapBits(uint32_t bits);
+    uint32_t GetSelectiveAckBitmapBitsConfig() const;
+    void SetFastRetransEnable(bool enable);
+    bool GetFastRetransEnable() const;
+    void SetSelectiveMarkPsnEnable(bool enable);
+    bool GetSelectiveMarkPsnEnable() const;
 private:
     struct InboundTaUnitState
     {
@@ -419,7 +436,8 @@ private:
     bool m_useShortestPaths;
     uint16_t m_lbHashSalt = 0; // load balance salt for ECMP/packet-spray hashing, increases per packet
 
-    bool m_isRetransEnable;
+    bool m_isRetransEnable{true};
+    std::unique_ptr<UbRetransController> m_retrans;
     Time m_initialRto;
     uint16_t m_maxRetransAttempts;
     uint16_t m_retransExponentFactor;
@@ -428,7 +446,7 @@ private:
     uint16_t m_retransAttemptsLeft ; // 剩余的重传次数
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     uint32_t m_selectiveAckBitmapBits{0};
-    bool m_enableFastSelectiveRetrans{false};
+    bool m_enableFastRetrans{false}; // GBN TPNAK fast retransmission and SELECTIVE TPSACK fast retransmission switch.
     bool m_enableSelectiveMarkPsn{false};
     bool m_selectiveMarkPsnRetransPhase{false};
     bool m_selectiveMarkPsnAwaitingFirstNew{true};

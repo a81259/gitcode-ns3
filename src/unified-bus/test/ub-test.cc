@@ -1268,17 +1268,21 @@ public:
                               false,
                               "invalid explicit selective ACK bitmap width should be rejected");
 
-        BooleanValue fastSelectiveRetrans;
-        tp->GetAttribute("EnableFastSelectiveRetrans", fastSelectiveRetrans);
-        NS_TEST_ASSERT_MSG_EQ(fastSelectiveRetrans.Get(),
+        BooleanValue fastRetrans;
+        tp->GetAttribute("EnableFastRetrans", fastRetrans);
+        NS_TEST_ASSERT_MSG_EQ(fastRetrans.Get(),
                               false,
-                              "fast selective retransmission should be opt-in");
+                              "fast retransmission should be opt-in");
 
-        tp->SetAttribute("EnableFastSelectiveRetrans", BooleanValue(true));
-        tp->GetAttribute("EnableFastSelectiveRetrans", fastSelectiveRetrans);
-        NS_TEST_ASSERT_MSG_EQ(fastSelectiveRetrans.Get(),
+        tp->SetAttribute("EnableFastRetrans", BooleanValue(true));
+        tp->GetAttribute("EnableFastRetrans", fastRetrans);
+        NS_TEST_ASSERT_MSG_EQ(fastRetrans.Get(),
                               true,
-                              "fast selective retransmission should be settable");
+                              "fast retransmission should be settable");
+
+        NS_TEST_ASSERT_MSG_EQ(tp->SetAttributeFailSafe("EnableRetrans", BooleanValue(true)),
+                              false,
+                              "EnableRetrans should no longer be exposed as a TypeId attribute");
 
         NS_TEST_ASSERT_MSG_EQ(
             UbTransportChannel::IsTransportResponseOpcode(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
@@ -1753,7 +1757,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(false));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -1798,7 +1802,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -1854,7 +1858,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -1922,7 +1926,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -1962,7 +1966,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2041,7 +2045,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2133,7 +2137,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2177,7 +2181,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2220,7 +2224,7 @@ public:
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2307,7 +2311,7 @@ public:
         GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -2422,7 +2426,7 @@ public:
         GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
         Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
                            EnumValue(UbRetransmissionMode::SELECTIVE));
-        Config::SetDefault("ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(false));
 
         Ptr<UbTransportChannel> senderTp = CreateObject<UbTransportChannel>();
@@ -7456,7 +7460,7 @@ class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
         std::ofstream config(caseDir / "network_attribute.txt", std::ios::app);
         config << "\ndefault ns3::UbTransportChannel::RetransmissionMode \"SELECTIVE\"\n";
-        config << "default ns3::UbTransportChannel::EnableFastSelectiveRetrans \"true\"\n";
+        config << "default ns3::UbTransportChannel::EnableFastRetrans \"true\"\n";
         config.close();
 
         auto [status, output] =

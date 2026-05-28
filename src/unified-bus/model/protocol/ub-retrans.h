@@ -2,6 +2,7 @@
 #ifndef UB_RETRANS_H
 #define UB_RETRANS_H
 
+#include "ns3/nstime.h"
 #include "ns3/ub-datatype.h"
 #include "ns3/ub-header.h"
 
@@ -48,8 +49,38 @@ class UbRetransController
 public:
     explicit UbRetransController(UbTransportChannel& transport);
 
+    void SetInitialRto(Time rto);
+    Time GetInitialRto() const;
+
+    void SetMaxRetransAttempts(uint16_t attempts);
+    uint16_t GetMaxRetransAttempts() const;
+
+    void SetRetransExponentFactor(uint16_t factor);
+    uint16_t GetRetransExponentFactor() const;
+
+    void SetRetransmissionMode(UbRetransmissionMode mode);
+    UbRetransmissionMode GetRetransmissionMode() const;
+
+    void SetSelectiveAckBitmapBits(uint32_t bits);
+    uint32_t GetSelectiveAckBitmapBitsConfig() const;
+
+    void SetFastRetransEnable(bool enable);
+    bool GetFastRetransEnable() const;
+
+    void SetSelectiveMarkPsnEnable(bool enable);
+    bool GetSelectiveMarkPsnEnable() const;
+
 private:
     UbTransportChannel& m_transport;
+    Time m_initialRto;
+    Time m_rto;
+    uint16_t m_maxRetransAttempts{7};
+    uint16_t m_retransAttemptsLeft{7};
+    uint16_t m_retransExponentFactor{1};
+    UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
+    uint32_t m_selectiveAckBitmapBits{0};
+    bool m_enableFastRetrans{false};
+    bool m_enableSelectiveMarkPsn{false};
 };
 
 } // namespace ns3
