@@ -397,7 +397,6 @@ void
 UbTransportChannel::SetSelectiveMarkPsnEnable(bool enable)
 {
     m_retrans->SetSelectiveMarkPsnEnable(enable);
-    m_enableSelectiveMarkPsn = enable;
 }
 
 bool
@@ -472,45 +471,6 @@ UbTransportChannel::OnSenderSelectiveAck(TpOpcode opcode,
                                          uint32_t retransmitBytes)
 {
     m_congestionCtrl->OnSenderSelectiveAck(opcode, psn, saetph, cetph, retransmitBytes);
-}
-
-bool
-UbTransportChannel::IsSelectiveMarkPsnEnabledForRetrans() const
-{
-    return IsSelectiveMarkPsnEnabled();
-}
-
-void
-UbTransportChannel::FinishSelectiveMarkPsnRetransPhaseIfDoneForRetrans()
-{
-    FinishSelectiveMarkPsnRetransPhaseIfDone();
-}
-
-bool
-UbTransportChannel::IsSelectiveMarkPsnRetransPhaseActiveForRetrans() const
-{
-    return m_selectiveMarkPsnRetransPhase;
-}
-
-void
-UbTransportChannel::RecordFirstSelectiveRetransmissionForRetrans(uint64_t psn)
-{
-    m_lastFirstSelectiveRtxPsn = psn;
-    m_lastFirstSelectiveRtxPsnValid = true;
-}
-
-bool
-UbTransportChannel::SelectiveAckReportsReceivedAtOrAboveMarkPsnForRetrans(
-    const UbTransportHeader& tpHeader,
-    const UbSelectiveAckExtTph& saetph) const
-{
-    return SelectiveAckReportsReceivedAtOrAboveMarkPsn(tpHeader, saetph);
-}
-
-void
-UbTransportChannel::EnterSelectiveMarkPsnRetransPhaseForRetrans()
-{
-    EnterSelectiveMarkPsnRetransPhase();
 }
 
 /**
@@ -657,9 +617,6 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
             // SELECTIVE mode: MarkPSN and per-PSN packet copies are only needed for
             // sparse retransmission driven by TPSACK/RTO.
-            if (IsSelectiveMarkPsnEnabled()) {
-                MaybeMarkFirstNewSelectivePacket(m_psnSndNxt);
-            }
             m_retrans->OnNewDataPacketSent(m_psnSndNxt,
                                            p,
                                            payloadSize,
@@ -1088,74 +1045,6 @@ uint32_t
 UbTransportChannel::GetPsnRetransmitCountForTest(uint64_t psn) const
 {
     return m_retrans->GetPsnRetransmitCountForTest(psn);
-}
-
-bool
-UbTransportChannel::IsSelectiveMarkPsnEnabled() const
-{
-    return m_enableSelectiveMarkPsn &&
-           m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
-           m_enableFastRetrans;
-}
-
-bool
-UbTransportChannel::SelectiveAckReportsReceivedAtOrAboveMarkPsn(
-    const UbTransportHeader& tpHeader,
-    const UbSelectiveAckExtTph& saetph) const
-{
-    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnValid) {
-        return false;
-    }
-
-    const uint64_t ackBase = tpHeader.GetPsn();
-    const uint32_t bitmapBits = saetph.GetBitmapBitCount();
-    const uint64_t representedEnd = ackBase + bitmapBits - 1;
-    const uint64_t visibleEnd = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
-
-    for (uint64_t psn = ackBase; psn <= visibleEnd; ++psn) {
-        const uint32_t offset = static_cast<uint32_t>(psn - ackBase);
-        if (psn >= m_selectiveMarkPsn && saetph.GetBitmapBit(offset)) {
-            return true;
-        }
-        if (psn == UINT64_MAX) {
-            break;
-        }
-    }
-    return false;
-}
-
-void
-UbTransportChannel::EnterSelectiveMarkPsnRetransPhase()
-{
-    if (!IsSelectiveMarkPsnEnabled()) {
-        return;
-    }
-    m_selectiveMarkPsnRetransPhase = true;
-}
-
-void
-UbTransportChannel::FinishSelectiveMarkPsnRetransPhaseIfDone()
-{
-    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnRetransPhase) {
-        return;
-    }
-    if (m_retrans->HasPendingSelectiveRetransmission()) {
-        return;
-    }
-    m_selectiveMarkPsnRetransPhase = false;
-    m_selectiveMarkPsnAwaitingFirstNew = true;
-    m_selectiveMarkPsnValid = false;
-}
-
-void
-UbTransportChannel::MaybeMarkFirstNewSelectivePacket(uint64_t psn)
-{
-    if (!IsSelectiveMarkPsnEnabled() || !m_selectiveMarkPsnAwaitingFirstNew) {
-        return;
-    }
-    m_selectiveMarkPsn = psn;
-    m_selectiveMarkPsnValid = true;
-    m_selectiveMarkPsnAwaitingFirstNew = false;
 }
 
 /**

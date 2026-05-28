@@ -306,14 +306,6 @@ public:
                               const UbSelectiveAckExtTph& saetph,
                               const UbCongestionExtTph* cetph,
                               uint32_t retransmitBytes);
-    bool IsSelectiveMarkPsnEnabledForRetrans() const;
-    void FinishSelectiveMarkPsnRetransPhaseIfDoneForRetrans();
-    bool IsSelectiveMarkPsnRetransPhaseActiveForRetrans() const;
-    void RecordFirstSelectiveRetransmissionForRetrans(uint64_t psn);
-    bool SelectiveAckReportsReceivedAtOrAboveMarkPsnForRetrans(
-        const UbTransportHeader& tpHeader,
-        const UbSelectiveAckExtTph& saetph) const;
-    void EnterSelectiveMarkPsnRetransPhaseForRetrans();
     uint32_t GetPsnOooThresholdForRetrans() const;
     bool HasReceiveGapForRetrans() const;
     uint64_t GetCumulativeAckPsnForRetrans() const;
@@ -347,12 +339,6 @@ private:
     bool ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment) const;
     uint64_t GetCumulativeAckPsn() const;
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
-    bool IsSelectiveMarkPsnEnabled() const;
-    bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
-                                                     const UbSelectiveAckExtTph& saetph) const;
-    void EnterSelectiveMarkPsnRetransPhase();
-    void FinishSelectiveMarkPsnRetransPhaseIfDone();
-    void MaybeMarkFirstNewSelectivePacket(uint64_t psn);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;
@@ -431,13 +417,6 @@ private:
     std::unique_ptr<UbRetransController> m_retrans;
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     bool m_enableFastRetrans{false}; // GBN TPNAK fast retransmission and SELECTIVE TPSACK fast retransmission switch.
-    bool m_enableSelectiveMarkPsn{false};
-    bool m_selectiveMarkPsnRetransPhase{false};
-    bool m_selectiveMarkPsnAwaitingFirstNew{true};
-    bool m_selectiveMarkPsnValid{false};
-    uint64_t m_selectiveMarkPsn{0};
-    bool m_lastFirstSelectiveRtxPsnValid{false};
-    uint64_t m_lastFirstSelectiveRtxPsn{0};
 
     // Callback functions
     IngressQueueType m_ingressQueueType = IngressQueueType::TP; // Transport channel queue type (TP)

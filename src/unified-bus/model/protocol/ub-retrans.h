@@ -100,6 +100,11 @@ public:
     uint64_t GetSelectiveAckBase() const;
     UbSelectiveAckExtTph BuildSelectiveAckHeader(uint64_t ackBase) const;
     UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
+    void OnNewDataPacketSent(uint64_t psn,
+                             Ptr<Packet> packet,
+                             uint32_t payloadBytes,
+                             uint32_t logicalBytes,
+                             Ptr<UbWqeSegment> segment);
     bool HasPendingRetransmission() const;
     bool CanSendRetransmission() const;
     uint32_t GetNextRetransmissionSize() const;
@@ -127,10 +132,22 @@ private:
     };
 
     void RetireAckedStateBeforeSendUna();
+    bool IsMarkPsnEnabled() const;
+    bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
+                                                     const UbSelectiveAckExtTph& saetph) const;
+    void EnterMarkPsnRetransPhase();
+    void FinishMarkPsnRetransPhaseIfDone();
+    void MaybeMarkFirstNewSelectivePacket(uint64_t psn);
 
     UbRetransController& m_controller;
     std::map<uint64_t, SentPsnState> m_sentPsnState;
     std::deque<uint64_t> m_selectiveRetransmitQ;
+    bool m_markPsnRetransPhase{false};
+    bool m_markPsnAwaitingFirstNew{true};
+    bool m_markPsnValid{false};
+    uint64_t m_markPsn{0};
+    bool m_lastFirstRtxPsnValid{false};
+    uint64_t m_lastFirstRtxPsn{0};
 };
 
 class UbRetransController
