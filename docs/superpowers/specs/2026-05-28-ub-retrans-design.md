@@ -5,8 +5,9 @@
 将 RTP 重传逻辑从 `ub-transport.cc` 中拆出，放到
 `src/unified-bus/model/protocol/` 下独立的 `ub-retrans.h/.cc` 模块中。
 
-本次重构需要保持现有对外行为和 ns-3 Attribute 配置方式稳定，同时让
-`UbTransportChannel` 更专注于传输层公共流程：
+本次重构需要保持除重传开关外的现有对外配置方式稳定，同时让
+`UbTransportChannel` 更专注于传输层公共流程。RTP 重传机制在设计上始终开启，不再设置
+`EnableRetrans` 这类业务开关。
 
 - packet 解析和 packet 构造
 - ACK/CNP 队列
@@ -26,6 +27,8 @@ UB Base Specification 2.0.1 的 6.4.2 节将重传机制拆成两条轴：
 - 触发方式：快速重传或超时重传
 
 超时重传是必须启用的机制，快速重传是可选机制。两者同时启用时，超时重传作为快速重传的兜底机制，用于处理尾 data packet 丢失、尾 ACK/SACK 丢失、负反馈或选择性反馈丢失等场景。
+
+重传机制本身不设开关。未显式配置重传模式时，默认使用 GBN；未显式开启快速重传时，默认不启用 fast retransmission。因此默认重传机制为 GBN 非快速重传，即由 RTO 触发 GoBackN 重传。
 
 重构后需要保持以下四种有效工作模式：
 
@@ -80,7 +83,6 @@ controller 可以持有 `UbTransportChannel` 的引用，但访问 transport 状
 
 以下通用重传字段从 `UbTransportChannel` 移到 `UbRetransController`：
 
-- 是否启用重传
 - 初始 RTO
 - 当前 RTO
 - 最大重传次数
@@ -274,18 +276,20 @@ RTO 的退避、重传次数统计、重新调度、是否触发发送，都由 
 
 ## Attribute 兼容性
 
-对外 ns-3 attributes 仍挂在 `UbTransportChannel` 上，名字保持不变。内部存储迁移到
+对外 ns-3 attributes 仍挂在 `UbTransportChannel` 上。重传模式、RTO、最大重传次数、退避因子、快速重传、selective ACK bitmap、MarkPSN 等配置项名字保持不变，内部存储迁移到
 `UbRetransController`。
 
-对于原来直接绑定成员变量的 attribute，改成 transport getter/setter 转发：
+`EnableRetrans` 不再作为业务配置项保留。RTP 下重传机制始终开启；默认组合为 `RetransmissionMode=GBN` 且 `EnableFastRetrans=false`。
+
+对于其它原来直接绑定成员变量的 attribute，改成 transport getter/setter 转发：
 
 ```cpp
-MakeBooleanAccessor(&UbTransportChannel::SetRetransEnable,
-                    &UbTransportChannel::GetRetransEnable)
+MakeBooleanAccessor(&UbTransportChannel::SetFastRetransEnable,
+                    &UbTransportChannel::GetFastRetransEnable)
 ```
 
-setter 转发到 `m_retrans->SetEnable(...)`，getter 转发到
-`m_retrans->GetEnable()`。现有配置文件和命令行覆盖方式保持可用。
+setter 转发到 `m_retrans->SetFastRetransEnable(...)`，getter 转发到
+`m_retrans->GetFastRetransEnable()`。除 `EnableRetrans` 外，现有配置文件和命令行覆盖方式保持可用。
 
 ## 函数迁移清单
 
