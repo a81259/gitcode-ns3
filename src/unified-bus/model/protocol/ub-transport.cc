@@ -1135,12 +1135,10 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                          PacketType::NAK, p->GetSize(), flowTag.GetFlowId(),
                          FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
         }
-        if (m_isRetransEnable) {
-            const UbRetransAckResult ackResult =
-                m_retrans->OnTransportResponse(TpHeader, opcode, nullptr, nullptr);
-            if (ackResult.triggerTransmit) {
-                TriggerTransportTransmit();
-            }
+        const UbRetransAckResult ackResult =
+            m_retrans->OnTransportResponse(TpHeader, opcode, nullptr, nullptr);
+        if (ackResult.triggerTransmit) {
+            TriggerTransportTransmit();
         }
         return;
     }

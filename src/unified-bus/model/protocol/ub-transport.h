@@ -416,7 +416,6 @@ private:
     bool m_useShortestPaths;
     uint16_t m_lbHashSalt = 0; // load balance salt for ECMP/packet-spray hashing, increases per packet
 
-    bool m_isRetransEnable{true};
     std::unique_ptr<UbRetransController> m_retrans;
 
     // Callback functions
