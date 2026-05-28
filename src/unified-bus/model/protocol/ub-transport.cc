@@ -359,7 +359,6 @@ void
 UbTransportChannel::SetRetransmissionMode(UbRetransmissionMode mode)
 {
     m_retrans->SetRetransmissionMode(mode);
-    m_retransmissionMode = mode;
 }
 
 UbRetransmissionMode
@@ -384,7 +383,6 @@ void
 UbTransportChannel::SetFastRetransEnable(bool enable)
 {
     m_retrans->SetFastRetransEnable(enable);
-    m_enableFastRetrans = enable;
 }
 
 bool
@@ -517,40 +515,39 @@ void UbTransportChannel::DoDispose()
  * @brief Get next packet from transport channel queue
  * Called by Switch Allocator during scheduling to retrieve the next packet for transmission
  */
-Ptr<Packet> UbTransportChannel::GetNextPacket()
+Ptr<Packet>
+UbTransportChannel::PopCnpPacket()
 {
-    if (!m_cnpQ.empty()) {
-        Ptr<Packet> p = m_cnpQ.front();
-        m_cnpQ.pop();
-        if (!IsEmpty()) {
-            m_headArrivalTime = Simulator::Now();
-        }
-        return p;
+    if (m_cnpQ.empty()) {
+        return nullptr;
     }
 
-    // 如果有ack，先发ack
-    if (!m_ackQ.empty()) {
-        Ptr<Packet> p = m_ackQ.front();
-        m_ackQ.pop();
-        if (!IsEmpty()) {
-            m_headArrivalTime = Simulator::Now();
-        }
-        return p;
+    Ptr<Packet> packet = m_cnpQ.front();
+    m_cnpQ.pop();
+    if (!IsEmpty()) {
+        m_headArrivalTime = Simulator::Now();
+    }
+    return packet;
+}
+
+Ptr<Packet>
+UbTransportChannel::PopAckPacket()
+{
+    if (m_ackQ.empty()) {
+        return nullptr;
     }
 
-    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        Ptr<Packet> retransmission = m_retrans->TryGetNextRetransmissionPacket();
-        if (retransmission != nullptr) {
-            if (!IsEmpty()) {
-                m_headArrivalTime = Simulator::Now();
-            }
-            return retransmission;
-        }
-        if (m_retrans->CanSendSelectiveRetransmission()) {
-            return nullptr;
-        }
+    Ptr<Packet> packet = m_ackQ.front();
+    m_ackQ.pop();
+    if (!IsEmpty()) {
+        m_headArrivalTime = Simulator::Now();
     }
+    return packet;
+}
 
+Ptr<Packet>
+UbTransportChannel::TryGetNextNewDataPacket()
+{
     if (m_wqeSegmentVector.empty()) {
         NS_LOG_DEBUG("No WQE segments available to send");
         TraceTpDebugState(m_nodeId,
@@ -614,15 +611,11 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         }
 
         Ptr<Packet> p = GenDataPacket(currentSegment, payloadSize, wireLengthBytes, progressBytes);
-        if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-            // SELECTIVE mode: MarkPSN and per-PSN packet copies are only needed for
-            // sparse retransmission driven by TPSACK/RTO.
-            m_retrans->OnNewDataPacketSent(m_psnSndNxt,
-                                           p,
-                                           payloadSize,
-                                           progressBytes,
-                                           currentSegment);
-        }
+        m_retrans->OnNewDataPacketSent(m_psnSndNxt,
+                                       p,
+                                       payloadSize,
+                                       progressBytes,
+                                       currentSegment);
 
         m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, progressBytes);
 
@@ -675,6 +668,32 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         return p;
     }
     return nullptr;
+}
+
+Ptr<Packet> UbTransportChannel::GetNextPacket()
+{
+    Ptr<Packet> packet = PopCnpPacket();
+    if (packet != nullptr) {
+        return packet;
+    }
+
+    packet = PopAckPacket();
+    if (packet != nullptr) {
+        return packet;
+    }
+
+    packet = m_retrans->TryGetNextRetransmissionPacket();
+    if (packet != nullptr) {
+        if (!IsEmpty()) {
+            m_headArrivalTime = Simulator::Now();
+        }
+        return packet;
+    }
+    if (m_retrans->CanSendSelectiveRetransmission()) {
+        return nullptr;
+    }
+
+    return TryGetNextNewDataPacket();
 }
 
 void
@@ -760,14 +779,12 @@ uint32_t UbTransportChannel::GetNextPacketSize()
     if (!m_ackQ.empty()) {
         return m_ackQ.front()->GetSize();
     }
-    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        const uint32_t selectiveRetransmissionSize =
-            m_retrans->CanSendSelectiveRetransmission()
-                ? m_retrans->GetNextSelectiveRetransmissionSize()
-                : 0;
-        if (selectiveRetransmissionSize > 0) {
-            return selectiveRetransmissionSize;
-        }
+    const uint32_t selectiveRetransmissionSize =
+        m_retrans->CanSendSelectiveRetransmission()
+            ? m_retrans->GetNextSelectiveRetransmissionSize()
+            : 0;
+    if (selectiveRetransmissionSize > 0) {
+        return selectiveRetransmissionSize;
     }
     for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
         Ptr<UbWqeSegment> currentSegment = m_wqeSegmentVector[i];
@@ -1143,34 +1160,16 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     }
 
     const uint64_t previousSndUna = m_psnSndUna;
-    if (hasSaetph) {
-        if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-            const UbRetransAckResult ackResult =
-                m_retrans->OnTransportResponse(TpHeader,
-                                               opcode,
-                                               &SAETPH,
-                                               hasCetph ? &CETPH : nullptr);
-            if (ackResult.triggerTransmit) {
-                TriggerTransportTransmit();
-            }
-        } else if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-            // GBN mode: TPSACK is not part of the algorithm; GBN uses TPACK/TPNAK/RTO.
-            NS_LOG_WARN("Dropping TPSACK in GBN retransmission mode.");
-            return;
-        } else {
-            NS_ASSERT_MSG(false, "Unknown retransmission mode.");
-        }
-    } else {
-        if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-            m_retrans->OnTransportResponse(TpHeader, opcode, nullptr, hasCetph ? &CETPH : nullptr);
-        } else if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-            // GBN mode receiving ordinary TPACK: advance the single cumulative send window.
-            if (TpHeader.GetPsn() + 1 > m_psnSndUna) {
-                m_psnSndUna = TpHeader.GetPsn() + 1;
-            }
-        } else {
-            NS_ASSERT_MSG(false, "Unknown retransmission mode.");
-        }
+    const UbRetransAckResult ackResult =
+        m_retrans->OnTransportResponse(TpHeader,
+                                       opcode,
+                                       hasSaetph ? &SAETPH : nullptr,
+                                       hasCetph ? &CETPH : nullptr);
+    if (ackResult.ignoreResponse) {
+        return;
+    }
+    if (ackResult.triggerTransmit) {
+        TriggerTransportTransmit();
     }
 
     // 拿到多个packet后组成taack发送
@@ -1478,13 +1477,8 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         if (outOfOrderPacket) {
             NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{" << psn
                         << "} expectedPsn:{" << m_psnRecvNxt << "}");
-            if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-                // GBN mode: receiver drops out-of-order DATA after recording it; TPNAK/RTO drives repair.
-                return; // 未开启sack的情况下乱序包不用回复ack，只用记录了bitmap
-            } else if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-                // SELECTIVE mode: receiver reports the gap with TPSACK below.
-            } else {
-                NS_ASSERT_MSG(false, "Unknown retransmission mode.");
+            if (receiveDecision.dropPacket) {
+                return;
             }
         }
         if (!outOfOrderPacket) {
@@ -1623,18 +1617,9 @@ UbTransportChannel::ResetSegmentSendProgressFromPsn(uint64_t psn)
 void UbTransportChannel::ReTxTimeout()
 {
     const UbRetransTimeoutResult timeoutResult = m_retrans->OnTimeout();
-    if (!timeoutResult.triggerTransmit) {
-        return;
-    }
-    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
+    if (timeoutResult.triggerTransmit) {
         TriggerTransportTransmit();
-        return;
     }
-    if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-        TriggerTransportTransmit();
-        return;
-    }
-    NS_ASSERT_MSG(false, "Unknown retransmission mode.");
 }
 
 /**
@@ -1734,10 +1719,8 @@ bool UbTransportChannel::IsEmpty()
     if (!m_ackQ.empty()) {
         return false;
     }
-    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        if (m_retrans->CanSendSelectiveRetransmission()) {
-            return false;
-        }
+    if (m_retrans->CanSendSelectiveRetransmission()) {
+        return false;
     }
     if (m_wqeSegmentVector.empty()) {
         return true;
@@ -1753,15 +1736,13 @@ bool UbTransportChannel::IsLimited()
     if (!m_ackQ.empty()) {
         return false;
     }
-    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        if (m_retrans->CanSendSelectiveRetransmission()) {
-            const uint32_t logicalBytes = m_retrans->GetNextSelectiveRetransmissionLogicalBytes();
-            if (m_congestionCtrl->IsCcLimited(logicalBytes == 0 ? UB_MTU_BYTE : logicalBytes)) {
-                m_sendWindowLimited = true;
-                return true;
-            }
-            return false;
+    if (m_retrans->CanSendSelectiveRetransmission()) {
+        const uint32_t logicalBytes = m_retrans->GetNextSelectiveRetransmissionLogicalBytes();
+        if (m_congestionCtrl->IsCcLimited(logicalBytes == 0 ? UB_MTU_BYTE : logicalBytes)) {
+            m_sendWindowLimited = true;
+            return true;
         }
+        return false;
     }
     if (IsInflightLimited()) {
         m_sendWindowLimited = true;

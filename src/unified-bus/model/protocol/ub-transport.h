@@ -330,6 +330,9 @@ private:
 
     void DoDispose() override;
 
+    Ptr<Packet> PopCnpPacket();
+    Ptr<Packet> PopAckPacket();
+    Ptr<Packet> TryGetNextNewDataPacket();
     Ptr<UbTransaction> GetTransaction();
     Ptr<UbWqeSegment> TrackInboundTaPacket(const UbTransportHeader& tpHeader,
                                            const UbTransactionHeader& taHeader,
@@ -415,8 +418,6 @@ private:
 
     bool m_isRetransEnable{true};
     std::unique_ptr<UbRetransController> m_retrans;
-    UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
-    bool m_enableFastRetrans{false}; // GBN TPNAK fast retransmission and SELECTIVE TPSACK fast retransmission switch.
 
     // Callback functions
     IngressQueueType m_ingressQueueType = IngressQueueType::TP; // Transport channel queue type (TP)

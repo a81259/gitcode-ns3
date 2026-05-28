@@ -2,6 +2,7 @@
 #include "ns3/ub-retrans.h"
 
 #include "ns3/assert.h"
+#include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/ub-transport.h"
 
@@ -9,6 +10,8 @@
 #include <array>
 
 namespace ns3 {
+
+NS_LOG_COMPONENT_DEFINE("UbRetransController");
 
 UbGbnRetransStrategy::UbGbnRetransStrategy(UbRetransController& controller)
     : m_controller(controller)
@@ -48,13 +51,16 @@ UbRetransReceiveDecision
 UbGbnRetransStrategy::OnDataPacketReceived(uint64_t psn)
 {
     UbRetransReceiveDecision decision;
-    if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::GBN ||
-        !m_controller.GetFastRetransEnable()) {
+    if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::GBN) {
         return decision;
     }
 
     const uint64_t nakPsn = m_controller.GetTransport().GetPsnRecvNxt();
     if (psn <= nakPsn) {
+        return decision;
+    }
+    decision.dropPacket = true;
+    if (!m_controller.GetFastRetransEnable()) {
         return decision;
     }
     if (m_lastNakPsn == nakPsn) {
@@ -872,10 +878,24 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
                 opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
         NS_ASSERT_MSG(saetph != nullptr, "SELECTIVE TPSACK processing requires SAETPH.");
         result = m_selective->OnTransportResponse(tph, opcode, *saetph, cetph);
+    } else if (m_retransmissionMode == UbRetransmissionMode::GBN &&
+               (opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
+                opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
+        NS_LOG_WARN("Dropping TPSACK in GBN retransmission mode.");
+        result.ignoreResponse = true;
     } else if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
                (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
                 opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
         result = m_selective->OnCumulativeAck(tph);
+    } else if (m_retransmissionMode == UbRetransmissionMode::GBN &&
+               (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
+                opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
+        result.previousSndUna = m_transport.GetPsnSndUna();
+        if (tph.GetPsn() + 1 > m_transport.GetPsnSndUna()) {
+            m_transport.SetPsnSndUna(tph.GetPsn() + 1);
+        }
+        result.newSndUna = m_transport.GetPsnSndUna();
+        result.ackAdvanced = result.newSndUna > result.previousSndUna;
     }
     return result;
 }
