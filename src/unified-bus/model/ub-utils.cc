@@ -2,9 +2,12 @@
 #include "ub-utils.h"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #ifdef NS3_MPI
 #include "ub-remote-link.h"
 #include "ns3/mpi-interface.h"
@@ -37,10 +40,65 @@ constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys =
      "LD/ST thread attributes moved to the UbLdstThread TypeId."},
 }};
 
+constexpr const char* kDeprecatedEnableRetransAttribute =
+    "ns3::UbTransportChannel::EnableRetrans";
+
 std::string
 DisplayFilename(const std::string& filename)
 {
     return std::filesystem::path(filename).filename().string();
+}
+
+bool
+IsDeprecatedEnableRetransDefaultLine(const std::string& line)
+{
+    const auto firstNonSpace = line.find_first_not_of(" \t");
+    if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
+    {
+        return false;
+    }
+
+    std::istringstream tokens(line.substr(firstNonSpace));
+    std::string directive;
+    std::string attribute;
+    tokens >> directive >> attribute;
+    return directive == "default" && attribute == kDeprecatedEnableRetransAttribute;
+}
+
+std::string
+CreateConfigStoreInput(const std::string& filename, uint32_t& skippedDeprecatedLines)
+{
+    std::ifstream input(filename.c_str());
+    NS_ASSERT_MSG(input.good(), "Can not open File: " << filename);
+
+    skippedDeprecatedLines = 0;
+    std::ostringstream filtered;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        if (IsDeprecatedEnableRetransDefaultLine(line))
+        {
+            ++skippedDeprecatedLines;
+            continue;
+        }
+        filtered << line << '\n';
+    }
+
+    if (skippedDeprecatedLines == 0)
+    {
+        return filename;
+    }
+
+    const auto uniqueSuffix =
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path filteredPath =
+        std::filesystem::temp_directory_path() /
+        ("ub-network-attribute-filtered-" + uniqueSuffix + ".txt");
+
+    std::ofstream output(filteredPath.c_str(), std::ios::trunc);
+    NS_ASSERT_MSG(output.good(), "Can not create filtered config file: " << filteredPath);
+    output << filtered.str();
+    return filteredPath.string();
 }
 
 void
@@ -1673,11 +1731,24 @@ void UbUtils::SetComponentsAttribute(const string &filename)
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
     ValidateLegacyNetworkAttributeKeys(filename);
-    Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
+    uint32_t skippedDeprecatedLines = 0;
+    const std::string configStoreFilename = CreateConfigStoreInput(filename, skippedDeprecatedLines);
+    if (skippedDeprecatedLines > 0)
+    {
+        PrintTimestamp("[setup] Ignore deprecated retransmission-enable attribute lines: " +
+                       std::to_string(skippedDeprecatedLines));
+    }
+    Config::SetDefault("ns3::ConfigStore::Filename", StringValue(configStoreFilename));
     Config::SetDefault("ns3::ConfigStore::FileFormat", StringValue("RawText"));
     Config::SetDefault("ns3::ConfigStore::Mode", StringValue("Load"));
     ConfigStore config;
     config.ConfigureDefaults();
+    if (configStoreFilename != filename)
+    {
+        Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
+        std::error_code ec;
+        std::filesystem::remove(configStoreFilename, ec);
+    }
 }
 
 void UbUtils::TopoTraceConnect()

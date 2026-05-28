@@ -22,6 +22,18 @@ UbRetransController::GetInitialRto() const
 }
 
 void
+UbRetransController::SetCurrentRto(Time rto)
+{
+    m_rto = rto;
+}
+
+Time
+UbRetransController::GetCurrentRto() const
+{
+    return m_rto;
+}
+
+void
 UbRetransController::SetMaxRetransAttempts(uint16_t attempts)
 {
     m_maxRetransAttempts = attempts;
@@ -32,6 +44,18 @@ uint16_t
 UbRetransController::GetMaxRetransAttempts() const
 {
     return m_maxRetransAttempts;
+}
+
+void
+UbRetransController::SetRetransAttemptsLeft(uint16_t attempts)
+{
+    m_retransAttemptsLeft = attempts;
+}
+
+uint16_t
+UbRetransController::GetRetransAttemptsLeft() const
+{
+    return m_retransAttemptsLeft;
 }
 
 void

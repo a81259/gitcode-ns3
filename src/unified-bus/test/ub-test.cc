@@ -6734,7 +6734,6 @@ RunNs3RunCommand(const std::string& testFile,
                  const std::string& programAndArgs,
                  const std::string& commandPrefix = "",
                  bool noBuild = true);
-void RemoveLinesContaining(const std::filesystem::path& filePath, const std::string& needle);
 
 } // namespace
 
@@ -6881,29 +6880,10 @@ RunQuickExampleCommand(const std::string& testFile,
         command += commandPrefix + " ";
     }
     command += "\"" + binaryPath.string() + "\"";
-    std::filesystem::path tempCaseDir;
     if (!casePathRelative.empty())
     {
         const std::filesystem::path casePath = repoRoot / casePathRelative;
-        std::filesystem::path runCasePath = casePath;
-        if (std::filesystem::is_directory(casePath))
-        {
-            const auto uniqueSuffix =
-                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-            tempCaseDir =
-                (std::filesystem::temp_directory_path() /
-                 ("ub-quick-example-case-copy-" + uniqueSuffix))
-                    .lexically_normal();
-            std::filesystem::copy(casePath, tempCaseDir, std::filesystem::copy_options::recursive);
-            const std::filesystem::path networkAttributes = tempCaseDir / "network_attribute.txt";
-            if (std::filesystem::exists(networkAttributes))
-            {
-                RemoveLinesContaining(networkAttributes,
-                                      "ns3::UbTransportChannel::EnableRetrans");
-            }
-            runCasePath = tempCaseDir;
-        }
-        command += " --case-path=\"" + runCasePath.string() + "\"";
+        command += " --case-path=\"" + casePath.string() + "\"";
     }
     if (!extraArgs.empty())
     {
@@ -6916,11 +6896,6 @@ RunQuickExampleCommand(const std::string& testFile,
     std::ifstream input(testFile);
     std::stringstream buffer;
     buffer << input.rdbuf();
-    if (!tempCaseDir.empty())
-    {
-        std::error_code ec;
-        std::filesystem::remove_all(tempCaseDir, ec);
-    }
     return {status, buffer.str()};
 }
 
@@ -6961,34 +6936,6 @@ NormalizeTestPath(const std::filesystem::path& path)
     return std::filesystem::absolute(path).lexically_normal().string();
 }
 
-void
-RemoveLinesContaining(const std::filesystem::path& filePath, const std::string& needle)
-{
-    std::ifstream input(filePath);
-    if (!input.is_open())
-    {
-        throw std::runtime_error("failed to open file for line removal helper: " + filePath.string());
-    }
-
-    std::ostringstream rewritten;
-    std::string line;
-    while (std::getline(input, line))
-    {
-        if (line.find(needle) == std::string::npos)
-        {
-            rewritten << line << '\n';
-        }
-    }
-
-    std::ofstream output(filePath, std::ios::trunc);
-    if (!output.is_open())
-    {
-        throw std::runtime_error("failed to open file for line removal helper write: " +
-                                 filePath.string());
-    }
-    output << rewritten.str();
-}
-
 std::filesystem::path
 CopyCaseDirWithoutFile(const std::string& sourceCasePathRelative, const std::string& omittedFilename)
 {
@@ -7012,12 +6959,6 @@ CopyCaseDirWithoutFile(const std::string& sourceCasePathRelative, const std::str
         fs::copy(entry.path(), destination, fs::copy_options::recursive);
     }
 
-    const fs::path networkAttributes = tempCaseDir / "network_attribute.txt";
-    if (fs::exists(networkAttributes))
-    {
-        RemoveLinesContaining(networkAttributes, "ns3::UbTransportChannel::EnableRetrans");
-    }
-
     return tempCaseDir;
 }
 
@@ -7039,12 +6980,6 @@ CopyCaseDirWithTrafficFile(const std::string& sourceCasePathRelative, const std:
     {
         const fs::path destination = tempCaseDir / entry.path().filename();
         fs::copy(entry.path(), destination, fs::copy_options::recursive);
-    }
-
-    const fs::path networkAttributes = tempCaseDir / "network_attribute.txt";
-    if (fs::exists(networkAttributes))
-    {
-        RemoveLinesContaining(networkAttributes, "ns3::UbTransportChannel::EnableRetrans");
     }
 
     std::ofstream trafficFile(tempCaseDir / "traffic.csv");
@@ -7269,24 +7204,12 @@ class UbQuickScratchLegacyAliasSystemTest : public TestCase
         SetDataDir(NS_TEST_SOURCEDIR);
         const std::filesystem::path repoRoot = LocateRepoRoot();
         const std::filesystem::path casePath = repoRoot / "scratch/2nodes_single-tp";
-        const auto uniqueSuffix =
-            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-        const std::filesystem::path tempCaseDir =
-            (std::filesystem::temp_directory_path() /
-             ("ub-quick-example-legacy-alias-copy-" + uniqueSuffix))
-                .lexically_normal();
-        std::filesystem::copy(casePath, tempCaseDir, std::filesystem::copy_options::recursive);
-        RemoveLinesContaining(tempCaseDir / "network_attribute.txt",
-                              "ns3::UbTransportChannel::EnableRetrans");
         auto [status, output] =
             RunNs3RunCommand(CreateTempDirFilename(GetName() + ".log"),
-                             "scratch/ub-quick-example --case-path=" + tempCaseDir.string() +
+                             "scratch/ub-quick-example --case-path=" + casePath.string() +
                                  " --test",
                              "",
                              false);
-
-        std::error_code ec;
-        std::filesystem::remove_all(tempCaseDir, ec);
 
         NS_TEST_ASSERT_MSG_EQ(status, 0, "legacy scratch quick-example should exit successfully");
         NS_TEST_ASSERT_MSG_NE(output.find("TEST : 00000 : PASSED"),
@@ -7307,28 +7230,15 @@ class UbQuickExampleSameCasePathSystemTest : public TestCase
     {
         SetDataDir(NS_TEST_SOURCEDIR);
         const std::filesystem::path repoRoot = LocateRepoRoot();
-        const auto uniqueSuffix =
-            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-        const std::filesystem::path tempCaseDir =
-            (std::filesystem::temp_directory_path() /
-             ("ub-quick-example-same-case-copy-" + uniqueSuffix))
-                .lexically_normal();
-        std::filesystem::copy(repoRoot / "scratch/2nodes_single-tp",
-                              tempCaseDir,
-                              std::filesystem::copy_options::recursive);
-        RemoveLinesContaining(tempCaseDir / "network_attribute.txt",
-                              "ns3::UbTransportChannel::EnableRetrans");
         const std::filesystem::path sameCasePath =
-            (tempCaseDir / "../" / tempCaseDir.filename()).lexically_normal();
+            (repoRoot / "scratch/2nodes_single-tp/../2nodes_single-tp").lexically_normal();
         auto [status, output] =
             RunQuickExampleCommand(CreateTempDirFilename(GetName() + ".log"),
-                                   "--case-path=\"" + tempCaseDir.string() + "\" \"" +
+                                   "--case-path=\"" +
+                                       (repoRoot / "scratch/2nodes_single-tp").string() + "\" \"" +
                                        sameCasePath.string() + "\" --stop-ms=1",
                                    "",
                                    "");
-
-        std::error_code ec;
-        std::filesystem::remove_all(tempCaseDir, ec);
 
         NS_TEST_ASSERT_MSG_EQ(status,
                               0,

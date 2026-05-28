@@ -52,8 +52,14 @@ public:
     void SetInitialRto(Time rto);
     Time GetInitialRto() const;
 
+    void SetCurrentRto(Time rto);
+    Time GetCurrentRto() const;
+
     void SetMaxRetransAttempts(uint16_t attempts);
     uint16_t GetMaxRetransAttempts() const;
+
+    void SetRetransAttemptsLeft(uint16_t attempts);
+    uint16_t GetRetransAttemptsLeft() const;
 
     void SetRetransExponentFactor(uint16_t factor);
     uint16_t GetRetransExponentFactor() const;
