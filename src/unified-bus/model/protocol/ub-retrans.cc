@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ns3/ub-retrans.h"
 
+#include "ns3/assert.h"
+#include "ns3/simulator.h"
+#include "ns3/ub-transport.h"
+
 namespace ns3 {
 
 UbRetransController::UbRetransController(UbTransportChannel& transport)
     : m_transport(transport)
 {
+}
+
+UbRetransController::~UbRetransController()
+{
+    CancelTimer();
 }
 
 void
@@ -116,6 +125,59 @@ bool
 UbRetransController::GetSelectiveMarkPsnEnable() const
 {
     return m_enableSelectiveMarkPsn;
+}
+
+void
+UbRetransController::ScheduleTimeout()
+{
+    m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, &m_transport);
+}
+
+void
+UbRetransController::StartTimerIfNeeded()
+{
+    if (!m_retransEvent.IsExpired())
+    {
+        return;
+    }
+
+    m_rto = m_initialRto;
+    ScheduleTimeout();
+}
+
+void
+UbRetransController::RestartTimerAfterAckProgress()
+{
+    m_rto = m_initialRto;
+    m_retransAttemptsLeft = m_maxRetransAttempts;
+    m_retransEvent.Cancel();
+    ScheduleTimeout();
+}
+
+void
+UbRetransController::CancelTimer()
+{
+    m_retransEvent.Cancel();
+}
+
+UbRetransTimeoutResult
+UbRetransController::OnTimeout()
+{
+    m_retransAttemptsLeft--;
+    uint64_t rto = m_rto.GetNanoSeconds();
+    rto = rto << m_retransExponentFactor;
+    m_rto = NanoSeconds(rto);
+    NS_ASSERT_MSG(m_retransAttemptsLeft > 0, "Avaliable retransmission attempts exhausted.");
+    ScheduleTimeout();
+    UbRetransTimeoutResult result;
+    result.triggerTransmit = true;
+    return result;
+}
+
+bool
+UbRetransController::HasTimerRunning() const
+{
+    return !m_retransEvent.IsExpired();
 }
 
 } // namespace ns3

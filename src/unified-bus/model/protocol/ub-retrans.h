@@ -2,6 +2,7 @@
 #ifndef UB_RETRANS_H
 #define UB_RETRANS_H
 
+#include "ns3/event-id.h"
 #include "ns3/nstime.h"
 #include "ns3/ub-datatype.h"
 #include "ns3/ub-header.h"
@@ -48,6 +49,7 @@ class UbRetransController
 {
 public:
     explicit UbRetransController(UbTransportChannel& transport);
+    ~UbRetransController();
 
     void SetInitialRto(Time rto);
     Time GetInitialRto() const;
@@ -76,8 +78,17 @@ public:
     void SetSelectiveMarkPsnEnable(bool enable);
     bool GetSelectiveMarkPsnEnable() const;
 
+    void StartTimerIfNeeded();
+    void RestartTimerAfterAckProgress();
+    void CancelTimer();
+    UbRetransTimeoutResult OnTimeout();
+    bool HasTimerRunning() const;
+
 private:
+    void ScheduleTimeout();
+
     UbTransportChannel& m_transport;
+    EventId m_retransEvent{};
     Time m_initialRto;
     Time m_rto;
     uint16_t m_maxRetransAttempts{7};

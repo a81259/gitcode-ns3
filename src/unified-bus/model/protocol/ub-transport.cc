@@ -324,8 +324,6 @@ void
 UbTransportChannel::SetInitialRto(Time rto)
 {
     m_retrans->SetInitialRto(rto);
-    m_initialRto = rto;
-    m_rto = rto;
 }
 
 Time
@@ -338,8 +336,6 @@ void
 UbTransportChannel::SetMaxRetransAttempts(uint16_t attempts)
 {
     m_retrans->SetMaxRetransAttempts(attempts);
-    m_maxRetransAttempts = attempts;
-    m_retransAttemptsLeft = attempts;
 }
 
 uint16_t
@@ -352,7 +348,6 @@ void
 UbTransportChannel::SetRetransExponentFactor(uint16_t factor)
 {
     m_retrans->SetRetransExponentFactor(factor);
-    m_retransExponentFactor = factor;
 }
 
 uint16_t
@@ -440,6 +435,9 @@ UbTransportChannel::~UbTransportChannel()
 void UbTransportChannel::DoDispose()
 {
     NS_LOG_FUNCTION(this);
+    if (m_retrans != nullptr) {
+        m_retrans->CancelTimer();
+    }
     m_ackQ = queue<Ptr<Packet>>();
     m_cnpQ = queue<Ptr<Packet>>();
     m_wqeSegmentVector.clear();
@@ -626,16 +624,7 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
                           static_cast<uint32_t>(m_ackQ.size()),
                           static_cast<uint32_t>(m_cnpQ.size()));
         // 发送时，更新定时器时间
-        if (m_isRetransEnable) {
-            if (m_retransEvent.IsExpired()) {
-                // Schedules retransmit timeout. m_rto should be already doubled.
-                m_rto = m_initialRto;
-                NS_LOG_LOGIC(this << " SendDataPacket Schedule ReTxTimeout at time "
-                                << Simulator::Now().GetNanoSeconds() << " to expire at time "
-                                << (Simulator::Now().GetNanoSeconds() + m_rto.GetNanoSeconds()));
-                m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
-            }
-        }
+        m_retrans->StartTimerIfNeeded();
         // 浅流水只限制仍可继续发送的活跃 segment。
         // 当前 segment 最后一个 data packet 发出后，就尝试补一个新的 segment，
         // 但已发完未 ACK 的 segment 仍保留在账本中供 ACK/重传使用。
@@ -1523,15 +1512,7 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                          FormatSimpleAckInfo("TPACK", TpHeader.GetPsn()), traceTag);
         }
         // 收到有效ack后更新rto和超时重传次数为初始值，关闭超时事件并重新设定超时事件
-        if (m_isRetransEnable) {
-            m_rto = m_initialRto;
-            m_retransAttemptsLeft = m_maxRetransAttempts;
-            m_retransEvent.Cancel();
-            NS_LOG_LOGIC(this << " Recv ack time " << Simulator::Now().GetNanoSeconds()
-                            << " reset m_retransEvent at time "
-                            << (Simulator::Now().GetNanoSeconds() + m_rto.GetNanoSeconds()));
-            m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
-        }
+        m_retrans->RestartTimerAfterAckProgress();
     }
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
         // SELECTIVE mode: retire per-PSN ACK/retransmission state that is now cumulatively ACKed.
@@ -1588,10 +1569,8 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
         m_tpFullFlag = false;
         ApplyNextWqeSegment();
     }
-    if (m_isRetransEnable) {
-        if (m_wqeSegmentVector.size() == 0) {
-            m_retransEvent.Cancel(); // 如果确认流都完成，取消定时器
-        }
+    if (m_wqeSegmentVector.size() == 0) {
+        m_retrans->CancelTimer(); // 如果确认流都完成，取消定时器
     }
     const bool transportIdle = IsEmpty();
     if (transportIdle) {
@@ -1631,7 +1610,6 @@ void UbTransportChannel::SetUbTransport(uint32_t nodeId,
     m_dip = dip;
     m_congestionCtrl = congestionCtrl;
     m_congestionCtrl->OnTpAttached(this);
-    m_retransAttemptsLeft = m_maxRetransAttempts;
     m_maxQueueSize = m_defaultMaxWqeSegNum;
     m_maxInflightPacketSize = m_defaultMaxInflightPacketSize;
     m_recvPsnWindow.Resize(m_psnOooThreshold);
@@ -1969,11 +1947,10 @@ UbTransportChannel::PrepareGbnRetransmissionFromPsn(uint64_t psn)
 
 void UbTransportChannel::ReTxTimeout()
 {
-    m_retransAttemptsLeft--;
-    uint64_t rto = m_rto.GetNanoSeconds();
-    rto = rto << m_retransExponentFactor; // 下一次超时重传变成Base_time * 2^(N*Times)
-    m_rto = ns3::NanoSeconds(rto);
-    NS_ASSERT_MSG (m_retransAttemptsLeft > 0, "Avaliable retransmission attempts exhausted.");
+    const UbRetransTimeoutResult timeoutResult = m_retrans->OnTimeout();
+    if (!timeoutResult.triggerTransmit) {
+        return;
+    }
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
         // SELECTIVE mode + RTO: queue every outstanding PSN for sparse retransmission.
         EnterSelectiveMarkPsnRetransPhase();
@@ -1983,7 +1960,6 @@ void UbTransportChannel::ReTxTimeout()
                 m_selectiveRetransmitQ.push_back(psn);
             }
         }
-        m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
         Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
         port->TriggerTransmit();
         return;
@@ -1992,7 +1968,6 @@ void UbTransportChannel::ReTxTimeout()
         // GBN mode + RTO: go back to the oldest unacknowledged PSN and retransmit from there.
         PrepareGbnRetransmissionFromPsn(m_psnSndUna);
 
-        m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, this);
         Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
         port->TriggerTransmit();
         return;

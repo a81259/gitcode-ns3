@@ -438,12 +438,6 @@ private:
 
     bool m_isRetransEnable{true};
     std::unique_ptr<UbRetransController> m_retrans;
-    Time m_initialRto;
-    uint16_t m_maxRetransAttempts;
-    uint16_t m_retransExponentFactor;
-    EventId m_retransEvent{};        //!< Retransmission event
-    Time m_rto;                      //!< Retransmit timeout 25600ns
-    uint16_t m_retransAttemptsLeft ; // 剩余的重传次数
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     uint32_t m_selectiveAckBitmapBits{0};
     bool m_enableFastRetrans{false}; // GBN TPNAK fast retransmission and SELECTIVE TPSACK fast retransmission switch.
