@@ -1637,6 +1637,8 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                           EnumValue(UbRetransmissionMode::SELECTIVE));
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -1677,6 +1679,8 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                           EnumValue(UbRetransmissionMode::SELECTIVE));
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -6730,6 +6734,7 @@ RunNs3RunCommand(const std::string& testFile,
                  const std::string& programAndArgs,
                  const std::string& commandPrefix = "",
                  bool noBuild = true);
+void RemoveLinesContaining(const std::filesystem::path& filePath, const std::string& needle);
 
 } // namespace
 
@@ -6876,10 +6881,29 @@ RunQuickExampleCommand(const std::string& testFile,
         command += commandPrefix + " ";
     }
     command += "\"" + binaryPath.string() + "\"";
+    std::filesystem::path tempCaseDir;
     if (!casePathRelative.empty())
     {
         const std::filesystem::path casePath = repoRoot / casePathRelative;
-        command += " --case-path=\"" + casePath.string() + "\"";
+        std::filesystem::path runCasePath = casePath;
+        if (std::filesystem::is_directory(casePath))
+        {
+            const auto uniqueSuffix =
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            tempCaseDir =
+                (std::filesystem::temp_directory_path() /
+                 ("ub-quick-example-case-copy-" + uniqueSuffix))
+                    .lexically_normal();
+            std::filesystem::copy(casePath, tempCaseDir, std::filesystem::copy_options::recursive);
+            const std::filesystem::path networkAttributes = tempCaseDir / "network_attribute.txt";
+            if (std::filesystem::exists(networkAttributes))
+            {
+                RemoveLinesContaining(networkAttributes,
+                                      "ns3::UbTransportChannel::EnableRetrans");
+            }
+            runCasePath = tempCaseDir;
+        }
+        command += " --case-path=\"" + runCasePath.string() + "\"";
     }
     if (!extraArgs.empty())
     {
@@ -6892,6 +6916,11 @@ RunQuickExampleCommand(const std::string& testFile,
     std::ifstream input(testFile);
     std::stringstream buffer;
     buffer << input.rdbuf();
+    if (!tempCaseDir.empty())
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(tempCaseDir, ec);
+    }
     return {status, buffer.str()};
 }
 
@@ -6932,6 +6961,34 @@ NormalizeTestPath(const std::filesystem::path& path)
     return std::filesystem::absolute(path).lexically_normal().string();
 }
 
+void
+RemoveLinesContaining(const std::filesystem::path& filePath, const std::string& needle)
+{
+    std::ifstream input(filePath);
+    if (!input.is_open())
+    {
+        throw std::runtime_error("failed to open file for line removal helper: " + filePath.string());
+    }
+
+    std::ostringstream rewritten;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        if (line.find(needle) == std::string::npos)
+        {
+            rewritten << line << '\n';
+        }
+    }
+
+    std::ofstream output(filePath, std::ios::trunc);
+    if (!output.is_open())
+    {
+        throw std::runtime_error("failed to open file for line removal helper write: " +
+                                 filePath.string());
+    }
+    output << rewritten.str();
+}
+
 std::filesystem::path
 CopyCaseDirWithoutFile(const std::string& sourceCasePathRelative, const std::string& omittedFilename)
 {
@@ -6955,6 +7012,12 @@ CopyCaseDirWithoutFile(const std::string& sourceCasePathRelative, const std::str
         fs::copy(entry.path(), destination, fs::copy_options::recursive);
     }
 
+    const fs::path networkAttributes = tempCaseDir / "network_attribute.txt";
+    if (fs::exists(networkAttributes))
+    {
+        RemoveLinesContaining(networkAttributes, "ns3::UbTransportChannel::EnableRetrans");
+    }
+
     return tempCaseDir;
 }
 
@@ -6976,6 +7039,12 @@ CopyCaseDirWithTrafficFile(const std::string& sourceCasePathRelative, const std:
     {
         const fs::path destination = tempCaseDir / entry.path().filename();
         fs::copy(entry.path(), destination, fs::copy_options::recursive);
+    }
+
+    const fs::path networkAttributes = tempCaseDir / "network_attribute.txt";
+    if (fs::exists(networkAttributes))
+    {
+        RemoveLinesContaining(networkAttributes, "ns3::UbTransportChannel::EnableRetrans");
     }
 
     std::ofstream trafficFile(tempCaseDir / "traffic.csv");
@@ -7200,12 +7269,24 @@ class UbQuickScratchLegacyAliasSystemTest : public TestCase
         SetDataDir(NS_TEST_SOURCEDIR);
         const std::filesystem::path repoRoot = LocateRepoRoot();
         const std::filesystem::path casePath = repoRoot / "scratch/2nodes_single-tp";
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const std::filesystem::path tempCaseDir =
+            (std::filesystem::temp_directory_path() /
+             ("ub-quick-example-legacy-alias-copy-" + uniqueSuffix))
+                .lexically_normal();
+        std::filesystem::copy(casePath, tempCaseDir, std::filesystem::copy_options::recursive);
+        RemoveLinesContaining(tempCaseDir / "network_attribute.txt",
+                              "ns3::UbTransportChannel::EnableRetrans");
         auto [status, output] =
             RunNs3RunCommand(CreateTempDirFilename(GetName() + ".log"),
-                             "scratch/ub-quick-example --case-path=" + casePath.string() +
+                             "scratch/ub-quick-example --case-path=" + tempCaseDir.string() +
                                  " --test",
                              "",
                              false);
+
+        std::error_code ec;
+        std::filesystem::remove_all(tempCaseDir, ec);
 
         NS_TEST_ASSERT_MSG_EQ(status, 0, "legacy scratch quick-example should exit successfully");
         NS_TEST_ASSERT_MSG_NE(output.find("TEST : 00000 : PASSED"),
@@ -7226,13 +7307,28 @@ class UbQuickExampleSameCasePathSystemTest : public TestCase
     {
         SetDataDir(NS_TEST_SOURCEDIR);
         const std::filesystem::path repoRoot = LocateRepoRoot();
+        const auto uniqueSuffix =
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const std::filesystem::path tempCaseDir =
+            (std::filesystem::temp_directory_path() /
+             ("ub-quick-example-same-case-copy-" + uniqueSuffix))
+                .lexically_normal();
+        std::filesystem::copy(repoRoot / "scratch/2nodes_single-tp",
+                              tempCaseDir,
+                              std::filesystem::copy_options::recursive);
+        RemoveLinesContaining(tempCaseDir / "network_attribute.txt",
+                              "ns3::UbTransportChannel::EnableRetrans");
         const std::filesystem::path sameCasePath =
-            (repoRoot / "scratch/2nodes_single-tp/../2nodes_single-tp").lexically_normal();
+            (tempCaseDir / "../" / tempCaseDir.filename()).lexically_normal();
         auto [status, output] =
             RunQuickExampleCommand(CreateTempDirFilename(GetName() + ".log"),
-                                   "\"" + sameCasePath.string() + "\" --stop-ms=1",
+                                   "--case-path=\"" + tempCaseDir.string() + "\" \"" +
+                                       sameCasePath.string() + "\" --stop-ms=1",
                                    "",
-                                   "scratch/2nodes_single-tp");
+                                   "");
+
+        std::error_code ec;
+        std::filesystem::remove_all(tempCaseDir, ec);
 
         NS_TEST_ASSERT_MSG_EQ(status,
                               0,
@@ -7343,11 +7439,11 @@ class UbQuickExampleLegacyNetworkAttributeHintSystemTest : public TestCase
     }
 };
 
-class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
+class UbQuickExampleDefaultGbnRetransCanContinueSystemTest : public TestCase
 {
   public:
-    UbQuickExampleDropWithoutRetransFailsFastSystemTest()
-        : TestCase("UnifiedBus - ub-quick-example stops when packet drops with retransmission disabled")
+    UbQuickExampleDefaultGbnRetransCanContinueSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example uses default GBN retransmission without fail-fast")
     {
     }
 
@@ -7366,6 +7462,9 @@ class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
         ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
 
         auto [status, output] =
             RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
@@ -7376,18 +7475,21 @@ class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
         std::error_code ec;
         std::filesystem::remove_all(caseDir, ec);
 
-        NS_TEST_ASSERT_MSG_NE(status, 0, "run should fail-fast after packet drop without retransmission");
-        NS_TEST_ASSERT_MSG_NE(output.find("Packet dropped while retransmission is disabled"),
+        NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "run should explain why it stopped early");
+                              "default GBN run should not print the removed fail-fast diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
+                              std::string::npos,
+                              "default GBN run should not reference removed EnableRetrans config");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "default GBN retransmission run should not fail-fast");
     }
 };
 
-class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
+class UbQuickExampleConfiguredGbnRetransCanContinueSystemTest : public TestCase
 {
   public:
-    UbQuickExampleDropWithRetransCanContinueSystemTest()
-        : TestCase("UnifiedBus - ub-quick-example does not fail-fast on packet drop when retransmission is enabled")
+    UbQuickExampleConfiguredGbnRetransCanContinueSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example accepts GBN retransmission config")
     {
     }
 
@@ -7403,9 +7505,6 @@ class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
         ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbSwitch::FlowControl \"CBFC\"",
                       "default ns3::UbSwitch::FlowControl \"NONE\"");
-        ReplaceInFile(caseDir / "network_attribute.txt",
-                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
-                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
@@ -7424,8 +7523,11 @@ class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
 
         NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "retrans-enabled run should not print the fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(status, 0, "retrans-enabled run should not fail-fast");
+                              "GBN retransmission run should not print the removed fail-fast diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
+                              std::string::npos,
+                              "GBN retransmission run should not reference removed EnableRetrans config");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "GBN retransmission run should not fail-fast");
     }
 };
 
@@ -7450,9 +7552,6 @@ class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
                       "default ns3::UbSwitch::FlowControl \"CBFC\"",
                       "default ns3::UbSwitch::FlowControl \"NONE\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
-                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
-                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
-        ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
@@ -7474,8 +7573,11 @@ class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
 
         NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "selective retrans-enabled run should not print the fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(status, 0, "selective retrans-enabled run should not fail-fast");
+                              "selective retransmission run should not print the removed fail-fast diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
+                              std::string::npos,
+                              "selective retransmission run should not reference removed EnableRetrans config");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "selective retransmission run should not fail-fast");
     }
 };
 
@@ -7776,9 +7878,9 @@ class UbQuickExampleSystemTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLegacyNetworkAttributeHintSystemTest(),
                     TestCase::Duration::QUICK);
-        AddTestCase(new UbQuickExampleDropWithoutRetransFailsFastSystemTest(),
+        AddTestCase(new UbQuickExampleDefaultGbnRetransCanContinueSystemTest(),
                     TestCase::Duration::QUICK);
-        AddTestCase(new UbQuickExampleDropWithRetransCanContinueSystemTest(),
+        AddTestCase(new UbQuickExampleConfiguredGbnRetransCanContinueSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleSelectiveRetransConfigSystemTest(),
                     TestCase::Duration::QUICK);
