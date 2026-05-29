@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <map>
+#include <optional>
 #include <queue>
 #include <deque>
 #include <string>
@@ -328,6 +329,31 @@ private:
         uint32_t taskId{0};
     };
 
+    struct ReceivedDataPacketContext
+    {
+        Ptr<Packet> packet;
+        UbDatalinkPacketHeader dataLinkHeader;
+        UbIpBasedNetworkHeader networkHeader;
+        Ipv4Header ipv4Header;
+        UdpHeader udpHeader;
+        UbTransportHeader transportHeader;
+        UbTransactionHeader transactionHeader;
+        UbMAExtTah maExtHeader;
+        UbFlowTag flowTag;
+        uint64_t psn{0};
+        uint32_t payloadBytes{0};
+        uint32_t logicalBytes{0};
+    };
+
+    struct AckResponseContext
+    {
+        TpOpcode opcode{TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH};
+        uint64_t psn{0};
+        bool selectiveAck{false};
+        std::optional<UbSelectiveAckExtTph> selectiveAckHeader;
+        std::optional<UbCongestionExtTph> congestionHeader;
+    };
+
     void DoDispose() override;
 
     bool HasPendingTransmitWork();
@@ -342,6 +368,8 @@ private:
     bool ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment) const;
     uint64_t GetCumulativeAckPsn() const;
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
+    bool ParseReceivedDataPacket(Ptr<Packet> packet, ReceivedDataPacketContext& ctx);
+    void TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;

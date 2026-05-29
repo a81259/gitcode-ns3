@@ -1276,6 +1276,52 @@ void UbTransportChannel::SetUbTransport(uint32_t nodeId,
     m_recvPsnWindow.Reset(m_psnRecvNxt);
 }
 
+bool
+UbTransportChannel::ParseReceivedDataPacket(Ptr<Packet> packet,
+                                            ReceivedDataPacketContext& ctx)
+{
+    if (packet == nullptr) {
+        NS_LOG_ERROR("Null packet received");
+        return false;
+    }
+
+    ctx.packet = packet;
+    packet->RemoveHeader(ctx.dataLinkHeader);
+    packet->RemoveHeader(ctx.networkHeader);
+    packet->RemoveHeader(ctx.ipv4Header);
+    packet->RemoveHeader(ctx.udpHeader);
+    packet->RemoveHeader(ctx.transportHeader);
+    packet->RemoveHeader(ctx.transactionHeader);
+    packet->RemoveHeader(ctx.maExtHeader);
+    ctx.payloadBytes = packet->GetSize();
+    ctx.logicalBytes = ctx.maExtHeader.GetLength();
+    ctx.psn = ctx.transportHeader.GetPsn();
+    packet->PeekPacketTag(ctx.flowTag);
+    return true;
+}
+
+void
+UbTransportChannel::TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx)
+{
+    m_hasReceivedAnyPsn = true;
+    m_maxRcvPsn = std::max(m_maxRcvPsn, ctx.psn);
+    NS_LOG_DEBUG("[Transport channel] Recv packet."
+                  << " PacketUid: "  << ctx.packet->GetUid()
+                  << " Tpn: " << m_tpn
+                  << " Psn: " << ctx.psn
+                  << " PacketType: Packet"
+                  << " Src: " << m_src
+                  << " Dst: " << m_dest
+                  << " PacketSize: " << ctx.packet->GetSize());
+    if (m_pktTraceEnabled) {
+        UbPacketTraceTag traceTag;
+        UbFlowTag flowTag = ctx.flowTag;
+        ctx.packet->PeekPacketTag(traceTag);
+        TpRecvNotify(ctx.packet->GetUid(), ctx.psn, m_dest, m_src, m_dstTpn, m_tpn,
+                     PacketType::PACKET, ctx.packet->GetSize(), flowTag.GetFlowId(), "", traceTag);
+    }
+}
+
 /**
  * @brief Receive Data Packets
  * @param tpack Transport acknowledgment message to process
@@ -1283,52 +1329,18 @@ void UbTransportChannel::SetUbTransport(uint32_t nodeId,
  */
 void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
 {
-    if (p == nullptr) {
-        NS_LOG_ERROR("Null packet received");
+    ReceivedDataPacketContext ctx;
+    if (!ParseReceivedDataPacket(p, ctx)) {
         return;
     }
 
-    UbDatalinkPacketHeader pktHeader;
-    UbTransactionHeader TaHeader;
-    UbAckTransactionHeader AckTaHeader;
-    UbTransportHeader TpHeader;
-    UbCongestionExtTph CETPH;
-    UbIpBasedNetworkHeader NetworkHeader;
-    UdpHeader udpHeader;
-    Ipv4Header ipv4Header;
-    UbMAExtTah MAExtTaHeader;
+    TraceReceivedDataPacket(ctx);
     Ptr<Packet> ackp = Create<Packet>(0);
-    p->RemoveHeader(pktHeader);
-    p->RemoveHeader(NetworkHeader);
-    p->RemoveHeader(ipv4Header);
-    p->RemoveHeader(udpHeader);
-    p->RemoveHeader(TpHeader);
-    p->RemoveHeader(TaHeader); // 处理接收包信息
-    p->RemoveHeader(MAExtTaHeader);
-    const uint32_t payloadBytes = p->GetSize();
-    const uint32_t logicalBytes = MAExtTaHeader.GetLength();
-    uint64_t psn = TpHeader.GetPsn();
-    m_hasReceivedAnyPsn = true;
-    m_maxRcvPsn = std::max(m_maxRcvPsn, psn);
-    NS_LOG_DEBUG("[Transport channel] Recv packet."
-                  << " PacketUid: "  << p->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << psn
-                  << " PacketType: Packet"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << p->GetSize());
-    UbFlowTag flowTag;
-    p->PeekPacketTag(flowTag);
+    ackp->AddPacketTag(ctx.flowTag);
+    UbAckTransactionHeader AckTaHeader;
+    UbCongestionExtTph CETPH;
     std::vector<Ptr<UbWqeSegment>> completedTaUnits;
-    if (m_pktTraceEnabled) {
-        UbPacketTraceTag traceTag;
-        p->PeekPacketTag(traceTag);
-        TpRecvNotify(p->GetUid(), psn, m_dest, m_src, m_dstTpn, m_tpn,
-                     PacketType::PACKET, p->GetSize(), flowTag.GetFlowId(), "", traceTag);
-    }
-    ackp->AddPacketTag(flowTag);
-    const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(psn);
+    const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
     if (receiveDecision.suppressResponse) {
         NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
                      << receiveDecision.responsePsn << "}");
@@ -1336,21 +1348,21 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
     if (receiveDecision.shouldNak) {
         const uint64_t nakPsn = receiveDecision.responsePsn;
-        TpHeader.SetTPOpcode(receiveDecision.responseOpcode);
-        TpHeader.SetRspSt(0);
-        TpHeader.SetRspInfo(0);
-        TpHeader.SetPsn(static_cast<uint32_t>(nakPsn));
-        TpHeader.SetSrcTpn(m_tpn);
-        TpHeader.SetDestTpn(m_dstTpn);
+        ctx.transportHeader.SetTPOpcode(receiveDecision.responseOpcode);
+        ctx.transportHeader.SetRspSt(0);
+        ctx.transportHeader.SetRspInfo(0);
+        ctx.transportHeader.SetPsn(static_cast<uint32_t>(nakPsn));
+        ctx.transportHeader.SetSrcTpn(m_tpn);
+        ctx.transportHeader.SetDestTpn(m_dstTpn);
         AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-        AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
-        AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
+        AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
+        AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
         ackp->AddHeader(AckTaHeader);
-        ackp->AddHeader(TpHeader);
-        ackp->AddHeader(udpHeader);
-        UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());
-        ackp->AddHeader(NetworkHeader);
-        UbDataLink::GenPacketHeader(ackp, false, true, pktHeader.GetCreditTargetVL(), pktHeader.GetPacketVL(),
+        ackp->AddHeader(ctx.transportHeader);
+        ackp->AddHeader(ctx.udpHeader);
+        UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
+        ackp->AddHeader(ctx.networkHeader);
+        UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
             0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
         if (m_ackQ.empty()) {
             m_headArrivalTime = Simulator::Now();
@@ -1367,12 +1379,16 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         TriggerTransportTransmit();
         return;
     }
-    if (TpHeader.GetLastPacket()) {
+    if (ctx.transportHeader.GetLastPacket()) {
         // 尾包被接收
-        LastPacketReceivesNotify(m_nodeId, TpHeader.GetSrcTpn(), TpHeader.GetDestTpn(), TpHeader.GetTpMsn(),
-            TpHeader.GetPsn(), m_dport);
+        LastPacketReceivesNotify(m_nodeId,
+                                  ctx.transportHeader.GetSrcTpn(),
+                                  ctx.transportHeader.GetDestTpn(),
+                                  ctx.transportHeader.GetTpMsn(),
+                                  ctx.transportHeader.GetPsn(),
+                                  m_dport);
     }
-    if (IsRepeatPacket(psn)) {
+    if (IsRepeatPacket(ctx.psn)) {
         const UbRetransReceiveDecision decision =
             m_retrans->BuildReceiveDecisionForCurrentState();
         if (decision.suppressResponse)
@@ -1396,33 +1412,33 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
             SAETPH = *decision.selectiveAckHeader;
         }
 
-        TpHeader.SetTPOpcode(responseOpcode);
-        TpHeader.SetRspSt(0);
-        TpHeader.SetRspInfo(0);
-        TpHeader.SetPsn(static_cast<uint32_t>(ackPsn));
-        TpHeader.SetSrcTpn(m_tpn);
-        TpHeader.SetDestTpn(m_dstTpn);
+        ctx.transportHeader.SetTPOpcode(responseOpcode);
+        ctx.transportHeader.SetRspSt(0);
+        ctx.transportHeader.SetRspInfo(0);
+        ctx.transportHeader.SetPsn(static_cast<uint32_t>(ackPsn));
+        ctx.transportHeader.SetSrcTpn(m_tpn);
+        ctx.transportHeader.SetDestTpn(m_dstTpn);
         if (responseOpcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)
         {
             CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(0, 0);
         }
         AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-        AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
-        AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
+        AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
+        AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
         ackp->AddHeader(AckTaHeader);
         if (selectiveAck)
         {
             ackp->AddHeader(SAETPH);
         }
-        if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
-            TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
+        if (ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
+            ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
             ackp->AddHeader(CETPH);
         }
-        ackp->AddHeader(TpHeader);
-        ackp->AddHeader(udpHeader);
-        UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());
-        ackp->AddHeader(NetworkHeader);
-        UbDataLink::GenPacketHeader(ackp, false, true, pktHeader.GetCreditTargetVL(), pktHeader.GetPacketVL(),
+        ackp->AddHeader(ctx.transportHeader);
+        ackp->AddHeader(ctx.udpHeader);
+        UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
+        ackp->AddHeader(ctx.networkHeader);
+        UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
             0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
         if (m_ackQ.empty()) {
             m_headArrivalTime = Simulator::Now();
@@ -1442,23 +1458,23 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
     uint32_t psnStart = 0;
     uint32_t psnEnd = 0;
-    if (psn >= m_psnRecvNxt) {
+    if (ctx.psn >= m_psnRecvNxt) {
         // psn=m_psnRecvNxt代表顺序收到包，psn>m_psnRecvNxt代表乱序
-        const bool outOfOrderPacket = psn > m_psnRecvNxt;
-        if (!SetBitmap(psn)) {
+        const bool outOfOrderPacket = ctx.psn > m_psnRecvNxt;
+        if (!SetBitmap(ctx.psn)) {
             // 超出bitmap允许的乱序规格了,先空着
             NS_LOG_WARN("Over Out-of-Order! Max Out-of-Order :" << m_psnOooThreshold);
             return;
         }
         // 记录包号和size
-        m_congestionCtrl->OnReceiverDataPacketReceived(psn, payloadBytes, NetworkHeader);
-        m_bufferedInboundPackets[psn] = {TpHeader,
-                                         TaHeader,
-                                         logicalBytes,
-                                         payloadBytes,
-                                         flowTag.GetFlowId()};
+        m_congestionCtrl->OnReceiverDataPacketReceived(ctx.psn, ctx.payloadBytes, ctx.networkHeader);
+        m_bufferedInboundPackets[ctx.psn] = {ctx.transportHeader,
+                                             ctx.transactionHeader,
+                                             ctx.logicalBytes,
+                                             ctx.payloadBytes,
+                                             ctx.flowTag.GetFlowId()};
         if (outOfOrderPacket) {
-            NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{" << psn
+            NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{" << ctx.psn
                         << "} expectedPsn:{" << m_psnRecvNxt << "}");
             if (receiveDecision.dropPacket) {
                 return;
@@ -1527,30 +1543,30 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
 
     NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << ackPsn << " node: " << m_src);
-    TpHeader.SetTPOpcode(decision.responseOpcode);
-    TpHeader.SetRspSt(0);
-    TpHeader.SetRspInfo(0);
+    ctx.transportHeader.SetTPOpcode(decision.responseOpcode);
+    ctx.transportHeader.SetRspSt(0);
+    ctx.transportHeader.SetRspInfo(0);
     CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
-    TpHeader.SetPsn(static_cast<uint32_t>(ackPsn));
-    TpHeader.SetSrcTpn(m_tpn);
-    TpHeader.SetDestTpn(m_dstTpn);
+    ctx.transportHeader.SetPsn(static_cast<uint32_t>(ackPsn));
+    ctx.transportHeader.SetSrcTpn(m_tpn);
+    ctx.transportHeader.SetDestTpn(m_dstTpn);
     AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-    AckTaHeader.SetIniTaSsn(TaHeader.GetIniTaSsn());
-    AckTaHeader.SetIniRcId(TaHeader.GetIniRcId());
+    AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
+    AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
     ackp->AddHeader(AckTaHeader);
     if (selectiveAck)
     {
         ackp->AddHeader(SAETPH);
     }
-    if (TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
-        TpHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
+    if (ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
+        ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
         ackp->AddHeader(CETPH);
     }
-    ackp->AddHeader(TpHeader);
-    ackp->AddHeader(udpHeader);
-    UbPort::AddIpv4Header(ackp, ipv4Header.GetDestination(), ipv4Header.GetSource());
-    ackp->AddHeader(NetworkHeader);
-    UbDataLink::GenPacketHeader(ackp, false, true, pktHeader.GetCreditTargetVL(), pktHeader.GetPacketVL(),
+    ackp->AddHeader(ctx.transportHeader);
+    ackp->AddHeader(ctx.udpHeader);
+    UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
+    ackp->AddHeader(ctx.networkHeader);
+    UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
         0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
     if (m_ackQ.empty()) {
         m_headArrivalTime = Simulator::Now();
