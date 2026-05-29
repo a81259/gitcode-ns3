@@ -516,30 +516,15 @@ void UbTransportChannel::DoDispose()
  * Called by Switch Allocator during scheduling to retrieve the next packet for transmission
  */
 Ptr<Packet>
-UbTransportChannel::PopCnpPacket()
+UbTransportChannel::PopQueuedPacket(std::queue<Ptr<Packet>>& packetQ)
 {
-    if (m_cnpQ.empty()) {
+    if (packetQ.empty()) {
         return nullptr;
     }
 
-    Ptr<Packet> packet = m_cnpQ.front();
-    m_cnpQ.pop();
-    if (!IsEmpty()) {
-        m_headArrivalTime = Simulator::Now();
-    }
-    return packet;
-}
-
-Ptr<Packet>
-UbTransportChannel::PopAckPacket()
-{
-    if (m_ackQ.empty()) {
-        return nullptr;
-    }
-
-    Ptr<Packet> packet = m_ackQ.front();
-    m_ackQ.pop();
-    if (!IsEmpty()) {
+    Ptr<Packet> packet = packetQ.front();
+    packetQ.pop();
+    if (HasPendingTransmitWork()) {
         m_headArrivalTime = Simulator::Now();
     }
     return packet;
@@ -662,7 +647,7 @@ UbTransportChannel::TryGetNextNewDataPacket()
         if (currentSegment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
             ApplyNextWqeSegment();
         }
-        if (!IsEmpty()) {
+        if (HasPendingTransmitWork()) {
             m_headArrivalTime = Simulator::Now();
         }
         return p;
@@ -672,19 +657,19 @@ UbTransportChannel::TryGetNextNewDataPacket()
 
 Ptr<Packet> UbTransportChannel::GetNextPacket()
 {
-    Ptr<Packet> packet = PopCnpPacket();
+    Ptr<Packet> packet = PopQueuedPacket(m_cnpQ);
     if (packet != nullptr) {
         return packet;
     }
 
-    packet = PopAckPacket();
+    packet = PopQueuedPacket(m_ackQ);
     if (packet != nullptr) {
         return packet;
     }
 
     packet = m_retrans->TryGetNextRetransmissionPacket();
     if (packet != nullptr) {
-        if (!IsEmpty()) {
+        if (HasPendingTransmitWork()) {
             m_headArrivalTime = Simulator::Now();
         }
         return packet;
@@ -1247,7 +1232,7 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     if (m_wqeSegmentVector.size() == 0) {
         m_retrans->CancelTimer(); // 如果确认流都完成，取消定时器
     }
-    const bool transportIdle = IsEmpty();
+    const bool transportIdle = !HasPendingTransmitWork();
     if (transportIdle) {
         m_congestionCtrl->OnSenderTransportIdle();
     }
@@ -1711,19 +1696,24 @@ void UbTransportChannel::ApplyNextWqeSegment()
 
 bool UbTransportChannel::IsEmpty()
 {
+    return !HasPendingTransmitWork();
+}
+
+bool UbTransportChannel::HasPendingTransmitWork()
+{
     if (!m_cnpQ.empty()) {
-        return false;
-    }
-    if (!m_ackQ.empty()) {
-        return false;
-    }
-    if (m_retrans->CanSendSelectiveRetransmission()) {
-        return false;
-    }
-    if (m_wqeSegmentVector.empty()) {
         return true;
     }
-    return m_psnSndNxt >= m_tpPsnCnt;
+    if (!m_ackQ.empty()) {
+        return true;
+    }
+    if (m_retrans->CanSendSelectiveRetransmission()) {
+        return true;
+    }
+    if (m_wqeSegmentVector.empty()) {
+        return false;
+    }
+    return m_psnSndNxt < m_tpPsnCnt;
 }
 
 bool UbTransportChannel::IsLimited()

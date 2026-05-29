@@ -330,8 +330,8 @@ private:
 
     void DoDispose() override;
 
-    Ptr<Packet> PopCnpPacket();
-    Ptr<Packet> PopAckPacket();
+    bool HasPendingTransmitWork();
+    Ptr<Packet> PopQueuedPacket(std::queue<Ptr<Packet>>& packetQ);
     Ptr<Packet> TryGetNextNewDataPacket();
     Ptr<UbTransaction> GetTransaction();
     Ptr<UbWqeSegment> TrackInboundTaPacket(const UbTransportHeader& tpHeader,
