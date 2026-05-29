@@ -389,6 +389,9 @@ private:
     bool ParseTransportResponsePacket(Ptr<Packet> packet, TransportResponseContext& ctx);
     bool HandleReceivedCnp(const TransportResponseContext& ctx);
     bool HandleReceivedTpNak(const TransportResponseContext& ctx);
+    bool HandleReceivedAckOrSack(const TransportResponseContext& ctx,
+                                 uint64_t previousSndUna,
+                                 UbRetransAckResult& ackResult);
     void TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx);
     Ptr<Packet> BuildTransportResponsePacket(const ReceivedDataPacketContext& ctx,
                                              const AckResponseContext& response);

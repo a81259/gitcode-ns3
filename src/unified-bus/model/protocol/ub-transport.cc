@@ -1167,6 +1167,42 @@ UbTransportChannel::HandleReceivedTpNak(const TransportResponseContext& ctx)
     return true;
 }
 
+bool
+UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
+                                            uint64_t,
+                                            UbRetransAckResult& ackResult)
+{
+    if (ctx.hasCetph && !ctx.hasSaetph) {
+        m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
+                                                         ctx.transportHeader.GetPsn(),
+                                                         ctx.congestionHeader);
+    }
+    if (ctx.hasSaetph && m_pktTraceEnabled) {
+        UbFlowTag flowTag;
+        ctx.packet->PeekPacketTag(flowTag);
+        UbPacketTraceTag traceTag;
+        ctx.packet->PeekPacketTag(traceTag);
+        TpRecvNotify(ctx.packet->GetUid(), ctx.transportHeader.GetPsn(),
+                     m_dest, m_src, m_dstTpn, m_tpn,
+                     PacketType::SACK, ctx.packet->GetSize(), flowTag.GetFlowId(),
+                     FormatSelectiveAckInfo(ctx.transportHeader, ctx.selectiveAckHeader),
+                     traceTag);
+    }
+
+    ackResult = m_retrans->OnTransportResponse(
+        ctx.transportHeader,
+        ctx.opcode,
+        ctx.hasSaetph ? &ctx.selectiveAckHeader : nullptr,
+        ctx.hasCetph ? &ctx.congestionHeader : nullptr);
+    if (ackResult.ignoreResponse) {
+        return false;
+    }
+    if (ackResult.triggerTransmit) {
+        TriggerTransportTransmit();
+    }
+    return true;
+}
+
 /**
  * @brief Receive Transport Acknowledgment message
  * @param tpack Transport acknowledgment message to process
@@ -1186,32 +1222,11 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     if (HandleReceivedTpNak(ctx)) {
         return;
     }
-    if (ctx.hasCetph && !ctx.hasSaetph) {
-        m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
-                                                         ctx.transportHeader.GetPsn(),
-                                                         ctx.congestionHeader);
-    }
-    if (ctx.hasSaetph && m_pktTraceEnabled) {
-        UbFlowTag flowTag;
-        p->PeekPacketTag(flowTag);
-        UbPacketTraceTag traceTag;
-        p->PeekPacketTag(traceTag);
-        TpRecvNotify(p->GetUid(), ctx.transportHeader.GetPsn(), m_dest, m_src, m_dstTpn, m_tpn,
-                     PacketType::SACK, p->GetSize(), flowTag.GetFlowId(),
-                     FormatSelectiveAckInfo(ctx.transportHeader, ctx.selectiveAckHeader), traceTag);
-    }
 
     const uint64_t previousSndUna = m_psnSndUna;
-    const UbRetransAckResult ackResult =
-        m_retrans->OnTransportResponse(ctx.transportHeader,
-                                       ctx.opcode,
-                                       ctx.hasSaetph ? &ctx.selectiveAckHeader : nullptr,
-                                       ctx.hasCetph ? &ctx.congestionHeader : nullptr);
-    if (ackResult.ignoreResponse) {
+    UbRetransAckResult ackResult;
+    if (!HandleReceivedAckOrSack(ctx, previousSndUna, ackResult)) {
         return;
-    }
-    if (ackResult.triggerTransmit) {
-        TriggerTransportTransmit();
     }
 
     // 拿到多个packet后组成taack发送
