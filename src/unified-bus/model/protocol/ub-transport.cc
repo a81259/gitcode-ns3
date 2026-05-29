@@ -552,8 +552,8 @@ UbTransportChannel::PopQueuedPacket(std::queue<Ptr<Packet>>& packetQ)
     return packet;
 }
 
-Ptr<Packet>
-UbTransportChannel::TryGetNextNewDataPacket()
+bool
+UbTransportChannel::CanTrySendNewDataPacket()
 {
     if (m_wqeSegmentVector.empty()) {
         NS_LOG_DEBUG("No WQE segments available to send");
@@ -569,7 +569,7 @@ UbTransportChannel::TryGetNextNewDataPacket()
                           static_cast<uint32_t>(m_wqeSegmentVector.size()),
                           static_cast<uint32_t>(m_ackQ.size()),
                           static_cast<uint32_t>(m_cnpQ.size()));
-        return nullptr;
+        return false;
     }
 
     if (IsInflightLimited()) {
@@ -587,20 +587,29 @@ UbTransportChannel::TryGetNextNewDataPacket()
                           static_cast<uint32_t>(m_wqeSegmentVector.size()),
                           static_cast<uint32_t>(m_ackQ.size()),
                           static_cast<uint32_t>(m_cnpQ.size()));
-        return nullptr;
+        return false;
     }
+
+    return true;
+}
+
+bool
+UbTransportChannel::BuildNextDataSendContext(NewDataSendContext& ctx)
+{
+    // This helper selects only a new data packet. Retransmission packets are handled earlier.
     for (size_t i = 0; i < m_wqeSegmentVector.size(); ++i) {
         Ptr<UbWqeSegment> currentSegment = m_wqeSegmentVector[i];
-
         if (currentSegment == nullptr || currentSegment->IsSentCompleted()) {
             continue;
         }
-        const uint32_t progressBytes = GetProgressBytesThisPacket(currentSegment);
-        const uint32_t payloadSize = GetPayloadBytesThisPacket(currentSegment, progressBytes);
-        const uint32_t wireLengthBytes = GetWireLengthBytes(currentSegment, payloadSize);
-        const uint32_t totalProgressBytes = GetTotalProgressBytes(currentSegment);
 
-        if (m_congestionCtrl->IsCcLimited(progressBytes)) {
+        ctx.segment = currentSegment;
+        ctx.progressBytes = GetProgressBytesThisPacket(currentSegment);
+        ctx.payloadBytes = GetPayloadBytesThisPacket(currentSegment, ctx.progressBytes);
+        ctx.wireLengthBytes = GetWireLengthBytes(currentSegment, ctx.payloadBytes);
+        ctx.totalProgressBytes = GetTotalProgressBytes(currentSegment);
+
+        if (m_congestionCtrl->IsCcLimited(ctx.progressBytes)) {
             m_sendWindowLimited = true;
             TraceTpDebugState(m_nodeId,
                               m_tpn,
@@ -614,66 +623,85 @@ UbTransportChannel::TryGetNextNewDataPacket()
                               static_cast<uint32_t>(m_wqeSegmentVector.size()),
                               static_cast<uint32_t>(m_ackQ.size()),
                               static_cast<uint32_t>(m_cnpQ.size()));
-            return nullptr;
+            return false;
         }
 
-        Ptr<Packet> p = GenDataPacket(currentSegment, payloadSize, wireLengthBytes, progressBytes);
-        m_retrans->OnNewDataPacketSent(m_psnSndNxt,
-                                       p,
-                                       payloadSize,
-                                       progressBytes);
-
-        m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, progressBytes);
-
-        if (currentSegment->GetBytesLeft() == totalProgressBytes) {
-            // wqe segment first packet
-            FirstPacketSendsNotify(m_nodeId, currentSegment->GetTaskId(), m_tpn, m_dstTpn,
-                currentSegment->GetTpMsn(), m_psnSndNxt, m_sport);
-        }
-        if (currentSegment->GetBytesLeft() == progressBytes) {
-            // wqe segment last packet
-            LastPacketSendsNotify(m_nodeId, currentSegment->GetTaskId(), m_tpn, m_dstTpn,
-                currentSegment->GetTpMsn(), m_psnSndNxt, m_sport);
-        }
-        // PacketUid: TaskId: Tpn: Psn: PacketType: Src: Dst: PacketSize:
-        NS_LOG_DEBUG("[Transport channel] Send packet."
-                  << " PacketUid: " << p->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " DstTpn: " << m_dstTpn
-                  << " Psn: " << m_psnSndNxt
-                  << " PacketType: Packet"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << p->GetSize()
-                  << " TaskId: " << currentSegment->GetTaskId());
-        currentSegment->UpdateSentBytes(progressBytes);
-        m_psnSndNxt++;
-        TraceTpDebugState(m_nodeId,
-                          m_tpn,
-                          "SEND_PACKET",
-                          m_psnSndNxt,
-                          m_psnSndUna,
-                          m_maxInflightPacketSize,
-                          false,
-                          m_sendWindowLimited,
-                          GetActiveSendSegmentCount(),
-                          static_cast<uint32_t>(m_wqeSegmentVector.size()),
-                          static_cast<uint32_t>(m_ackQ.size()),
-                          static_cast<uint32_t>(m_cnpQ.size()));
-        // 发送时，更新定时器时间
-        m_retrans->StartTimerIfNeeded();
-        // 浅流水只限制仍可继续发送的活跃 segment。
-        // 当前 segment 最后一个 data packet 发出后，就尝试补一个新的 segment，
-        // 但已发完未 ACK 的 segment 仍保留在账本中供 ACK/重传使用。
-        if (currentSegment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
-            ApplyNextWqeSegment();
-        }
-        if (HasPendingTransmitWork()) {
-            m_headArrivalTime = Simulator::Now();
-        }
-        return p;
+        return true;
     }
-    return nullptr;
+
+    return false;
+}
+
+Ptr<Packet>
+UbTransportChannel::TryGetNextNewDataPacket()
+{
+    if (!CanTrySendNewDataPacket()) {
+        return nullptr;
+    }
+
+    NewDataSendContext ctx;
+    if (!BuildNextDataSendContext(ctx)) {
+        return nullptr;
+    }
+
+    Ptr<Packet> p = GenDataPacket(ctx.segment,
+                                  ctx.payloadBytes,
+                                  ctx.wireLengthBytes,
+                                  ctx.progressBytes);
+    m_retrans->OnNewDataPacketSent(m_psnSndNxt,
+                                   p,
+                                   ctx.payloadBytes,
+                                   ctx.progressBytes);
+
+    m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, ctx.progressBytes);
+
+    if (ctx.segment->GetBytesLeft() == ctx.totalProgressBytes) {
+        // wqe segment first packet
+        FirstPacketSendsNotify(m_nodeId, ctx.segment->GetTaskId(), m_tpn, m_dstTpn,
+            ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
+    }
+    if (ctx.segment->GetBytesLeft() == ctx.progressBytes) {
+        // wqe segment last packet
+        LastPacketSendsNotify(m_nodeId, ctx.segment->GetTaskId(), m_tpn, m_dstTpn,
+            ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
+    }
+    // PacketUid: TaskId: Tpn: Psn: PacketType: Src: Dst: PacketSize:
+    NS_LOG_DEBUG("[Transport channel] Send packet."
+              << " PacketUid: " << p->GetUid()
+              << " Tpn: " << m_tpn
+              << " DstTpn: " << m_dstTpn
+              << " Psn: " << m_psnSndNxt
+              << " PacketType: Packet"
+              << " Src: " << m_src
+              << " Dst: " << m_dest
+              << " PacketSize: " << p->GetSize()
+              << " TaskId: " << ctx.segment->GetTaskId());
+    ctx.segment->UpdateSentBytes(ctx.progressBytes);
+    m_psnSndNxt++;
+    TraceTpDebugState(m_nodeId,
+                      m_tpn,
+                      "SEND_PACKET",
+                      m_psnSndNxt,
+                      m_psnSndUna,
+                      m_maxInflightPacketSize,
+                      false,
+                      m_sendWindowLimited,
+                      GetActiveSendSegmentCount(),
+                      static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                      static_cast<uint32_t>(m_ackQ.size()),
+                      static_cast<uint32_t>(m_cnpQ.size()));
+    // 发送时，更新定时器时间
+    m_retrans->StartTimerIfNeeded();
+    // 浅流水只限制仍可继续发送的活跃 segment。
+    // 当前 segment 最后一个 data packet 发出后，就尝试补一个新的 segment，
+    // 但已发完未 ACK 的 segment 仍保留在账本中供 ACK/重传使用。
+    if (ctx.segment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
+        ApplyNextWqeSegment();
+    }
+    if (HasPendingTransmitWork()) {
+        m_headArrivalTime = Simulator::Now();
+    }
+    return p;
 }
 
 Ptr<Packet> UbTransportChannel::GetNextPacket()

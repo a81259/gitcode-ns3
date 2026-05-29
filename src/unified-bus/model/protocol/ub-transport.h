@@ -371,11 +371,22 @@ private:
         bool isCnp{false};
     };
 
+    struct NewDataSendContext
+    {
+        Ptr<UbWqeSegment> segment;
+        uint32_t progressBytes{0};
+        uint32_t payloadBytes{0};
+        uint32_t wireLengthBytes{0};
+        uint32_t totalProgressBytes{0};
+    };
+
     void DoDispose() override;
 
     bool HasPendingTransmitWork();
     Ptr<Packet> PopQueuedPacket(std::queue<Ptr<Packet>>& packetQ);
     Ptr<Packet> TryGetNextNewDataPacket();
+    bool CanTrySendNewDataPacket();
+    bool BuildNextDataSendContext(NewDataSendContext& ctx);
     Ptr<UbTransaction> GetTransaction();
     Ptr<UbWqeSegment> TrackInboundTaPacket(const UbTransportHeader& tpHeader,
                                            const UbTransactionHeader& taHeader,
