@@ -1395,6 +1395,78 @@ UbTransportChannel::EnqueueTransportResponse(Ptr<Packet> response,
     TriggerTransportTransmit();
 }
 
+bool
+UbTransportChannel::HandleImmediateRetransReceiveDecision(
+    const ReceivedDataPacketContext& ctx,
+    const UbRetransReceiveDecision& decision)
+{
+    if (decision.suppressResponse) {
+        NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
+                     << decision.responsePsn << "}");
+        return true;
+    }
+    if (!decision.shouldNak) {
+        return false;
+    }
+
+    AckResponseContext response;
+    response.opcode = decision.responseOpcode;
+    response.psn = decision.responsePsn;
+    Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
+    EnqueueTransportResponse(responsePacket, "tpnak", response.psn);
+    return true;
+}
+
+bool
+UbTransportChannel::HandleRepeatedDataPacket(const ReceivedDataPacketContext& ctx)
+{
+    if (!IsRepeatPacket(ctx.psn)) {
+        return false;
+    }
+
+    const UbRetransReceiveDecision decision =
+        m_retrans->BuildReceiveDecisionForCurrentState();
+    if (decision.suppressResponse) {
+        if (decision.selectiveAck) {
+            NS_LOG_WARN("Suppressing duplicate-packet TPSACK because SelectiveAckBitmapBits cannot be resolved");
+        }
+        return true;
+    }
+
+    AckResponseContext response;
+    response.opcode = decision.selectiveAck ? decision.responseOpcode
+                                            : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
+    response.psn = decision.responsePsn;
+    response.selectiveAck = decision.selectiveAck;
+    if (decision.selectiveAck) {
+        NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
+                      "SELECTIVE receive decision requires SAETPH.");
+        response.selectiveAckHeader = *decision.selectiveAckHeader;
+    }
+    if (response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
+        response.congestionHeader =
+            m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(0, 0);
+    }
+    Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
+    EnqueueTransportResponse(responsePacket, "ack", response.psn);
+    return true;
+}
+
+void
+UbTransportChannel::NotifyLastPacketReceived(const ReceivedDataPacketContext& ctx)
+{
+    if (!ctx.transportHeader.GetLastPacket()) {
+        return;
+    }
+
+    LastPacketReceivesNotify(m_nodeId,
+                             ctx.transportHeader.GetSrcTpn(),
+                             ctx.transportHeader.GetDestTpn(),
+                             ctx.transportHeader.GetTpMsn(),
+                             ctx.transportHeader.GetPsn(),
+                             m_dport);
+}
+
 /**
  * @brief Receive Data Packets
  * @param tpack Transport acknowledgment message to process
@@ -1410,57 +1482,11 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     TraceReceivedDataPacket(ctx);
     std::vector<Ptr<UbWqeSegment>> completedTaUnits;
     const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
-    if (receiveDecision.suppressResponse) {
-        NS_LOG_DEBUG("Suppress repeated GBN TPNAK,tpn:{" << m_tpn << "} psn:{"
-                     << receiveDecision.responsePsn << "}");
+    if (HandleImmediateRetransReceiveDecision(ctx, receiveDecision)) {
         return;
     }
-    if (receiveDecision.shouldNak) {
-        AckResponseContext response;
-        response.opcode = receiveDecision.responseOpcode;
-        response.psn = receiveDecision.responsePsn;
-        Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
-        EnqueueTransportResponse(responsePacket, "tpnak", response.psn);
-        return;
-    }
-    if (ctx.transportHeader.GetLastPacket()) {
-        // 尾包被接收
-        LastPacketReceivesNotify(m_nodeId,
-                                  ctx.transportHeader.GetSrcTpn(),
-                                  ctx.transportHeader.GetDestTpn(),
-                                  ctx.transportHeader.GetTpMsn(),
-                                  ctx.transportHeader.GetPsn(),
-                                  m_dport);
-    }
-    if (IsRepeatPacket(ctx.psn)) {
-        const UbRetransReceiveDecision decision =
-            m_retrans->BuildReceiveDecisionForCurrentState();
-        if (decision.suppressResponse)
-        {
-            if (decision.selectiveAck)
-            {
-                NS_LOG_WARN("Suppressing duplicate-packet TPSACK because SelectiveAckBitmapBits cannot be resolved");
-            }
-            return;
-        }
-
-        const bool selectiveAck = decision.selectiveAck;
-        AckResponseContext response;
-        response.opcode = selectiveAck ? decision.responseOpcode
-                                       : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
-        response.psn = decision.responsePsn;
-        response.selectiveAck = selectiveAck;
-        if (selectiveAck) {
-            NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
-                          "SELECTIVE receive decision requires SAETPH.");
-            response.selectiveAckHeader = *decision.selectiveAckHeader;
-        }
-        if (response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
-            response.congestionHeader =
-                m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(0, 0);
-        }
-        Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
-        EnqueueTransportResponse(responsePacket, "ack", response.psn);
+    NotifyLastPacketReceived(ctx);
+    if (HandleRepeatedDataPacket(ctx)) {
         return;
     }
     uint32_t psnStart = 0;
