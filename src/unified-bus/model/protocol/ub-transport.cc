@@ -1112,6 +1112,61 @@ UbTransportChannel::ParseTransportResponsePacket(Ptr<Packet> packet,
     return true;
 }
 
+bool
+UbTransportChannel::HandleReceivedCnp(const TransportResponseContext& ctx)
+{
+    if (!ctx.isCnp) {
+        return false;
+    }
+
+    // CNP is a congestion-control path; it does not advance ACK state.
+    UbCongestionExtTph notification;
+    notification.SetAckSequence(0);
+    notification.SetRawBytes4to7(
+        (static_cast<uint32_t>(ctx.cnpHeader.GetEcn() & 0x3U) << 30) |
+        (static_cast<uint32_t>(ctx.cnpHeader.GetLocation() ? 1U : 0U) << 29));
+    m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP,
+                                                     ctx.transportHeader.GetPsn(),
+                                                     notification);
+    NS_LOG_DEBUG("Recv TP CNP");
+    return true;
+}
+
+bool
+UbTransportChannel::HandleReceivedTpNak(const TransportResponseContext& ctx)
+{
+    if (!ctx.isTpnak) {
+        return false;
+    }
+
+    // TPNAK is negative feedback for retransmission; it does not enter ACK progress finalization.
+    const uint64_t nakPsn = ctx.transportHeader.GetPsn();
+    NS_LOG_DEBUG("[Transport channel] Recv tpnak."
+              << " PacketUid: " << ctx.packet->GetUid()
+              << " Tpn: " << m_tpn
+              << " Psn: " << nakPsn
+              << " PacketType: Nak"
+              << " Src: " << m_src
+              << " Dst: " << m_dest
+              << " PacketSize: " << ctx.packet->GetSize());
+    if (m_pktTraceEnabled) {
+        UbFlowTag flowTag;
+        ctx.packet->PeekPacketTag(flowTag);
+        UbPacketTraceTag traceTag;
+        ctx.packet->PeekPacketTag(traceTag);
+        TpRecvNotify(ctx.packet->GetUid(), nakPsn, m_dest, m_src, m_dstTpn, m_tpn,
+                     PacketType::NAK, ctx.packet->GetSize(), flowTag.GetFlowId(),
+                     FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
+    }
+
+    const UbRetransAckResult ackResult =
+        m_retrans->OnTransportResponse(ctx.transportHeader, ctx.opcode, nullptr, nullptr);
+    if (ackResult.triggerTransmit) {
+        TriggerTransportTransmit();
+    }
+    return true;
+}
+
 /**
  * @brief Receive Transport Acknowledgment message
  * @param tpack Transport acknowledgment message to process
@@ -1123,42 +1178,12 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     if (!ParseTransportResponsePacket(p, ctx)) {
         return;
     }
-    if (ctx.isCnp) {
-        UbCongestionExtTph notification;
-        notification.SetAckSequence(0);
-        notification.SetRawBytes4to7(
-            (static_cast<uint32_t>(ctx.cnpHeader.GetEcn() & 0x3U) << 30) |
-            (static_cast<uint32_t>(ctx.cnpHeader.GetLocation() ? 1U : 0U) << 29));
-        m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP,
-                                                         ctx.transportHeader.GetPsn(),
-                                                         notification);
-        NS_LOG_DEBUG("Recv TP CNP");
+
+    if (HandleReceivedCnp(ctx)) {
         return;
     }
-    if (ctx.isTpnak) {
-        const uint64_t nakPsn = ctx.transportHeader.GetPsn();
-        NS_LOG_DEBUG("[Transport channel] Recv tpnak."
-                  << " PacketUid: " << p->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << nakPsn
-                  << " PacketType: Nak"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << p->GetSize());
-        if (m_pktTraceEnabled) {
-            UbFlowTag flowTag;
-            p->PeekPacketTag(flowTag);
-            UbPacketTraceTag traceTag;
-            p->PeekPacketTag(traceTag);
-            TpRecvNotify(p->GetUid(), nakPsn, m_dest, m_src, m_dstTpn, m_tpn,
-                         PacketType::NAK, p->GetSize(), flowTag.GetFlowId(),
-                         FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
-        }
-        const UbRetransAckResult ackResult =
-            m_retrans->OnTransportResponse(ctx.transportHeader, ctx.opcode, nullptr, nullptr);
-        if (ackResult.triggerTransmit) {
-            TriggerTransportTransmit();
-        }
+
+    if (HandleReceivedTpNak(ctx)) {
         return;
     }
     if (ctx.hasCetph && !ctx.hasSaetph) {

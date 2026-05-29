@@ -387,6 +387,8 @@ private:
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
     bool ParseReceivedDataPacket(Ptr<Packet> packet, ReceivedDataPacketContext& ctx);
     bool ParseTransportResponsePacket(Ptr<Packet> packet, TransportResponseContext& ctx);
+    bool HandleReceivedCnp(const TransportResponseContext& ctx);
+    bool HandleReceivedTpNak(const TransportResponseContext& ctx);
     void TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx);
     Ptr<Packet> BuildTransportResponsePacket(const ReceivedDataPacketContext& ctx,
                                              const AckResponseContext& response);
