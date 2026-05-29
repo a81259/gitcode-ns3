@@ -370,6 +370,9 @@ private:
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
     bool ParseReceivedDataPacket(Ptr<Packet> packet, ReceivedDataPacketContext& ctx);
     void TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx);
+    Ptr<Packet> BuildTransportResponsePacket(const ReceivedDataPacketContext& ctx,
+                                             const AckResponseContext& response);
+    void EnqueueTransportResponse(Ptr<Packet> response, const char* logType, uint64_t psn);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;

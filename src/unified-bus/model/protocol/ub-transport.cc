@@ -1322,6 +1322,79 @@ UbTransportChannel::TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx
     }
 }
 
+Ptr<Packet>
+UbTransportChannel::BuildTransportResponsePacket(const ReceivedDataPacketContext& ctx,
+                                                 const AckResponseContext& response)
+{
+    Ptr<Packet> responsePacket = Create<Packet>(0);
+    responsePacket->AddPacketTag(ctx.flowTag);
+
+    UbAckTransactionHeader ackTaHeader;
+    ackTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+    ackTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
+    ackTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
+
+    UbTransportHeader tpHeader = ctx.transportHeader;
+    tpHeader.SetTPOpcode(response.opcode);
+    tpHeader.SetRspSt(0);
+    tpHeader.SetRspInfo(0);
+    tpHeader.SetPsn(static_cast<uint32_t>(response.psn));
+    tpHeader.SetSrcTpn(m_tpn);
+    tpHeader.SetDestTpn(m_dstTpn);
+
+    responsePacket->AddHeader(ackTaHeader);
+    if (response.selectiveAck) {
+        NS_ASSERT_MSG(response.selectiveAckHeader.has_value(),
+                      "Selective response requires SAETPH.");
+        responsePacket->AddHeader(*response.selectiveAckHeader);
+    }
+    if (response.congestionHeader.has_value()) {
+        responsePacket->AddHeader(*response.congestionHeader);
+    }
+    responsePacket->AddHeader(tpHeader);
+    responsePacket->AddHeader(ctx.udpHeader);
+    UbPort::AddIpv4Header(responsePacket,
+                          ctx.ipv4Header.GetDestination(),
+                          ctx.ipv4Header.GetSource());
+    responsePacket->AddHeader(ctx.networkHeader);
+    UbDataLink::GenPacketHeader(responsePacket,
+                                false,
+                                true,
+                                ctx.dataLinkHeader.GetCreditTargetVL(),
+                                ctx.dataLinkHeader.GetPacketVL(),
+                                0,
+                                1,
+                                UbDatalinkHeaderConfig::PACKET_IPV4);
+    return responsePacket;
+}
+
+void
+UbTransportChannel::EnqueueTransportResponse(Ptr<Packet> response,
+                                             const char* logType,
+                                             uint64_t psn)
+{
+    if (m_ackQ.empty()) {
+        m_headArrivalTime = Simulator::Now();
+    }
+    m_ackQ.push(response);
+
+    std::string packetType = logType;
+    if (packetType == "tpnak") {
+        packetType = "Nak";
+    } else if (packetType == "ack") {
+        packetType = "Ack";
+    }
+    NS_LOG_DEBUG("[Transport channel] Send " << logType << ". "
+                  << " PacketUid: "  << response->GetUid()
+                  << " Tpn: " << m_tpn
+                  << " Psn: " << psn
+                  << " PacketType: " << packetType
+                  << " Src: " << m_src
+                  << " Dst: " << m_dest
+                  << " PacketSize: " << response->GetSize());
+    TriggerTransportTransmit();
+}
+
 /**
  * @brief Receive Data Packets
  * @param tpack Transport acknowledgment message to process
@@ -1335,10 +1408,6 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
 
     TraceReceivedDataPacket(ctx);
-    Ptr<Packet> ackp = Create<Packet>(0);
-    ackp->AddPacketTag(ctx.flowTag);
-    UbAckTransactionHeader AckTaHeader;
-    UbCongestionExtTph CETPH;
     std::vector<Ptr<UbWqeSegment>> completedTaUnits;
     const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
     if (receiveDecision.suppressResponse) {
@@ -1347,36 +1416,11 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         return;
     }
     if (receiveDecision.shouldNak) {
-        const uint64_t nakPsn = receiveDecision.responsePsn;
-        ctx.transportHeader.SetTPOpcode(receiveDecision.responseOpcode);
-        ctx.transportHeader.SetRspSt(0);
-        ctx.transportHeader.SetRspInfo(0);
-        ctx.transportHeader.SetPsn(static_cast<uint32_t>(nakPsn));
-        ctx.transportHeader.SetSrcTpn(m_tpn);
-        ctx.transportHeader.SetDestTpn(m_dstTpn);
-        AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-        AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
-        AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
-        ackp->AddHeader(AckTaHeader);
-        ackp->AddHeader(ctx.transportHeader);
-        ackp->AddHeader(ctx.udpHeader);
-        UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
-        ackp->AddHeader(ctx.networkHeader);
-        UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
-            0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
-        if (m_ackQ.empty()) {
-            m_headArrivalTime = Simulator::Now();
-        }
-        m_ackQ.push(ackp);
-        NS_LOG_DEBUG("[Transport channel] Send tpnak. "
-                  << " PacketUid: "  << ackp->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << nakPsn
-                  << " PacketType: Nak"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << ackp->GetSize());
-        TriggerTransportTransmit();
+        AckResponseContext response;
+        response.opcode = receiveDecision.responseOpcode;
+        response.psn = receiveDecision.responsePsn;
+        Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
+        EnqueueTransportResponse(responsePacket, "tpnak", response.psn);
         return;
     }
     if (ctx.transportHeader.GetLastPacket()) {
@@ -1401,59 +1445,22 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         }
 
         const bool selectiveAck = decision.selectiveAck;
-        const uint64_t ackPsn = decision.responsePsn;
-        const TpOpcode responseOpcode = selectiveAck ? decision.responseOpcode
-                                                     : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
-        UbSelectiveAckExtTph SAETPH;
-        if (selectiveAck)
-        {
+        AckResponseContext response;
+        response.opcode = selectiveAck ? decision.responseOpcode
+                                       : TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH;
+        response.psn = decision.responsePsn;
+        response.selectiveAck = selectiveAck;
+        if (selectiveAck) {
             NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
                           "SELECTIVE receive decision requires SAETPH.");
-            SAETPH = *decision.selectiveAckHeader;
+            response.selectiveAckHeader = *decision.selectiveAckHeader;
         }
-
-        ctx.transportHeader.SetTPOpcode(responseOpcode);
-        ctx.transportHeader.SetRspSt(0);
-        ctx.transportHeader.SetRspInfo(0);
-        ctx.transportHeader.SetPsn(static_cast<uint32_t>(ackPsn));
-        ctx.transportHeader.SetSrcTpn(m_tpn);
-        ctx.transportHeader.SetDestTpn(m_dstTpn);
-        if (responseOpcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)
-        {
-            CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(0, 0);
+        if (response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
+            response.congestionHeader =
+                m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(0, 0);
         }
-        AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-        AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
-        AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
-        ackp->AddHeader(AckTaHeader);
-        if (selectiveAck)
-        {
-            ackp->AddHeader(SAETPH);
-        }
-        if (ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
-            ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
-            ackp->AddHeader(CETPH);
-        }
-        ackp->AddHeader(ctx.transportHeader);
-        ackp->AddHeader(ctx.udpHeader);
-        UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
-        ackp->AddHeader(ctx.networkHeader);
-        UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
-            0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
-        if (m_ackQ.empty()) {
-            m_headArrivalTime = Simulator::Now();
-        }
-        m_ackQ.push(ackp); // 将ack放入队列
-        NS_LOG_DEBUG("[Transport channel] Send ack. "
-                  << " PacketUid: "  << ackp->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << ackPsn
-                  << " PacketType: Ack"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << ackp->GetSize());
-        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-        port->TriggerTransmit(); // 触发发送
+        Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
+        EnqueueTransportResponse(responsePacket, "ack", response.psn);
         return;
     }
     uint32_t psnStart = 0;
@@ -1532,56 +1539,24 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         return;
     }
 
-    const bool selectiveAck = decision.selectiveAck;
-    const uint64_t ackPsn = decision.responsePsn;
-    UbSelectiveAckExtTph SAETPH;
-    if (selectiveAck)
-    {
+    AckResponseContext response;
+    response.opcode = decision.responseOpcode;
+    response.psn = decision.responsePsn;
+    response.selectiveAck = decision.selectiveAck;
+    if (decision.selectiveAck) {
         NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
                       "SELECTIVE receive decision requires SAETPH.");
-        SAETPH = *decision.selectiveAckHeader;
+        response.selectiveAckHeader = *decision.selectiveAckHeader;
     }
-
-    NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << ackPsn << " node: " << m_src);
-    ctx.transportHeader.SetTPOpcode(decision.responseOpcode);
-    ctx.transportHeader.SetRspSt(0);
-    ctx.transportHeader.SetRspInfo(0);
-    CETPH = m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
-    ctx.transportHeader.SetPsn(static_cast<uint32_t>(ackPsn));
-    ctx.transportHeader.SetSrcTpn(m_tpn);
-    ctx.transportHeader.SetDestTpn(m_dstTpn);
-    AckTaHeader.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
-    AckTaHeader.SetIniTaSsn(ctx.transactionHeader.GetIniTaSsn());
-    AckTaHeader.SetIniRcId(ctx.transactionHeader.GetIniRcId());
-    ackp->AddHeader(AckTaHeader);
-    if (selectiveAck)
-    {
-        ackp->AddHeader(SAETPH);
+    UbCongestionExtTph congestionHeader =
+        m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
+    if (response.opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH ||
+        response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
+        response.congestionHeader = congestionHeader;
     }
-    if (ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITH_CETPH) ||
-        ctx.transportHeader.GetTPOpcode() == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
-        ackp->AddHeader(CETPH);
-    }
-    ackp->AddHeader(ctx.transportHeader);
-    ackp->AddHeader(ctx.udpHeader);
-    UbPort::AddIpv4Header(ackp, ctx.ipv4Header.GetDestination(), ctx.ipv4Header.GetSource());
-    ackp->AddHeader(ctx.networkHeader);
-    UbDataLink::GenPacketHeader(ackp, false, true, ctx.dataLinkHeader.GetCreditTargetVL(), ctx.dataLinkHeader.GetPacketVL(),
-        0, 1, UbDatalinkHeaderConfig::PACKET_IPV4);
-    if (m_ackQ.empty()) {
-        m_headArrivalTime = Simulator::Now();
-    }
-    m_ackQ.push(ackp); // 将ack放入队列
-    NS_LOG_DEBUG("[Transport channel] Send ack. "
-                  << " PacketUid: "  << ackp->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << ackPsn
-                  << " PacketType: Ack"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << ackp->GetSize());
-    Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-    port->TriggerTransmit(); // 触发发送
+    NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << response.psn << " node: " << m_src);
+    Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
+    EnqueueTransportResponse(responsePacket, "ack", response.psn);
     for (const Ptr<UbWqeSegment>& completedTaUnit : completedTaUnits)
     {
         if (completedTaUnit == nullptr) {
