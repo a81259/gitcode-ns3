@@ -1563,8 +1563,12 @@ UbTransportChannel::BuildAckResponseFromDecision(
         response.selectiveAckHeader = *decision.selectiveAckHeader;
     }
 
-    response.congestionHeader =
+    UbCongestionExtTph congestionHeader =
         m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
+    if (response.opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH ||
+        response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
+        response.congestionHeader = congestionHeader;
+    }
     return true;
 }
 
