@@ -1070,6 +1070,48 @@ UbTransportChannel::GetPsnRetransmitCountForTest(uint64_t psn) const
     return m_retrans->GetPsnRetransmitCountForTest(psn);
 }
 
+bool
+UbTransportChannel::ParseTransportResponsePacket(Ptr<Packet> packet,
+                                                 TransportResponseContext& ctx)
+{
+    if (packet == nullptr) {
+        NS_LOG_ERROR("Null ack packet received");
+        return false;
+    }
+
+    ctx.packet = packet;
+    packet->RemoveHeader(ctx.transportHeader);
+    ctx.opcode = static_cast<TpOpcode>(ctx.transportHeader.GetTPOpcode());
+    ctx.isCnp = ctx.opcode == TpOpcode::TP_OPCODE_CNP;
+    ctx.hasCetph = ctx.opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH ||
+                   ctx.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
+    ctx.hasSaetph = ctx.opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
+                    ctx.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
+    ctx.isTpnak = ctx.opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH;
+
+    if (ctx.isCnp) {
+        packet->RemoveHeader(ctx.cnpHeader);
+        return true;
+    }
+
+    if (ctx.hasCetph) {
+        packet->RemoveHeader(ctx.congestionHeader);
+    }
+    if (ctx.hasSaetph) {
+        try
+        {
+            packet->RemoveHeader(ctx.selectiveAckHeader);
+        }
+        catch (const std::invalid_argument& e)
+        {
+            NS_LOG_WARN("Dropping malformed TPSACK: " << e.what());
+            return false;
+        }
+    }
+    packet->RemoveHeader(ctx.ackTransactionHeader);
+    return true;
+}
+
 /**
  * @brief Receive Transport Acknowledgment message
  * @param tpack Transport acknowledgment message to process
@@ -1077,53 +1119,24 @@ UbTransportChannel::GetPsnRetransmitCountForTest(uint64_t psn) const
  */
 void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
 {
-    if (p == nullptr) {
-        NS_LOG_ERROR("Null ack packet received");
+    TransportResponseContext ctx;
+    if (!ParseTransportResponsePacket(p, ctx)) {
         return;
     }
-    UbAckTransactionHeader AckTaHeader;
-    UbTransportHeader TpHeader;
-    p->RemoveHeader(TpHeader); // 处理接收包信息
-    const auto opcode = static_cast<TpOpcode>(TpHeader.GetTPOpcode());
-    if (opcode == TpOpcode::TP_OPCODE_CNP) {
-        UbCnpExtTph cnpHeader;
-        p->RemoveHeader(cnpHeader);
+    if (ctx.isCnp) {
         UbCongestionExtTph notification;
         notification.SetAckSequence(0);
         notification.SetRawBytes4to7(
-            (static_cast<uint32_t>(cnpHeader.GetEcn() & 0x3U) << 30) |
-            (static_cast<uint32_t>(cnpHeader.GetLocation() ? 1U : 0U) << 29));
+            (static_cast<uint32_t>(ctx.cnpHeader.GetEcn() & 0x3U) << 30) |
+            (static_cast<uint32_t>(ctx.cnpHeader.GetLocation() ? 1U : 0U) << 29));
         m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_CNP,
-                                                         TpHeader.GetPsn(),
+                                                         ctx.transportHeader.GetPsn(),
                                                          notification);
         NS_LOG_DEBUG("Recv TP CNP");
         return;
     }
-    const bool hasCetph = opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH ||
-                          opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
-    const bool hasSaetph = opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
-                           opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH;
-    const bool isTpnak = opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH;
-
-    UbCongestionExtTph CETPH;
-    if (hasCetph) {
-        p->RemoveHeader(CETPH);
-    }
-    UbSelectiveAckExtTph SAETPH;
-    if (hasSaetph) {
-        try
-        {
-            p->RemoveHeader(SAETPH);
-        }
-        catch (const std::invalid_argument& e)
-        {
-            NS_LOG_WARN("Dropping malformed TPSACK: " << e.what());
-            return;
-        }
-    }
-    p->RemoveHeader(AckTaHeader); // 处理接收包信息
-    if (isTpnak) {
-        const uint64_t nakPsn = TpHeader.GetPsn();
+    if (ctx.isTpnak) {
+        const uint64_t nakPsn = ctx.transportHeader.GetPsn();
         NS_LOG_DEBUG("[Transport channel] Recv tpnak."
                   << " PacketUid: " << p->GetUid()
                   << " Tpn: " << m_tpn
@@ -1142,33 +1155,33 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                          FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
         }
         const UbRetransAckResult ackResult =
-            m_retrans->OnTransportResponse(TpHeader, opcode, nullptr, nullptr);
+            m_retrans->OnTransportResponse(ctx.transportHeader, ctx.opcode, nullptr, nullptr);
         if (ackResult.triggerTransmit) {
             TriggerTransportTransmit();
         }
         return;
     }
-    if (hasCetph && !hasSaetph) {
+    if (ctx.hasCetph && !ctx.hasSaetph) {
         m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
-                                                         TpHeader.GetPsn(),
-                                                         CETPH);
+                                                         ctx.transportHeader.GetPsn(),
+                                                         ctx.congestionHeader);
     }
-    if (hasSaetph && m_pktTraceEnabled) {
+    if (ctx.hasSaetph && m_pktTraceEnabled) {
         UbFlowTag flowTag;
         p->PeekPacketTag(flowTag);
         UbPacketTraceTag traceTag;
         p->PeekPacketTag(traceTag);
-        TpRecvNotify(p->GetUid(), TpHeader.GetPsn(), m_dest, m_src, m_dstTpn, m_tpn,
+        TpRecvNotify(p->GetUid(), ctx.transportHeader.GetPsn(), m_dest, m_src, m_dstTpn, m_tpn,
                      PacketType::SACK, p->GetSize(), flowTag.GetFlowId(),
-                     FormatSelectiveAckInfo(TpHeader, SAETPH), traceTag);
+                     FormatSelectiveAckInfo(ctx.transportHeader, ctx.selectiveAckHeader), traceTag);
     }
 
     const uint64_t previousSndUna = m_psnSndUna;
     const UbRetransAckResult ackResult =
-        m_retrans->OnTransportResponse(TpHeader,
-                                       opcode,
-                                       hasSaetph ? &SAETPH : nullptr,
-                                       hasCetph ? &CETPH : nullptr);
+        m_retrans->OnTransportResponse(ctx.transportHeader,
+                                       ctx.opcode,
+                                       ctx.hasSaetph ? &ctx.selectiveAckHeader : nullptr,
+                                       ctx.hasCetph ? &ctx.congestionHeader : nullptr);
     if (ackResult.ignoreResponse) {
         return;
     }
@@ -1194,14 +1207,14 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
                   << " Src: " << m_src
                   << " Dst: " << m_dest
                   << " PacketSize: " << p->GetSize());
-        if (m_pktTraceEnabled && !hasSaetph) {
+        if (m_pktTraceEnabled && !ctx.hasSaetph) {
             UbFlowTag flowTag;
             p->PeekPacketTag(flowTag);
             UbPacketTraceTag traceTag;
             p->PeekPacketTag(traceTag);
             TpRecvNotify(p->GetUid(), m_psnSndUna - 1, m_dest, m_src, m_dstTpn, m_tpn,
                          PacketType::ACK, p->GetSize(), flowTag.GetFlowId(),
-                         FormatSimpleAckInfo("TPACK", TpHeader.GetPsn()), traceTag);
+                         FormatSimpleAckInfo("TPACK", ctx.transportHeader.GetPsn()), traceTag);
         }
         // 收到有效ack后更新rto和超时重传次数为初始值，关闭超时事件并重新设定超时事件
         m_retrans->RestartTimerAfterAckProgress();
@@ -1210,10 +1223,10 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
     for (size_t i = 0; i < m_wqeSegmentVector.size();) {
         if (m_psnSndUna >= (m_wqeSegmentVector[i]->GetPsnStart() + m_wqeSegmentVector[i]->GetPsnSize())) {
             // 对应ack的所有wqeSeg完成
-            if (TpHeader.GetLastPacket()) {
+            if (ctx.transportHeader.GetLastPacket()) {
                 // 尾包ack被确认
                 LastPacketACKsNotify(m_nodeId, m_wqeSegmentVector[i]->GetTaskId(), m_tpn, m_dstTpn,
-                    TpHeader.GetTpMsn(), TpHeader.GetPsn(), m_sport);
+                    ctx.transportHeader.GetTpMsn(), ctx.transportHeader.GetPsn(), m_sport);
             }
             if (ShouldCompleteOnTpAck(m_wqeSegmentVector[i])) {
                 auto ubTa = GetTransaction();

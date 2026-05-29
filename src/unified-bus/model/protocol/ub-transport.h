@@ -356,6 +356,21 @@ private:
         std::optional<UbCongestionExtTph> congestionHeader;
     };
 
+    struct TransportResponseContext
+    {
+        Ptr<Packet> packet;
+        UbTransportHeader transportHeader;
+        UbAckTransactionHeader ackTransactionHeader;
+        UbCongestionExtTph congestionHeader;
+        UbSelectiveAckExtTph selectiveAckHeader;
+        UbCnpExtTph cnpHeader;
+        TpOpcode opcode{TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH};
+        bool hasCetph{false};
+        bool hasSaetph{false};
+        bool isTpnak{false};
+        bool isCnp{false};
+    };
+
     void DoDispose() override;
 
     bool HasPendingTransmitWork();
@@ -371,6 +386,7 @@ private:
     uint64_t GetCumulativeAckPsn() const;
     TpOpcode GetResponseOpcode(bool selectiveAck) const;
     bool ParseReceivedDataPacket(Ptr<Packet> packet, ReceivedDataPacketContext& ctx);
+    bool ParseTransportResponsePacket(Ptr<Packet> packet, TransportResponseContext& ctx);
     void TraceReceivedDataPacket(const ReceivedDataPacketContext& ctx);
     Ptr<Packet> BuildTransportResponsePacket(const ReceivedDataPacketContext& ctx,
                                              const AckResponseContext& response);
