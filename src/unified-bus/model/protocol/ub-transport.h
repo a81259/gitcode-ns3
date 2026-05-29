@@ -383,6 +383,10 @@ private:
         uint32_t& psnStart,
         uint32_t& psnEnd,
         std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
+    bool BuildAckResponseFromDecision(const UbRetransReceiveDecision& decision,
+                                      uint32_t psnStart,
+                                      uint32_t psnEnd,
+                                      AckResponseContext& response);
     void CompleteInboundTaUnits(const std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;

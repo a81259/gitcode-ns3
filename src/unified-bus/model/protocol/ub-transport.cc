@@ -1540,6 +1540,34 @@ UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
     return true;
 }
 
+bool
+UbTransportChannel::BuildAckResponseFromDecision(
+    const UbRetransReceiveDecision& decision,
+    uint32_t psnStart,
+    uint32_t psnEnd,
+    AckResponseContext& response)
+{
+    if (decision.suppressResponse) {
+        if (decision.selectiveAck) {
+            NS_LOG_WARN("Suppressing TPSACK because SelectiveAckBitmapBits cannot be resolved");
+        }
+        return false;
+    }
+
+    response.opcode = decision.responseOpcode;
+    response.psn = decision.responsePsn;
+    response.selectiveAck = decision.selectiveAck;
+    if (decision.selectiveAck) {
+        NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
+                      "SELECTIVE receive decision requires SAETPH.");
+        response.selectiveAckHeader = *decision.selectiveAckHeader;
+    }
+
+    response.congestionHeader =
+        m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
+    return true;
+}
+
 void
 UbTransportChannel::CompleteInboundTaUnits(
     const std::vector<Ptr<UbWqeSegment>>& completedTaUnits)
@@ -1586,31 +1614,13 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
                                                   completedTaUnits)) {
         return;
     }
-    const UbRetransReceiveDecision decision = m_retrans->BuildReceiveDecisionForCurrentState();
-    if (decision.suppressResponse)
-    {
-        if (decision.selectiveAck)
-        {
-            NS_LOG_WARN("Suppressing TPSACK because SelectiveAckBitmapBits cannot be resolved");
-        }
+    AckResponseContext response;
+    const UbRetransReceiveDecision ackDecision =
+        m_retrans->BuildReceiveDecisionForCurrentState();
+    if (!BuildAckResponseFromDecision(ackDecision, psnStart, psnEnd, response)) {
         return;
     }
 
-    AckResponseContext response;
-    response.opcode = decision.responseOpcode;
-    response.psn = decision.responsePsn;
-    response.selectiveAck = decision.selectiveAck;
-    if (decision.selectiveAck) {
-        NS_ASSERT_MSG(decision.selectiveAckHeader.has_value(),
-                      "SELECTIVE receive decision requires SAETPH.");
-        response.selectiveAckHeader = *decision.selectiveAckHeader;
-    }
-    UbCongestionExtTph congestionHeader =
-        m_congestionCtrl->OnReceiverPrepareAckCongestionHeader(psnStart, psnEnd);
-    if (response.opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH ||
-        response.opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH) {
-        response.congestionHeader = congestionHeader;
-    }
     NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << response.psn << " node: " << m_src);
     Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
     EnqueueTransportResponse(responsePacket, "ack", response.psn);
