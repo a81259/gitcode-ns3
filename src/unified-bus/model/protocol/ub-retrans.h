@@ -153,8 +153,8 @@ public:
     explicit UbRetransController(UbTransportChannel& transport);
     ~UbRetransController();
 
-    void SetInitialRto(Time rto);
-    Time GetInitialRto() const;
+    void SetBaseRto(Time rto);
+    Time GetBaseRto() const;
 
     void SetCurrentRto(Time rto);
     Time GetCurrentRto() const;
@@ -167,6 +167,9 @@ public:
 
     void SetRetransExponentFactor(uint16_t factor);
     uint16_t GetRetransExponentFactor() const;
+
+    void SetRetransTimeoutMode(UbRetransTimeoutMode mode);
+    UbRetransTimeoutMode GetRetransTimeoutMode() const;
 
     void SetRetransmissionMode(UbRetransmissionMode mode);
     UbRetransmissionMode GetRetransmissionMode() const;
@@ -218,11 +221,12 @@ private:
     std::unique_ptr<UbGbnRetransStrategy> m_gbn;
     std::unique_ptr<UbSelectiveRetransStrategy> m_selective;
     EventId m_retransEvent{};
-    Time m_initialRto;
-    Time m_rto;
+    Time m_baseRto{NanoSeconds(25600)};
+    Time m_rto{NanoSeconds(25600)};
     uint16_t m_maxRetransAttempts{7};
     uint16_t m_retransAttemptsLeft{7};
     uint16_t m_retransExponentFactor{1};
+    UbRetransTimeoutMode m_retransTimeoutMode{UbRetransTimeoutMode::DYNAMIC};
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     uint32_t m_selectiveAckBitmapBits{0};
     bool m_enableFastRetrans{false};

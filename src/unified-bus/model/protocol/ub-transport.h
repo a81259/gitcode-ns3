@@ -276,12 +276,14 @@ public:
     bool HasRetainedPsnForTest(uint64_t psn) const;
     uint32_t GetPsnRetransmitCountForTest(uint64_t psn) const;
 
-    void SetInitialRto(Time rto);
-    Time GetInitialRto() const;
+    void SetBaseRto(Time rto);
+    Time GetBaseRto() const;
     void SetMaxRetransAttempts(uint16_t attempts);
     uint16_t GetMaxRetransAttempts() const;
     void SetRetransExponentFactor(uint16_t factor);
     uint16_t GetRetransExponentFactor() const;
+    void SetRetransTimeoutMode(UbRetransTimeoutMode mode);
+    UbRetransTimeoutMode GetRetransTimeoutMode() const;
     void SetRetransmissionMode(UbRetransmissionMode mode);
     UbRetransmissionMode GetRetransmissionMode() const;
     void SetSelectiveAckBitmapBits(uint32_t bits);

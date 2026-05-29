@@ -141,6 +141,11 @@ enum class UbRetransmissionMode : uint8_t {
     SELECTIVE = 1,
 };
 
+enum class UbRetransTimeoutMode : uint8_t {
+    STATIC = 0,
+    DYNAMIC = 1,
+};
+
 // 定义NLP常量，便于使用
 enum class NextLayerProtocol : uint8_t {
     NLP_TAH = 0x0,      // TAH (事务头)

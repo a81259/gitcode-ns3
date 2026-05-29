@@ -196,12 +196,22 @@ TypeId UbTransportChannel::GetTypeId(void)
     static TypeId tid = TypeId("ns3::UbTransportChannel")
         .SetParent<UbIngressQueue>()
         .SetGroupName("UnifiedBus")
-        .AddAttribute("InitialRTO",
-                      "Initial retransmission timeout in nanoseconds (RTO0).",
+        .AddAttribute("BaseRTO",
+                      "Base retransmission timeout. In DYNAMIC mode it is Base_time; in STATIC mode it is the fixed timeout.",
                       TimeValue(NanoSeconds(25600)),
-                      MakeTimeAccessor(&UbTransportChannel::SetInitialRto,
-                                       &UbTransportChannel::GetInitialRto),
+                      MakeTimeAccessor(&UbTransportChannel::SetBaseRto,
+                                       &UbTransportChannel::GetBaseRto),
                       MakeTimeChecker())
+        .AddAttribute("RetransTimeoutMode",
+                      "Retransmission timeout mode.",
+                      EnumValue(UbRetransTimeoutMode::DYNAMIC),
+                      MakeEnumAccessor<UbRetransTimeoutMode>(
+                          &UbTransportChannel::SetRetransTimeoutMode,
+                          &UbTransportChannel::GetRetransTimeoutMode),
+                      MakeEnumChecker(UbRetransTimeoutMode::STATIC,
+                                      "STATIC",
+                                      UbRetransTimeoutMode::DYNAMIC,
+                                      "DYNAMIC"))
         .AddAttribute("MaxRetransAttempts",
                       "Maximum retransmission attempts before aborting.",
                       UintegerValue(7),
@@ -209,7 +219,7 @@ TypeId UbTransportChannel::GetTypeId(void)
                                            &UbTransportChannel::GetMaxRetransAttempts),
                       MakeUintegerChecker<uint16_t>())
         .AddAttribute("RetransExponentFactor",
-                      "Exponential backoff multiplier applied to RTO on each retransmission attempt.",
+                      "Dynamic timeout interval coefficient N: RTO = BaseRTO * 2^(N * Times). Ignored in STATIC mode.",
                       UintegerValue(1),
                       MakeUintegerAccessor(&UbTransportChannel::SetRetransExponentFactor,
                                            &UbTransportChannel::GetRetransExponentFactor),
@@ -320,15 +330,15 @@ UbTransportChannel::IsTransportResponseOpcode(uint8_t opcode)
 }
 
 void
-UbTransportChannel::SetInitialRto(Time rto)
+UbTransportChannel::SetBaseRto(Time rto)
 {
-    m_retrans->SetInitialRto(rto);
+    m_retrans->SetBaseRto(rto);
 }
 
 Time
-UbTransportChannel::GetInitialRto() const
+UbTransportChannel::GetBaseRto() const
 {
-    return m_retrans->GetInitialRto();
+    return m_retrans->GetBaseRto();
 }
 
 void
@@ -353,6 +363,18 @@ uint16_t
 UbTransportChannel::GetRetransExponentFactor() const
 {
     return m_retrans->GetRetransExponentFactor();
+}
+
+void
+UbTransportChannel::SetRetransTimeoutMode(UbRetransTimeoutMode mode)
+{
+    m_retrans->SetRetransTimeoutMode(mode);
+}
+
+UbRetransTimeoutMode
+UbTransportChannel::GetRetransTimeoutMode() const
+{
+    return m_retrans->GetRetransTimeoutMode();
 }
 
 void

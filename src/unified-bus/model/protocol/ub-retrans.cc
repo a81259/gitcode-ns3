@@ -694,16 +694,16 @@ UbRetransController::~UbRetransController()
 }
 
 void
-UbRetransController::SetInitialRto(Time rto)
+UbRetransController::SetBaseRto(Time rto)
 {
-    m_initialRto = rto;
+    m_baseRto = rto;
     m_rto = rto;
 }
 
 Time
-UbRetransController::GetInitialRto() const
+UbRetransController::GetBaseRto() const
 {
-    return m_initialRto;
+    return m_baseRto;
 }
 
 void
@@ -753,6 +753,18 @@ uint16_t
 UbRetransController::GetRetransExponentFactor() const
 {
     return m_retransExponentFactor;
+}
+
+void
+UbRetransController::SetRetransTimeoutMode(UbRetransTimeoutMode mode)
+{
+    m_retransTimeoutMode = mode;
+}
+
+UbRetransTimeoutMode
+UbRetransController::GetRetransTimeoutMode() const
+{
+    return m_retransTimeoutMode;
 }
 
 void
@@ -817,14 +829,14 @@ UbRetransController::StartTimerIfNeeded()
         return;
     }
 
-    m_rto = m_initialRto;
+    m_rto = m_baseRto;
     ScheduleTimeout();
 }
 
 void
 UbRetransController::RestartTimerAfterAckProgress()
 {
-    m_rto = m_initialRto;
+    m_rto = m_baseRto;
     m_retransAttemptsLeft = m_maxRetransAttempts;
     m_retransEvent.Cancel();
     ScheduleTimeout();
@@ -840,9 +852,13 @@ UbRetransTimeoutResult
 UbRetransController::OnTimeout()
 {
     m_retransAttemptsLeft--;
-    uint64_t rto = m_rto.GetNanoSeconds();
-    rto = rto << m_retransExponentFactor;
-    m_rto = NanoSeconds(rto);
+    if (m_retransTimeoutMode == UbRetransTimeoutMode::DYNAMIC) {
+        uint64_t rto = m_rto.GetNanoSeconds();
+        rto = rto << m_retransExponentFactor;
+        m_rto = NanoSeconds(rto);
+    } else {
+        m_rto = m_baseRto;
+    }
     NS_ASSERT_MSG(m_retransAttemptsLeft > 0, "Avaliable retransmission attempts exhausted.");
     ScheduleTimeout();
     if (m_retransmissionMode == UbRetransmissionMode::GBN) {
