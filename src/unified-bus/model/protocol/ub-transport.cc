@@ -599,8 +599,7 @@ UbTransportChannel::TryGetNextNewDataPacket()
         m_retrans->OnNewDataPacketSent(m_psnSndNxt,
                                        p,
                                        payloadSize,
-                                       progressBytes,
-                                       currentSegment);
+                                       progressBytes);
 
         m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, progressBytes);
 
@@ -1016,7 +1015,7 @@ UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, ui
     tpHeader.SetDestTpn(m_dstTpn);
     tpHeader.SetPsn(static_cast<uint32_t>(psn));
     packet->AddHeader(tpHeader);
-    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes, nullptr);
+    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes);
 }
 
 uint32_t

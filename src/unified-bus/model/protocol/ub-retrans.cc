@@ -106,14 +106,12 @@ void
 UbSelectiveRetransStrategy::RetainSentPsn(uint64_t psn,
                                           Ptr<Packet> packet,
                                           uint32_t payloadBytes,
-                                          uint32_t logicalBytes,
-                                          Ptr<UbWqeSegment> segment)
+                                          uint32_t logicalBytes)
 {
     SentPsnState& state = m_sentPsnState[psn];
     state.packet = packet != nullptr ? packet->Copy() : nullptr;
     state.payloadBytes = payloadBytes;
     state.logicalBytes = logicalBytes;
-    state.segment = segment;
     state.acknowledged = false;
     state.selectivelyReportedMissing = false;
     state.retransmitPending = false;
@@ -541,13 +539,12 @@ void
 UbSelectiveRetransStrategy::OnNewDataPacketSent(uint64_t psn,
                                                 Ptr<Packet> packet,
                                                 uint32_t payloadBytes,
-                                                uint32_t logicalBytes,
-                                                Ptr<UbWqeSegment> segment)
+                                                uint32_t logicalBytes)
 {
     if (IsMarkPsnEnabled()) {
         MaybeMarkFirstNewSelectivePacket(psn);
     }
-    RetainSentPsn(psn, packet, payloadBytes, logicalBytes, segment);
+    RetainSentPsn(psn, packet, payloadBytes, logicalBytes);
 }
 
 void
@@ -934,11 +931,10 @@ void
 UbRetransController::OnNewDataPacketSent(uint64_t psn,
                                          Ptr<Packet> packet,
                                          uint32_t payloadBytes,
-                                         uint32_t logicalBytes,
-                                         Ptr<UbWqeSegment> segment)
+                                         uint32_t logicalBytes)
 {
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes, segment);
+        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes);
     }
 }
 
