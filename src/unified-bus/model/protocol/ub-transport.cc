@@ -1467,6 +1467,94 @@ UbTransportChannel::NotifyLastPacketReceived(const ReceivedDataPacketContext& ct
                              m_dport);
 }
 
+bool
+UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
+    const ReceivedDataPacketContext& ctx,
+    const UbRetransReceiveDecision& decision,
+    uint32_t& psnStart,
+    uint32_t& psnEnd,
+    std::vector<Ptr<UbWqeSegment>>& completedTaUnits)
+{
+    if (ctx.psn < m_psnRecvNxt) {
+        return true;
+    }
+
+    const bool outOfOrderPacket = ctx.psn > m_psnRecvNxt;
+    if (!SetBitmap(ctx.psn)) {
+        NS_LOG_WARN("Over Out-of-Order! Max Out-of-Order :" << m_psnOooThreshold);
+        return false;
+    }
+
+    m_congestionCtrl->OnReceiverDataPacketReceived(ctx.psn,
+                                                   ctx.payloadBytes,
+                                                   ctx.networkHeader);
+    UbFlowTag flowTag = ctx.flowTag;
+    m_bufferedInboundPackets[ctx.psn] = {ctx.transportHeader,
+                                         ctx.transactionHeader,
+                                         ctx.logicalBytes,
+                                         ctx.payloadBytes,
+                                         flowTag.GetFlowId()};
+    if (outOfOrderPacket) {
+        NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{"
+                     << ctx.psn << "} expectedPsn:{" << m_psnRecvNxt << "}");
+        return !decision.dropPacket;
+    }
+
+    uint32_t oldRecvNxt = m_psnRecvNxt;
+    while (m_psnRecvNxt < oldRecvNxt + m_psnOooThreshold) {
+        uint32_t currentBitIndex = m_psnRecvNxt - oldRecvNxt;
+        if (currentBitIndex >= m_recvPsnWindow.GetWindowSize() ||
+            !m_recvPsnWindow.Contains(m_psnRecvNxt)) {
+            break;
+        }
+
+        auto bufferedIt = m_bufferedInboundPackets.find(m_psnRecvNxt);
+        if (bufferedIt == m_bufferedInboundPackets.end()) {
+            NS_LOG_WARN("Missing buffered inbound packet for contiguous psn " << m_psnRecvNxt
+                        << " on tpn " << m_tpn);
+            break;
+        }
+
+        Ptr<UbWqeSegment> completedTaUnit =
+            TrackInboundTaPacket(bufferedIt->second.tpHeader,
+                                 bufferedIt->second.taHeader,
+                                 bufferedIt->second.logicalBytes,
+                                 bufferedIt->second.payloadBytes,
+                                 bufferedIt->second.taskId);
+        if (completedTaUnit != nullptr) {
+            completedTaUnits.push_back(completedTaUnit);
+        }
+        m_bufferedInboundPackets.erase(bufferedIt);
+        m_psnRecvNxt++;
+    }
+
+    if (m_psnRecvNxt > oldRecvNxt) {
+        NS_LOG_DEBUG("Updated m_psnRecvNxt from " << oldRecvNxt
+                     << " to " << m_psnRecvNxt);
+        m_retrans->ClearNakSuppressionIfGapClosed(m_psnRecvNxt);
+        uint32_t shiftCount = m_psnRecvNxt - oldRecvNxt;
+        RightShiftBitset(shiftCount);
+        psnStart = oldRecvNxt;
+        psnEnd = m_psnRecvNxt;
+    }
+    return true;
+}
+
+void
+UbTransportChannel::CompleteInboundTaUnits(
+    const std::vector<Ptr<UbWqeSegment>>& completedTaUnits)
+{
+    for (const Ptr<UbWqeSegment>& completedTaUnit : completedTaUnits) {
+        if (completedTaUnit == nullptr) {
+            continue;
+        }
+        GetTransaction()->HandleInboundTaUnit(m_tpn, completedTaUnit);
+        WqeSegmentCompletesNotify(m_nodeId,
+                                  completedTaUnit->GetTaskId(),
+                                  completedTaUnit->GetTaSsn());
+    }
+}
+
 /**
  * @brief Receive Data Packets
  * @param tpack Transport acknowledgment message to process
@@ -1480,7 +1568,6 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
 
     TraceReceivedDataPacket(ctx);
-    std::vector<Ptr<UbWqeSegment>> completedTaUnits;
     const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
     if (HandleImmediateRetransReceiveDecision(ctx, receiveDecision)) {
         return;
@@ -1491,69 +1578,13 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
     uint32_t psnStart = 0;
     uint32_t psnEnd = 0;
-    if (ctx.psn >= m_psnRecvNxt) {
-        // psn=m_psnRecvNxt代表顺序收到包，psn>m_psnRecvNxt代表乱序
-        const bool outOfOrderPacket = ctx.psn > m_psnRecvNxt;
-        if (!SetBitmap(ctx.psn)) {
-            // 超出bitmap允许的乱序规格了,先空着
-            NS_LOG_WARN("Over Out-of-Order! Max Out-of-Order :" << m_psnOooThreshold);
-            return;
-        }
-        // 记录包号和size
-        m_congestionCtrl->OnReceiverDataPacketReceived(ctx.psn, ctx.payloadBytes, ctx.networkHeader);
-        m_bufferedInboundPackets[ctx.psn] = {ctx.transportHeader,
-                                             ctx.transactionHeader,
-                                             ctx.logicalBytes,
-                                             ctx.payloadBytes,
-                                             ctx.flowTag.GetFlowId()};
-        if (outOfOrderPacket) {
-            NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{" << ctx.psn
-                        << "} expectedPsn:{" << m_psnRecvNxt << "}");
-            if (receiveDecision.dropPacket) {
-                return;
-            }
-        }
-        if (!outOfOrderPacket) {
-            uint32_t oldRecvNxt = m_psnRecvNxt;
-            while (m_psnRecvNxt < oldRecvNxt + m_psnOooThreshold) {
-                uint32_t currentBitIndex = m_psnRecvNxt - oldRecvNxt;
-                if (currentBitIndex < m_recvPsnWindow.GetWindowSize() &&
-                    m_recvPsnWindow.Contains(m_psnRecvNxt)) {
-                    auto bufferedIt = m_bufferedInboundPackets.find(m_psnRecvNxt);
-                    if (bufferedIt == m_bufferedInboundPackets.end()) {
-                        NS_LOG_WARN("Missing buffered inbound packet for contiguous psn " << m_psnRecvNxt
-                                    << " on tpn " << m_tpn);
-                        break;
-                    }
-                    Ptr<UbWqeSegment> completedTaUnit =
-                        TrackInboundTaPacket(bufferedIt->second.tpHeader,
-                                             bufferedIt->second.taHeader,
-                                             bufferedIt->second.logicalBytes,
-                                             bufferedIt->second.payloadBytes,
-                                             bufferedIt->second.taskId);
-                    if (completedTaUnit != nullptr) {
-                        completedTaUnits.push_back(completedTaUnit);
-                    }
-                    m_bufferedInboundPackets.erase(bufferedIt);
-                    m_psnRecvNxt++;
-                } else if (currentBitIndex) {
-                    break; // 遇到未确认的分段，停止
-                } else {
-                    break;
-                }
-            }
-            // 如果 m_psnRecvNxt 有更新，需要清理 bitset
-            if (m_psnRecvNxt > oldRecvNxt) {
-                NS_LOG_DEBUG("Updated m_psnRecvNxt from " << oldRecvNxt
-                            << " to " << m_psnRecvNxt);
-                m_retrans->ClearNakSuppressionIfGapClosed(m_psnRecvNxt);
-                // 手动右移 bitset
-                uint32_t shiftCount = m_psnRecvNxt - oldRecvNxt;
-                RightShiftBitset(shiftCount);
-                psnStart = oldRecvNxt;
-                psnEnd = m_psnRecvNxt;
-            }
-        }
+    std::vector<Ptr<UbWqeSegment>> completedTaUnits;
+    if (!UpdateReceiveWindowAndCollectCompletedTa(ctx,
+                                                  receiveDecision,
+                                                  psnStart,
+                                                  psnEnd,
+                                                  completedTaUnits)) {
+        return;
     }
     const UbRetransReceiveDecision decision = m_retrans->BuildReceiveDecisionForCurrentState();
     if (decision.suppressResponse)
@@ -1583,14 +1614,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     NS_LOG_DEBUG("RecvDataPacket ready to send ack psn: " << response.psn << " node: " << m_src);
     Ptr<Packet> responsePacket = BuildTransportResponsePacket(ctx, response);
     EnqueueTransportResponse(responsePacket, "ack", response.psn);
-    for (const Ptr<UbWqeSegment>& completedTaUnit : completedTaUnits)
-    {
-        if (completedTaUnit == nullptr) {
-            continue;
-        }
-        GetTransaction()->HandleInboundTaUnit(m_tpn, completedTaUnit);
-        WqeSegmentCompletesNotify(m_nodeId, completedTaUnit->GetTaskId(), completedTaUnit->GetTaSsn());
-    }
+    CompleteInboundTaUnits(completedTaUnits);
 }
 
 void

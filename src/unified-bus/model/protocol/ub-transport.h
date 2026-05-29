@@ -377,6 +377,13 @@ private:
                                                const UbRetransReceiveDecision& decision);
     bool HandleRepeatedDataPacket(const ReceivedDataPacketContext& ctx);
     void NotifyLastPacketReceived(const ReceivedDataPacketContext& ctx);
+    bool UpdateReceiveWindowAndCollectCompletedTa(
+        const ReceivedDataPacketContext& ctx,
+        const UbRetransReceiveDecision& decision,
+        uint32_t& psnStart,
+        uint32_t& psnEnd,
+        std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
+    void CompleteInboundTaUnits(const std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
 
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceFirstPacketSendsNotify;
     TracedCallback<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> m_traceLastPacketSendsNotify;
