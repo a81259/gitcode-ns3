@@ -1203,6 +1203,115 @@ UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
     return true;
 }
 
+void
+UbTransportChannel::CompleteAckedWqeSegments(const TransportResponseContext& ctx)
+{
+    for (size_t i = 0; i < m_wqeSegmentVector.size();) {
+        Ptr<UbWqeSegment> segment = m_wqeSegmentVector[i];
+        if (m_psnSndUna < segment->GetPsnStart() + segment->GetPsnSize()) {
+            ++i;
+            continue;
+        }
+
+        if (ctx.transportHeader.GetLastPacket()) {
+            LastPacketACKsNotify(m_nodeId, segment->GetTaskId(), m_tpn, m_dstTpn,
+                                 ctx.transportHeader.GetTpMsn(),
+                                 ctx.transportHeader.GetPsn(),
+                                 m_sport);
+        }
+        if (ShouldCompleteOnTpAck(segment)) {
+            auto ubTa = GetTransaction();
+            if (!ubTa->ProcessWqeSegmentComplete(segment)) {
+                ++i;
+                continue;
+            }
+            WqeSegmentCompletesNotify(m_nodeId, segment->GetTaskId(), segment->GetTaSsn());
+        }
+
+        m_wqeSegmentVector.erase(m_wqeSegmentVector.begin() + i);
+        // Shallow pipeline counts only active segments that can still send new data.
+        if (GetActiveSendSegmentCount() < 2) {
+            ApplyNextWqeSegment();
+        }
+    }
+}
+
+void
+UbTransportChannel::UpdateSenderAfterTransportAck(const TransportResponseContext&,
+                                                  uint64_t)
+{
+    if (m_tpFullFlag && IsWqeSegmentLimited() == false) {
+        m_tpFullFlag = false;
+        ApplyNextWqeSegment();
+    }
+    if (m_wqeSegmentVector.size() == 0) {
+        m_retrans->CancelTimer();
+    }
+
+    const bool transportIdle = !HasPendingTransmitWork();
+    if (transportIdle) {
+        m_congestionCtrl->OnSenderTransportIdle();
+    }
+    if (!transportIdle && !m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
+        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+        port->TriggerTransmit();
+    }
+    NS_LOG_DEBUG("Recv TP(data packet) acknowledgment");
+}
+
+void
+UbTransportChannel::FinalizeTransportAckProgress(const TransportResponseContext& ctx,
+                                                 uint64_t previousSndUna)
+{
+    if (m_psnSndUna > previousSndUna) {
+        if (m_sendWindowLimited && IsInflightLimited() == false) {
+            if (!m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
+                m_sendWindowLimited = false;
+                Ptr<UbPort> port =
+                    DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
+                port->TriggerTransmit();
+            }
+        }
+        NS_LOG_DEBUG("[Transport channel] Recv ack."
+                  << " PacketUid: " << ctx.packet->GetUid()
+                  << " Tpn: " << m_tpn
+                  << " Psn: " << m_psnSndUna - 1
+                  << " PacketType: Ack"
+                  << " Src: " << m_src
+                  << " Dst: " << m_dest
+                  << " PacketSize: " << ctx.packet->GetSize());
+        if (m_pktTraceEnabled && !ctx.hasSaetph) {
+            UbFlowTag flowTag;
+            ctx.packet->PeekPacketTag(flowTag);
+            UbPacketTraceTag traceTag;
+            ctx.packet->PeekPacketTag(traceTag);
+            TpRecvNotify(ctx.packet->GetUid(), m_psnSndUna - 1,
+                         m_dest, m_src, m_dstTpn, m_tpn,
+                         PacketType::ACK, ctx.packet->GetSize(), flowTag.GetFlowId(),
+                         FormatSimpleAckInfo("TPACK", ctx.transportHeader.GetPsn()),
+                         traceTag);
+        }
+
+        // Only real ACK progress resets the RTO state and reschedules timeout.
+        m_retrans->RestartTimerAfterAckProgress();
+    }
+
+    CompleteAckedWqeSegments(ctx);
+    TraceTpDebugState(m_nodeId,
+                      m_tpn,
+                      "RECV_ACK",
+                      m_psnSndNxt,
+                      m_psnSndUna,
+                      m_maxInflightPacketSize,
+                      m_congestionCtrl->IsCcLimited(UB_MTU_BYTE),
+                      m_sendWindowLimited,
+                      GetActiveSendSegmentCount(),
+                      static_cast<uint32_t>(m_wqeSegmentVector.size()),
+                      static_cast<uint32_t>(m_ackQ.size()),
+                      static_cast<uint32_t>(m_cnpQ.size()));
+    UpdateSenderAfterTransportAck(ctx, previousSndUna);
+}
+
 /**
  * @brief Receive Transport Acknowledgment message
  * @param tpack Transport acknowledgment message to process
@@ -1229,92 +1338,7 @@ void UbTransportChannel::RecvTpAck(Ptr<Packet> p)
         return;
     }
 
-    // 拿到多个packet后组成taack发送
-    if (m_psnSndUna > previousSndUna) {
-        if (m_sendWindowLimited && IsInflightLimited() == false) {
-            if (!m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
-                m_sendWindowLimited = false;
-                Ptr<UbPort> port =
-                    DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-                port->TriggerTransmit(); // 触发发送
-            }
-        }
-        NS_LOG_DEBUG("[Transport channel] Recv ack."
-                  << " PacketUid: " << p->GetUid()
-                  << " Tpn: " << m_tpn
-                  << " Psn: " << m_psnSndUna - 1
-                  << " PacketType: Ack"
-                  << " Src: " << m_src
-                  << " Dst: " << m_dest
-                  << " PacketSize: " << p->GetSize());
-        if (m_pktTraceEnabled && !ctx.hasSaetph) {
-            UbFlowTag flowTag;
-            p->PeekPacketTag(flowTag);
-            UbPacketTraceTag traceTag;
-            p->PeekPacketTag(traceTag);
-            TpRecvNotify(p->GetUid(), m_psnSndUna - 1, m_dest, m_src, m_dstTpn, m_tpn,
-                         PacketType::ACK, p->GetSize(), flowTag.GetFlowId(),
-                         FormatSimpleAckInfo("TPACK", ctx.transportHeader.GetPsn()), traceTag);
-        }
-        // 收到有效ack后更新rto和超时重传次数为初始值，关闭超时事件并重新设定超时事件
-        m_retrans->RestartTimerAfterAckProgress();
-    }
-
-    for (size_t i = 0; i < m_wqeSegmentVector.size();) {
-        if (m_psnSndUna >= (m_wqeSegmentVector[i]->GetPsnStart() + m_wqeSegmentVector[i]->GetPsnSize())) {
-            // 对应ack的所有wqeSeg完成
-            if (ctx.transportHeader.GetLastPacket()) {
-                // 尾包ack被确认
-                LastPacketACKsNotify(m_nodeId, m_wqeSegmentVector[i]->GetTaskId(), m_tpn, m_dstTpn,
-                    ctx.transportHeader.GetTpMsn(), ctx.transportHeader.GetPsn(), m_sport);
-            }
-            if (ShouldCompleteOnTpAck(m_wqeSegmentVector[i])) {
-                auto ubTa = GetTransaction();
-                if (!ubTa->ProcessWqeSegmentComplete(m_wqeSegmentVector[i])) {
-                    ++i;
-                    continue;
-                }
-                WqeSegmentCompletesNotify(m_nodeId, m_wqeSegmentVector[i]->GetTaskId(),
-                    m_wqeSegmentVector[i]->GetTaSsn());
-            }
-            m_wqeSegmentVector.erase(m_wqeSegmentVector.begin() + i);
-            // 浅流水只按仍可继续发送的活跃 segment 计数。
-            if (GetActiveSendSegmentCount() < 2) {
-                ApplyNextWqeSegment();
-            }
-        } else {
-            ++i;
-        }
-    }
-    TraceTpDebugState(m_nodeId,
-                      m_tpn,
-                      "RECV_ACK",
-                      m_psnSndNxt,
-                      m_psnSndUna,
-                      m_maxInflightPacketSize,
-                      m_congestionCtrl->IsCcLimited(UB_MTU_BYTE),
-                      m_sendWindowLimited,
-                      GetActiveSendSegmentCount(),
-                      static_cast<uint32_t>(m_wqeSegmentVector.size()),
-                      static_cast<uint32_t>(m_ackQ.size()),
-                      static_cast<uint32_t>(m_cnpQ.size()));
-    // tp从超过缓存限制的状态中恢复
-    if (m_tpFullFlag && IsWqeSegmentLimited() == false) {
-        m_tpFullFlag = false;
-        ApplyNextWqeSegment();
-    }
-    if (m_wqeSegmentVector.size() == 0) {
-        m_retrans->CancelTimer(); // 如果确认流都完成，取消定时器
-    }
-    const bool transportIdle = !HasPendingTransmitWork();
-    if (transportIdle) {
-        m_congestionCtrl->OnSenderTransportIdle();
-    }
-    if (!transportIdle && !m_congestionCtrl->IsCcLimited(UB_MTU_BYTE)) {
-        Ptr<UbPort> port = DynamicCast<UbPort>(NodeList::GetNode(m_nodeId)->GetDevice(m_sport));
-        port->TriggerTransmit(); // 触发发送
-    }
-    NS_LOG_DEBUG("Recv TP(data packet) acknowledgment");
+    FinalizeTransportAckProgress(ctx, previousSndUna);
 }
 
 
