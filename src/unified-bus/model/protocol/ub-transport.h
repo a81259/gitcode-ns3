@@ -387,6 +387,9 @@ private:
     Ptr<Packet> TryGetNextNewDataPacket();
     bool CanTrySendNewDataPacket();
     bool BuildNextDataSendContext(NewDataSendContext& ctx);
+    Ptr<Packet> SendNewDataPacket(const NewDataSendContext& ctx);
+    void NotifyNewDataPacketSent(const NewDataSendContext& ctx, Ptr<Packet> packet);
+    void AdvanceNewDataSendState(const NewDataSendContext& ctx, Ptr<Packet> packet);
     Ptr<UbTransaction> GetTransaction();
     Ptr<UbWqeSegment> TrackInboundTaPacket(const UbTransportHeader& tpHeader,
                                            const UbTransactionHeader& taHeader,

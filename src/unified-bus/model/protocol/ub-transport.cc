@@ -632,50 +632,42 @@ UbTransportChannel::BuildNextDataSendContext(NewDataSendContext& ctx)
     return false;
 }
 
-Ptr<Packet>
-UbTransportChannel::TryGetNextNewDataPacket()
+void
+UbTransportChannel::NotifyNewDataPacketSent(const NewDataSendContext& ctx,
+                                            Ptr<Packet> packet)
 {
-    if (!CanTrySendNewDataPacket()) {
-        return nullptr;
-    }
-
-    NewDataSendContext ctx;
-    if (!BuildNextDataSendContext(ctx)) {
-        return nullptr;
-    }
-
-    Ptr<Packet> p = GenDataPacket(ctx.segment,
-                                  ctx.payloadBytes,
-                                  ctx.wireLengthBytes,
-                                  ctx.progressBytes);
     m_retrans->OnNewDataPacketSent(m_psnSndNxt,
-                                   p,
+                                   packet,
                                    ctx.payloadBytes,
                                    ctx.progressBytes);
 
     m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, ctx.progressBytes);
 
     if (ctx.segment->GetBytesLeft() == ctx.totalProgressBytes) {
-        // wqe segment first packet
         FirstPacketSendsNotify(m_nodeId, ctx.segment->GetTaskId(), m_tpn, m_dstTpn,
-            ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
+                               ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
     }
     if (ctx.segment->GetBytesLeft() == ctx.progressBytes) {
-        // wqe segment last packet
         LastPacketSendsNotify(m_nodeId, ctx.segment->GetTaskId(), m_tpn, m_dstTpn,
-            ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
+                              ctx.segment->GetTpMsn(), m_psnSndNxt, m_sport);
     }
-    // PacketUid: TaskId: Tpn: Psn: PacketType: Src: Dst: PacketSize:
+
     NS_LOG_DEBUG("[Transport channel] Send packet."
-              << " PacketUid: " << p->GetUid()
+              << " PacketUid: " << packet->GetUid()
               << " Tpn: " << m_tpn
               << " DstTpn: " << m_dstTpn
               << " Psn: " << m_psnSndNxt
               << " PacketType: Packet"
               << " Src: " << m_src
               << " Dst: " << m_dest
-              << " PacketSize: " << p->GetSize()
+              << " PacketSize: " << packet->GetSize()
               << " TaskId: " << ctx.segment->GetTaskId());
+}
+
+void
+UbTransportChannel::AdvanceNewDataSendState(const NewDataSendContext& ctx,
+                                            Ptr<Packet>)
+{
     ctx.segment->UpdateSentBytes(ctx.progressBytes);
     m_psnSndNxt++;
     TraceTpDebugState(m_nodeId,
@@ -690,18 +682,42 @@ UbTransportChannel::TryGetNextNewDataPacket()
                       static_cast<uint32_t>(m_wqeSegmentVector.size()),
                       static_cast<uint32_t>(m_ackQ.size()),
                       static_cast<uint32_t>(m_cnpQ.size()));
-    // 发送时，更新定时器时间
     m_retrans->StartTimerIfNeeded();
-    // 浅流水只限制仍可继续发送的活跃 segment。
-    // 当前 segment 最后一个 data packet 发出后，就尝试补一个新的 segment，
-    // 但已发完未 ACK 的 segment 仍保留在账本中供 ACK/重传使用。
+
+    // Shallow pipeline keeps at most two active segments capable of sending new data.
     if (ctx.segment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
         ApplyNextWqeSegment();
     }
     if (HasPendingTransmitWork()) {
         m_headArrivalTime = Simulator::Now();
     }
-    return p;
+}
+
+Ptr<Packet>
+UbTransportChannel::SendNewDataPacket(const NewDataSendContext& ctx)
+{
+    Ptr<Packet> packet = GenDataPacket(ctx.segment,
+                                       ctx.payloadBytes,
+                                       ctx.wireLengthBytes,
+                                       ctx.progressBytes);
+    NotifyNewDataPacketSent(ctx, packet);
+    AdvanceNewDataSendState(ctx, packet);
+    return packet;
+}
+
+Ptr<Packet>
+UbTransportChannel::TryGetNextNewDataPacket()
+{
+    if (!CanTrySendNewDataPacket()) {
+        return nullptr;
+    }
+
+    NewDataSendContext ctx;
+    if (!BuildNextDataSendContext(ctx)) {
+        return nullptr;
+    }
+
+    return SendNewDataPacket(ctx);
 }
 
 Ptr<Packet> UbTransportChannel::GetNextPacket()
