@@ -183,6 +183,8 @@ public:
     void SetSelectiveMarkPsnEnable(bool enable);
     bool GetSelectiveMarkPsnEnable() const;
 
+    void SetRetransEnable(bool enable);
+    bool GetRetransEnable() const;
     void StartTimerIfNeeded();
     void RestartTimerAfterAckProgress();
     void CancelTimer();
@@ -229,6 +231,7 @@ private:
     UbRetransTimeoutMode m_retransTimeoutMode{UbRetransTimeoutMode::DYNAMIC};
     UbRetransmissionMode m_retransmissionMode{UbRetransmissionMode::GBN};
     uint32_t m_selectiveAckBitmapBits{0};
+    bool m_enableRetrans{false};
     bool m_enableFastRetrans{false};
     bool m_enableSelectiveMarkPsn{false};
 };

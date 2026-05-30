@@ -12,6 +12,7 @@
 #include "ns3/ub-transport.h"
 #include "ns3/ub-utils.h"
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 
@@ -196,6 +197,12 @@ TypeId UbTransportChannel::GetTypeId(void)
     static TypeId tid = TypeId("ns3::UbTransportChannel")
         .SetParent<UbIngressQueue>()
         .SetGroupName("UnifiedBus")
+        .AddAttribute("EnableRetrans",
+                      "Enable transport-layer retransmission.",
+                      BooleanValue(false),
+                      MakeBooleanAccessor(&UbTransportChannel::SetRetransEnable,
+                                          &UbTransportChannel::GetRetransEnable),
+                      MakeBooleanChecker())
         .AddAttribute("BaseRTO",
                       "Base retransmission timeout. In DYNAMIC mode it is Base_time; in STATIC mode it is the fixed timeout.",
                       TimeValue(NanoSeconds(25600)),
@@ -387,6 +394,18 @@ UbRetransmissionMode
 UbTransportChannel::GetRetransmissionMode() const
 {
     return m_retrans->GetRetransmissionMode();
+}
+
+void
+UbTransportChannel::SetRetransEnable(bool enable)
+{
+    m_retrans->SetRetransEnable(enable);
+}
+
+bool
+UbTransportChannel::GetRetransEnable() const
+{
+    return m_retrans->GetRetransEnable();
 }
 
 void
@@ -634,6 +653,8 @@ void
 UbTransportChannel::NotifyNewDataPacketSent(const NewDataSendContext& ctx,
                                             Ptr<Packet> packet)
 {
+    // TODO: Keep Notify* helpers as logging/trace notifications only. Retransmission
+    // and congestion-control state updates should live at the actual send trigger.
     m_retrans->OnNewDataPacketSent(m_psnSndNxt,
                                    packet,
                                    ctx.payloadBytes,

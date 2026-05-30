@@ -221,6 +221,14 @@ InstallStaticTpPair(const LocalTpTopology& topo)
     }
 }
 
+void
+UseSelectiveRetransmissionForTest()
+{
+    Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(true));
+    Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                       EnumValue(UbRetransmissionMode::SELECTIVE));
+}
+
 Ptr<Packet>
 BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPacket)
 {
@@ -1328,9 +1336,17 @@ public:
                               true,
                               "fast retransmission should be settable");
 
-        NS_TEST_ASSERT_MSG_EQ(tp->SetAttributeFailSafe("EnableRetrans", BooleanValue(true)),
+        BooleanValue retrans;
+        tp->GetAttribute("EnableRetrans", retrans);
+        NS_TEST_ASSERT_MSG_EQ(retrans.Get(),
                               false,
-                              "EnableRetrans should no longer be exposed as a TypeId attribute");
+                              "transport retransmission should preserve the legacy opt-in default");
+
+        tp->SetAttribute("EnableRetrans", BooleanValue(true));
+        tp->GetAttribute("EnableRetrans", retrans);
+        NS_TEST_ASSERT_MSG_EQ(retrans.Get(),
+                              true,
+                              "EnableRetrans should preserve the legacy TypeId attribute");
 
         NS_TEST_ASSERT_MSG_EQ(
             UbTransportChannel::IsTransportResponseOpcode(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
@@ -1440,8 +1456,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
@@ -1486,8 +1501,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
@@ -1524,8 +1538,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::SelectiveAckBitmapBits", UintegerValue(64));
 
         LocalTpTopology topo = BuildLocalTpTopology();
@@ -1558,8 +1571,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
@@ -1601,8 +1613,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
@@ -1646,8 +1657,7 @@ public:
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
         GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
@@ -1685,8 +1695,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -1727,8 +1736,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -1807,8 +1815,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(false));
 
@@ -1852,8 +1859,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -1908,8 +1914,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -1976,8 +1981,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2016,8 +2020,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2056,8 +2059,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -2095,8 +2097,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2187,8 +2188,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2231,8 +2231,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2274,8 +2273,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2325,8 +2323,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
 
         LocalTpTopology topo = BuildLocalTpTopology();
         InstallStaticTpPair(topo);
@@ -2361,8 +2358,7 @@ public:
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
         GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2402,8 +2398,7 @@ public:
     {
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(true));
 
@@ -2532,8 +2527,7 @@ public:
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
         GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
-        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
-                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        UseSelectiveRetransmissionForTest();
         Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
                            BooleanValue(false));
 
@@ -7457,11 +7451,11 @@ class UbQuickExampleLegacyNetworkAttributeHintSystemTest : public TestCase
     }
 };
 
-class UbQuickExampleDefaultGbnRetransCanContinueSystemTest : public TestCase
+class UbQuickExampleDisabledRetransStopsOnDropSystemTest : public TestCase
 {
   public:
-    UbQuickExampleDefaultGbnRetransCanContinueSystemTest()
-        : TestCase("UnifiedBus - ub-quick-example uses default GBN retransmission without fail-fast")
+    UbQuickExampleDisabledRetransStopsOnDropSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example stops when packet drops with retransmission disabled")
     {
     }
 
@@ -7493,13 +7487,10 @@ class UbQuickExampleDefaultGbnRetransCanContinueSystemTest : public TestCase
         std::error_code ec;
         std::filesystem::remove_all(caseDir, ec);
 
-        NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
+        NS_TEST_ASSERT_MSG_NE(status, 0, "run should fail-fast after packet drop without retransmission");
+        NS_TEST_ASSERT_MSG_NE(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "default GBN run should not print the removed fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
-                              std::string::npos,
-                              "default GBN run should not reference removed EnableRetrans config");
-        NS_TEST_ASSERT_MSG_EQ(status, 0, "default GBN retransmission run should not fail-fast");
+                              "run should explain why it stopped early");
     }
 };
 
@@ -7527,6 +7518,9 @@ class UbQuickExampleConfiguredGbnRetransCanContinueSystemTest : public TestCase
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
+                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
 
@@ -7541,10 +7535,7 @@ class UbQuickExampleConfiguredGbnRetransCanContinueSystemTest : public TestCase
 
         NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "GBN retransmission run should not print the removed fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
-                              std::string::npos,
-                              "GBN retransmission run should not reference removed EnableRetrans config");
+                              "GBN retransmission run should not print the disabled-retrans diagnostic");
         NS_TEST_ASSERT_MSG_EQ(status, 0, "GBN retransmission run should not fail-fast");
     }
 };
@@ -7576,7 +7567,8 @@ class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
         std::ofstream config(caseDir / "network_attribute.txt", std::ios::app);
-        config << "\ndefault ns3::UbTransportChannel::RetransmissionMode \"SELECTIVE\"\n";
+        config << "\ndefault ns3::UbTransportChannel::EnableRetrans \"true\"\n";
+        config << "default ns3::UbTransportChannel::RetransmissionMode \"SELECTIVE\"\n";
         config << "default ns3::UbTransportChannel::EnableFastRetrans \"true\"\n";
         config.close();
 
@@ -7591,10 +7583,7 @@ class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
 
         NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "selective retransmission run should not print the removed fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(output.find("EnableRetrans"),
-                              std::string::npos,
-                              "selective retransmission run should not reference removed EnableRetrans config");
+                              "selective retransmission run should not print the disabled-retrans diagnostic");
         NS_TEST_ASSERT_MSG_EQ(status, 0, "selective retransmission run should not fail-fast");
     }
 };
@@ -7896,7 +7885,7 @@ class UbQuickExampleSystemTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLegacyNetworkAttributeHintSystemTest(),
                     TestCase::Duration::QUICK);
-        AddTestCase(new UbQuickExampleDefaultGbnRetransCanContinueSystemTest(),
+        AddTestCase(new UbQuickExampleDisabledRetransStopsOnDropSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleConfiguredGbnRetransCanContinueSystemTest(),
                     TestCase::Duration::QUICK);

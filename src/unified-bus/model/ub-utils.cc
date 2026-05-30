@@ -40,8 +40,17 @@ constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys =
      "LD/ST thread attributes moved to the UbLdstThread TypeId."},
 }};
 
-constexpr const char* kDeprecatedEnableRetransAttribute =
-    "ns3::UbTransportChannel::EnableRetrans";
+struct NetworkAttributeAlias
+{
+    const char* legacy;
+    const char* replacement;
+};
+
+constexpr std::array<NetworkAttributeAlias, 2> kNetworkAttributeAliases = {{
+    {"ns3::UbTransportChannel::InitialRTO", "ns3::UbTransportChannel::BaseRTO"},
+    {"ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+     "ns3::UbTransportChannel::EnableFastRetrans"},
+}};
 
 std::string
 DisplayFilename(const std::string& filename)
@@ -50,7 +59,7 @@ DisplayFilename(const std::string& filename)
 }
 
 bool
-IsDeprecatedEnableRetransDefaultLine(const std::string& line)
+RewriteDefaultAttributeLine(std::string& line, const NetworkAttributeAlias& alias)
 {
     const auto firstNonSpace = line.find_first_not_of(" \t");
     if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
@@ -62,43 +71,54 @@ IsDeprecatedEnableRetransDefaultLine(const std::string& line)
     std::string directive;
     std::string attribute;
     tokens >> directive >> attribute;
-    return directive == "default" && attribute == kDeprecatedEnableRetransAttribute;
+    if (directive != "default" || attribute != alias.legacy)
+    {
+        return false;
+    }
+
+    const auto attributePos = line.find(attribute, firstNonSpace + directive.size());
+    NS_ASSERT_MSG(attributePos != std::string::npos, "Parsed network attribute missing from line");
+    line.replace(attributePos, attribute.size(), alias.replacement);
+    return true;
 }
 
 std::string
-CreateConfigStoreInput(const std::string& filename, uint32_t& skippedDeprecatedLines)
+CreateConfigStoreInput(const std::string& filename, uint32_t& rewrittenAliasLines)
 {
     std::ifstream input(filename.c_str());
     NS_ASSERT_MSG(input.good(), "Can not open File: " << filename);
 
-    skippedDeprecatedLines = 0;
-    std::ostringstream filtered;
+    rewrittenAliasLines = 0;
+    std::ostringstream rewritten;
     std::string line;
     while (std::getline(input, line))
     {
-        if (IsDeprecatedEnableRetransDefaultLine(line))
+        for (const auto& alias : kNetworkAttributeAliases)
         {
-            ++skippedDeprecatedLines;
-            continue;
+            if (RewriteDefaultAttributeLine(line, alias))
+            {
+                ++rewrittenAliasLines;
+                break;
+            }
         }
-        filtered << line << '\n';
+        rewritten << line << '\n';
     }
 
-    if (skippedDeprecatedLines == 0)
+    if (rewrittenAliasLines == 0)
     {
         return filename;
     }
 
     const auto uniqueSuffix =
         std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-    const std::filesystem::path filteredPath =
+    const std::filesystem::path rewrittenPath =
         std::filesystem::temp_directory_path() /
-        ("ub-network-attribute-filtered-" + uniqueSuffix + ".txt");
+        ("ub-network-attribute-rewritten-" + uniqueSuffix + ".txt");
 
-    std::ofstream output(filteredPath.c_str(), std::ios::trunc);
-    NS_ASSERT_MSG(output.good(), "Can not create filtered config file: " << filteredPath);
-    output << filtered.str();
-    return filteredPath.string();
+    std::ofstream output(rewrittenPath.c_str(), std::ios::trunc);
+    NS_ASSERT_MSG(output.good(), "Can not create rewritten config file: " << rewrittenPath);
+    output << rewritten.str();
+    return rewrittenPath.string();
 }
 
 void
@@ -1731,12 +1751,12 @@ void UbUtils::SetComponentsAttribute(const string &filename)
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
     ValidateLegacyNetworkAttributeKeys(filename);
-    uint32_t skippedDeprecatedLines = 0;
-    const std::string configStoreFilename = CreateConfigStoreInput(filename, skippedDeprecatedLines);
-    if (skippedDeprecatedLines > 0)
+    uint32_t rewrittenAliasLines = 0;
+    const std::string configStoreFilename = CreateConfigStoreInput(filename, rewrittenAliasLines);
+    if (rewrittenAliasLines > 0)
     {
-        PrintTimestamp("[setup] Ignore deprecated retransmission-enable attribute lines: " +
-                       std::to_string(skippedDeprecatedLines));
+        PrintTimestamp("[setup] Rewrite legacy network attribute aliases: " +
+                       std::to_string(rewrittenAliasLines));
     }
     Config::SetDefault("ns3::ConfigStore::Filename", StringValue(configStoreFilename));
     Config::SetDefault("ns3::ConfigStore::FileFormat", StringValue("RawText"));

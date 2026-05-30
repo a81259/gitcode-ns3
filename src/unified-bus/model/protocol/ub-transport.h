@@ -286,6 +286,8 @@ public:
     UbRetransTimeoutMode GetRetransTimeoutMode() const;
     void SetRetransmissionMode(UbRetransmissionMode mode);
     UbRetransmissionMode GetRetransmissionMode() const;
+    void SetRetransEnable(bool enable);
+    bool GetRetransEnable() const;
     void SetSelectiveAckBitmapBits(uint32_t bits);
     uint32_t GetSelectiveAckBitmapBitsConfig() const;
     void SetFastRetransEnable(bool enable);

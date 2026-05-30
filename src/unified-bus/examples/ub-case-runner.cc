@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ub-case-runner.h"
 
+#include "ns3/boolean.h"
 #include "ns3/command-line.h"
 #include "ns3/node-list.h"
 #include "ns3/ub-app.h"
 #include "ns3/ub-traffic-gen.h"
+#include "ns3/ub-transport.h"
 #include "ns3/ub-utils.h"
 
 #include <array>
@@ -41,6 +43,13 @@ struct QuickExampleOptions
     uint32_t stopMs = 0;
     uint32_t rngRun = 10;
     std::string configPath;
+};
+
+struct DropAbortState
+{
+    bool retransEnabled = false;
+    bool triggered = false;
+    std::string reason;
 };
 
 struct RuntimeSelection
@@ -122,6 +131,56 @@ void CheckNoProgress(double sim_time_us, std::ostringstream& oss)
     }
 }
 
+DropAbortState& GetDropAbortState()
+{
+    static DropAbortState state;
+    return state;
+}
+
+void ResetDropAbortState()
+{
+    auto& state = GetDropAbortState();
+    state = DropAbortState{};
+}
+
+bool IsRetransEnabledForRun()
+{
+    Ptr<UbTransportChannel> tp = CreateObject<UbTransportChannel>();
+    BooleanValue value;
+    tp->GetAttribute("EnableRetrans", value);
+    return value.Get();
+}
+
+void CheckDropWithoutRetrans(std::ostringstream& oss)
+{
+    auto& state = GetDropAbortState();
+    if (state.triggered || state.retransEnabled)
+    {
+        return;
+    }
+
+    if (UbUtils::Get()->GetRuntimePacketDropCount() == 0)
+    {
+        return;
+    }
+
+    state.triggered = true;
+    state.reason = UbUtils::Get()->GetRuntimePacketDropReason();
+    oss << " [ERROR: Packet dropped while retransmission is disabled; stopping run]";
+    std::cout << std::endl;
+    UbUtils::Get()->PrintTimestamp(
+        "[error] Packet dropped while retransmission is disabled. "
+        "This run cannot guarantee completion without end-to-end recovery.");
+    if (!state.reason.empty())
+    {
+        UbUtils::Get()->PrintTimestamp("[error] First drop reason: " + state.reason);
+    }
+    UbUtils::Get()->PrintTimestamp(
+        "[error] Suggested actions: enable ns3::UbTransportChannel::EnableRetrans; "
+        "prefer CBFC for lossless backpressure, or tune PFC carefully if PFC is required.");
+    Simulator::Stop();
+}
+
 void CheckExampleProcess()
 {
     double sim_time_us = Simulator::Now().GetMicroSeconds();
@@ -135,8 +194,13 @@ void CheckExampleProcess()
         << "Simulation time progress: " << FormatTime(sim_time_us);
 
     CheckNoProgress(sim_time_us, oss);
+    CheckDropWithoutRetrans(oss);
 
     std::cout << "\r" << oss.str() << std::flush;
+    if (GetDropAbortState().triggered)
+    {
+        return;
+    }
     if (!UbTrafficGen::Get()->IsCompleted())
     {
         Simulator::Schedule(MicroSeconds(100), &CheckExampleProcess);
@@ -527,7 +591,10 @@ PhaseTiming RunScenario(const QuickExampleOptions& options,
     RngSeedManager::SetSeed(options.rngRun);
 
     timing.simulationStart = std::chrono::high_resolution_clock::now();
+    UbUtils::ResetRuntimeDropDiagnostics();
     BuildScenarioFromConfig(options.configPath);
+    ResetDropAbortState();
+    GetDropAbortState().retransEnabled = IsRetransEnabledForRun();
     ActivateTrafficFromConfig(options.configPath, runtime.enableMpi, runtime.mpiRank);
     if (options.stopMs > 0)
     {
@@ -607,7 +674,7 @@ int RunUbCaseRunner(int argc, char* argv[])
     }
     PhaseTiming timing = RunScenario(options, runtime, programStart);
     ReportResult(options, runtime, timing);
-    return 0;
+    return GetDropAbortState().triggered ? 1 : 0;
 }
 
 } // namespace ns3

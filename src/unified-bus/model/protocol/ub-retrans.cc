@@ -816,6 +816,22 @@ UbRetransController::GetSelectiveMarkPsnEnable() const
 }
 
 void
+UbRetransController::SetRetransEnable(bool enable)
+{
+    m_enableRetrans = enable;
+    if (!m_enableRetrans) {
+        CancelTimer();
+        ClearRetainedState();
+    }
+}
+
+bool
+UbRetransController::GetRetransEnable() const
+{
+    return m_enableRetrans;
+}
+
+void
 UbRetransController::ScheduleTimeout()
 {
     m_retransEvent = Simulator::Schedule(m_rto, &UbTransportChannel::ReTxTimeout, &m_transport);
@@ -824,6 +840,11 @@ UbRetransController::ScheduleTimeout()
 void
 UbRetransController::StartTimerIfNeeded()
 {
+    if (!m_enableRetrans)
+    {
+        return;
+    }
+
     if (!m_retransEvent.IsExpired())
     {
         return;
@@ -836,6 +857,11 @@ UbRetransController::StartTimerIfNeeded()
 void
 UbRetransController::RestartTimerAfterAckProgress()
 {
+    if (!m_enableRetrans)
+    {
+        return;
+    }
+
     m_rto = m_baseRto;
     m_retransAttemptsLeft = m_maxRetransAttempts;
     m_retransEvent.Cancel();
@@ -851,6 +877,11 @@ UbRetransController::CancelTimer()
 UbRetransTimeoutResult
 UbRetransController::OnTimeout()
 {
+    if (!m_enableRetrans)
+    {
+        return {};
+    }
+
     m_retransAttemptsLeft--;
     if (m_retransTimeoutMode == UbRetransTimeoutMode::DYNAMIC) {
         uint64_t rto = m_rto.GetNanoSeconds();
@@ -884,6 +915,22 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
                                          const UbCongestionExtTph* cetph)
 {
     UbRetransAckResult result;
+    if (!m_enableRetrans)
+    {
+        if (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
+            opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH) {
+            result.previousSndUna = m_transport.GetPsnSndUna();
+            if (tph.GetPsn() + 1 > m_transport.GetPsnSndUna()) {
+                m_transport.SetPsnSndUna(tph.GetPsn() + 1);
+            }
+            result.newSndUna = m_transport.GetPsnSndUna();
+            result.ackAdvanced = result.newSndUna > result.previousSndUna;
+        } else {
+            result.ignoreResponse = true;
+        }
+        return result;
+    }
+
     if (opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH) {
         result.triggerTransmit = m_gbn->HandleTpNak(tph.GetPsn());
     } else if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
@@ -916,6 +963,11 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
 UbRetransReceiveDecision
 UbRetransController::OnDataPacketReceived(uint64_t psn)
 {
+    if (!m_enableRetrans)
+    {
+        return {};
+    }
+
     if (m_retransmissionMode == UbRetransmissionMode::GBN) {
         return m_gbn->OnDataPacketReceived(psn);
     }
@@ -931,6 +983,15 @@ UbRetransController::ResolveSelectiveAckBitmapBits(uint32_t& bits) const
 UbRetransReceiveDecision
 UbRetransController::BuildReceiveDecisionForCurrentState() const
 {
+    if (!m_enableRetrans)
+    {
+        UbRetransReceiveDecision decision;
+        decision.shouldAck = true;
+        decision.responsePsn = m_transport.GetCumulativeAckPsnForRetrans();
+        decision.responseOpcode = m_transport.GetResponseOpcodeForRetrans(false);
+        return decision;
+    }
+
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE)
     {
         return m_selective->BuildReceiveDecisionForCurrentState();
@@ -949,6 +1010,11 @@ UbRetransController::OnNewDataPacketSent(uint64_t psn,
                                          uint32_t payloadBytes,
                                          uint32_t resLenBytes)
 {
+    if (!m_enableRetrans)
+    {
+        return;
+    }
+
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
         m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, resLenBytes);
     }
@@ -957,6 +1023,11 @@ UbRetransController::OnNewDataPacketSent(uint64_t psn,
 Ptr<Packet>
 UbRetransController::TryGetNextRetransmissionPacket()
 {
+    if (!m_enableRetrans)
+    {
+        return nullptr;
+    }
+
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
         return m_selective->TryGetNextRetransmissionPacket();
     }
@@ -966,6 +1037,11 @@ UbRetransController::TryGetNextRetransmissionPacket()
 bool
 UbRetransController::HasPendingSelectiveRetransmission() const
 {
+    if (!m_enableRetrans)
+    {
+        return false;
+    }
+
     return m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
            m_selective->HasPendingRetransmission();
 }
@@ -973,6 +1049,11 @@ UbRetransController::HasPendingSelectiveRetransmission() const
 bool
 UbRetransController::CanSendSelectiveRetransmission() const
 {
+    if (!m_enableRetrans)
+    {
+        return false;
+    }
+
     return m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
            m_selective->CanSendRetransmission();
 }
@@ -980,7 +1061,7 @@ UbRetransController::CanSendSelectiveRetransmission() const
 uint32_t
 UbRetransController::GetNextSelectiveRetransmissionSize() const
 {
-    if (m_retransmissionMode != UbRetransmissionMode::SELECTIVE) {
+    if (!m_enableRetrans || m_retransmissionMode != UbRetransmissionMode::SELECTIVE) {
         return 0;
     }
     return m_selective->GetNextRetransmissionSize();
@@ -989,7 +1070,7 @@ UbRetransController::GetNextSelectiveRetransmissionSize() const
 uint32_t
 UbRetransController::GetNextSelectiveRetransmissionPayloadBytes() const
 {
-    if (m_retransmissionMode != UbRetransmissionMode::SELECTIVE) {
+    if (!m_enableRetrans || m_retransmissionMode != UbRetransmissionMode::SELECTIVE) {
         return 0;
     }
     return m_selective->GetNextRetransmissionPayloadBytes();
