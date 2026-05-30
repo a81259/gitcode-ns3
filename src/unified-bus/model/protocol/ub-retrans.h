@@ -106,8 +106,8 @@ public:
     bool HasPendingRetransmission() const;
     bool CanSendRetransmission() const;
     uint32_t GetNextRetransmissionSize() const;
-    uint32_t GetNextRetransmissionLogicalBytes() const;
-    uint32_t GetRetainedLogicalBytes(uint64_t psn) const;
+    uint32_t GetNextRetransmissionPayloadBytes() const;
+    uint32_t GetRetainedPayloadBytes(uint64_t psn) const;
 
     uint32_t GetPendingRetransmissionCountForTest() const;
     uint32_t GetRawRetransmissionQueueCountForTest() const;
@@ -203,7 +203,7 @@ public:
     bool HasPendingSelectiveRetransmission() const;
     bool CanSendSelectiveRetransmission() const;
     uint32_t GetNextSelectiveRetransmissionSize() const;
-    uint32_t GetNextSelectiveRetransmissionLogicalBytes() const;
+    uint32_t GetNextSelectiveRetransmissionPayloadBytes() const;
     uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
     uint32_t GetRawSelectiveRetransmissionQueueCountForTest() const;
     bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;

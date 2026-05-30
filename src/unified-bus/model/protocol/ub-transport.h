@@ -299,11 +299,9 @@ public:
     uint64_t GetPsnRecvNxt() const;
     void ResetSegmentSendProgressFromPsn(uint64_t psn);
     void TriggerTransportTransmit();
-    bool IsCcLimitedForRetransmission(uint32_t logicalBytes) const;
+    bool IsCcLimitedForRetransmission(uint32_t payloadBytes) const;
     void SetSendWindowLimited(bool limited);
-    void OnSelectiveRetransmissionPacketSent(uint64_t psn,
-                                             uint32_t logicalBytes,
-                                             uint32_t payloadBytes);
+    void OnSelectiveRetransmissionPacketSent(uint64_t psn, uint32_t payloadBytes);
     void OnSenderSelectiveAck(TpOpcode opcode,
                               uint64_t psn,
                               const UbSelectiveAckExtTph& saetph,

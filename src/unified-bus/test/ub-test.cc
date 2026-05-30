@@ -411,6 +411,54 @@ RecordSelectiveRetransmitForTest(uint32_t nodeId, uint32_t tpn, uint64_t psn, ui
     g_selectiveRetransmitRecordsForTest.push_back({nodeId, tpn, psn, payloadBytes});
 }
 
+class RecordingRetransmissionCc : public UbCongestionControl
+{
+public:
+    static TypeId GetTypeId()
+    {
+        static TypeId tid =
+            TypeId("ns3::RecordingRetransmissionCc")
+                .SetParent<UbCongestionControl>()
+                .SetGroupName("UnifiedBus")
+                .AddConstructor<RecordingRetransmissionCc>();
+        return tid;
+    }
+
+    bool IsCcLimited(uint32_t bytes) override
+    {
+        lastLimitedCheckBytes = bytes;
+        return bytes > 0;
+    }
+
+    void OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size) override
+    {
+        lastRetransmissionPsn = psn;
+        lastRetransmissionBytes = size;
+        retransmissionNotifyCount++;
+    }
+
+    void OnSenderSelectiveAck(TpOpcode opcode,
+                              uint32_t cumulativePsn,
+                              const UbSelectiveAckExtTph& saetph,
+                              const UbCongestionExtTph* cetph,
+                              uint32_t retransmitBytes) override
+    {
+        (void)opcode;
+        (void)cumulativePsn;
+        (void)saetph;
+        (void)cetph;
+        lastSelectiveAckRetransmitBytes = retransmitBytes;
+        selectiveAckNotifyCount++;
+    }
+
+    uint32_t lastLimitedCheckBytes{0};
+    uint32_t lastRetransmissionPsn{0};
+    uint32_t lastRetransmissionBytes{0};
+    uint32_t retransmissionNotifyCount{0};
+    uint32_t lastSelectiveAckRetransmitBytes{0};
+    uint32_t selectiveAckNotifyCount{0};
+};
+
 Ptr<UbTransportChannel>
 CreateSelectiveReceiverTp(const LocalTpTopology& topo)
 {
@@ -711,7 +759,7 @@ class UbDcqcnCnpHeaderRoundTripTest : public TestCase
 {
 public:
     UbDcqcnCnpHeaderRoundTripTest()
-        : TestCase("UnifiedBus - DCQCN CNP header round-trips ECN/location in spec layout")
+        : TestCase("UnifiedBus - DCQCN CNP header round-trips ECN and location in spec layout")
     {
     }
 
@@ -2336,6 +2384,62 @@ public:
         NS_TEST_ASSERT_MSG_GT(cc->GetNextAvailableSendTimeForTest(),
                               beforeRetransmit,
                               "selective retransmission should advance DCQCN pacing debt");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest : public TestCase
+{
+public:
+    UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest()
+        : TestCase("UnifiedBus - selective retransmission congestion control uses payload bytes")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                           EnumValue(UbRetransmissionMode::SELECTIVE));
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<RecordingRetransmissionCc> cc = CreateObject<RecordingRetransmissionCc>();
+        txTp->SetCongestionControlForTest(cc);
+
+        txTp->RetainSentPsnForTest(10, 16, 16);
+        txTp->RetainSentPsnForTest(11, 0, 1000);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000));
+
+        NS_TEST_ASSERT_MSG_EQ(cc->selectiveAckNotifyCount,
+                              1u,
+                              "TPSACK should notify congestion control once");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastSelectiveAckRetransmitBytes,
+                              0u,
+                              "TPSACK congestion accounting should use missing payload bytes");
+
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission,
+                              nullptr,
+                              "zero-payload selective retransmission should not be blocked by logical bytes");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastLimitedCheckBytes,
+                              0u,
+                              "retransmission CC limit check should use payload bytes");
+        NS_TEST_ASSERT_MSG_EQ(cc->retransmissionNotifyCount,
+                              1u,
+                              "dequeued selective retransmission should notify congestion control");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastRetransmissionBytes,
+                              0u,
+                              "retransmission send accounting should use payload bytes");
 
         Simulator::Destroy();
         Config::Reset();
@@ -4374,7 +4478,7 @@ class UbQueueManagerDynamicPfcDecisionApiTest : public TestCase
 {
   public:
     UbQueueManagerDynamicPfcDecisionApiTest()
-        : TestCase("UnifiedBus - queue manager exposes unified dynamic PFC pause/resume decisions")
+        : TestCase("UnifiedBus - queue manager exposes unified dynamic PFC pause resume decisions")
     {
     }
 
@@ -4423,7 +4527,7 @@ class UbQueueManagerPaperPfcDecisionApiTest : public TestCase
 {
   public:
     UbQueueManagerPaperPfcDecisionApiTest()
-        : TestCase("UnifiedBus - queue manager exposes unified paper PFC pause/resume decisions")
+        : TestCase("UnifiedBus - queue manager exposes unified paper PFC pause resume decisions")
     {
     }
 
@@ -6615,6 +6719,8 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSelectiveSenderQueuePriorityTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderRtoEnqueuesOutstandingPsnsTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveRetransmissionAccountsDcqcnSendStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbCaqmSelectiveAckWithCetphAccountingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbTransportTpsackCcReportsRetransmitBytesOnceTest(),
                 TestCase::Duration::QUICK);
@@ -6711,6 +6817,8 @@ class UbOutOfOrderRegressionTestSuite : public TestSuite
         : TestSuite("unified-bus-transport-ooo-regression", Type::UNIT)
     {
         AddTestCase(new UbUrmaWriteOutOfOrderRequestSliceCompletionTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
                     TestCase::Duration::QUICK);
     }
 };

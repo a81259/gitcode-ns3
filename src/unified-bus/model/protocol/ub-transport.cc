@@ -463,9 +463,9 @@ UbTransportChannel::TriggerTransportTransmit()
 }
 
 bool
-UbTransportChannel::IsCcLimitedForRetransmission(uint32_t logicalBytes) const
+UbTransportChannel::IsCcLimitedForRetransmission(uint32_t payloadBytes) const
 {
-    return m_congestionCtrl->IsCcLimited(logicalBytes == 0 ? UB_MTU_BYTE : logicalBytes);
+    return m_congestionCtrl->IsCcLimited(payloadBytes);
 }
 
 void
@@ -475,11 +475,9 @@ UbTransportChannel::SetSendWindowLimited(bool limited)
 }
 
 void
-UbTransportChannel::OnSelectiveRetransmissionPacketSent(uint64_t psn,
-                                                        uint32_t logicalBytes,
-                                                        uint32_t payloadBytes)
+UbTransportChannel::OnSelectiveRetransmissionPacketSent(uint64_t psn, uint32_t payloadBytes)
 {
-    m_congestionCtrl->OnSenderRetransmissionPacketSent(static_cast<uint32_t>(psn), logicalBytes);
+    m_congestionCtrl->OnSenderRetransmissionPacketSent(static_cast<uint32_t>(psn), payloadBytes);
     m_traceSelectiveRetransmit(m_nodeId, m_tpn, psn, payloadBytes);
 }
 
@@ -1922,8 +1920,8 @@ bool UbTransportChannel::IsLimited()
         return false;
     }
     if (m_retrans->CanSendSelectiveRetransmission()) {
-        const uint32_t logicalBytes = m_retrans->GetNextSelectiveRetransmissionLogicalBytes();
-        if (m_congestionCtrl->IsCcLimited(logicalBytes == 0 ? UB_MTU_BYTE : logicalBytes)) {
+        const uint32_t payloadBytes = m_retrans->GetNextSelectiveRetransmissionPayloadBytes();
+        if (m_congestionCtrl->IsCcLimited(payloadBytes)) {
             m_sendWindowLimited = true;
             return true;
         }

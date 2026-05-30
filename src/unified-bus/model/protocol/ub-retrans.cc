@@ -293,22 +293,22 @@ UbSelectiveRetransStrategy::GetNextRetransmissionSize() const
 }
 
 uint32_t
-UbSelectiveRetransStrategy::GetNextRetransmissionLogicalBytes() const
+UbSelectiveRetransStrategy::GetNextRetransmissionPayloadBytes() const
 {
     for (uint64_t psn : m_selectiveRetransmitQ) {
         auto it = m_sentPsnState.find(psn);
         if (it != m_sentPsnState.end() && !it->second.acknowledged && it->second.packet != nullptr) {
-            return it->second.logicalBytes;
+            return it->second.payloadBytes;
         }
     }
     return 0;
 }
 
 uint32_t
-UbSelectiveRetransStrategy::GetRetainedLogicalBytes(uint64_t psn) const
+UbSelectiveRetransStrategy::GetRetainedPayloadBytes(uint64_t psn) const
 {
     auto it = m_sentPsnState.find(psn);
-    return it == m_sentPsnState.end() ? 0 : it->second.logicalBytes;
+    return it == m_sentPsnState.end() ? 0 : it->second.payloadBytes;
 }
 
 Ptr<Packet>
@@ -325,8 +325,8 @@ UbSelectiveRetransStrategy::TryGetNextRetransmissionPacket()
             }
             continue;
         }
-        const uint32_t logicalBytes = it->second.logicalBytes == 0 ? UB_MTU_BYTE : it->second.logicalBytes;
-        if (transport.IsCcLimitedForRetransmission(logicalBytes)) {
+        const uint32_t payloadBytes = it->second.payloadBytes;
+        if (transport.IsCcLimitedForRetransmission(payloadBytes)) {
             transport.SetSendWindowLimited(true);
             return nullptr;
         }
@@ -337,7 +337,7 @@ UbSelectiveRetransStrategy::TryGetNextRetransmissionPacket()
             m_lastFirstRtxPsnValid = true;
         }
         it->second.retransmitCount++;
-        transport.OnSelectiveRetransmissionPacketSent(psn, logicalBytes, it->second.payloadBytes);
+        transport.OnSelectiveRetransmissionPacketSent(psn, payloadBytes);
         Ptr<Packet> retransmission = it->second.packet->Copy();
         if (IsMarkPsnEnabled()) {
             FinishMarkPsnRetransPhaseIfDone();
@@ -392,7 +392,7 @@ UbSelectiveRetransStrategy::OnTransportResponse(const UbTransportHeader& tpHeade
     std::vector<uint64_t> missingPsns = CollectMissingPsnsFromSelectiveAck(tpHeader, saetph);
     uint32_t retransmitBytes = 0;
     for (uint64_t psn : missingPsns) {
-        retransmitBytes += GetRetainedLogicalBytes(psn);
+        retransmitBytes += GetRetainedPayloadBytes(psn);
     }
     transport.OnSenderSelectiveAck(opcode, tpHeader.GetPsn(), saetph, cetph, retransmitBytes);
     bool queuedFastRetransmission = false;
@@ -411,7 +411,7 @@ UbSelectiveRetransStrategy::OnTransportResponse(const UbTransportHeader& tpHeade
     result.newSndUna = transport.GetPsnSndUna();
     result.ackAdvanced = result.newSndUna > result.previousSndUna;
     result.triggerTransmit = queuedFastRetransmission && CanSendRetransmission() &&
-                             !transport.IsCcLimitedForRetransmission(GetNextRetransmissionLogicalBytes());
+                             !transport.IsCcLimitedForRetransmission(GetNextRetransmissionPayloadBytes());
     return result;
 }
 
@@ -987,12 +987,12 @@ UbRetransController::GetNextSelectiveRetransmissionSize() const
 }
 
 uint32_t
-UbRetransController::GetNextSelectiveRetransmissionLogicalBytes() const
+UbRetransController::GetNextSelectiveRetransmissionPayloadBytes() const
 {
     if (m_retransmissionMode != UbRetransmissionMode::SELECTIVE) {
         return 0;
     }
-    return m_selective->GetNextRetransmissionLogicalBytes();
+    return m_selective->GetNextRetransmissionPayloadBytes();
 }
 
 uint32_t
