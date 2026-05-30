@@ -106,12 +106,12 @@ void
 UbSelectiveRetransStrategy::RetainSentPsn(uint64_t psn,
                                           Ptr<Packet> packet,
                                           uint32_t payloadBytes,
-                                          uint32_t logicalBytes)
+                                          uint32_t resLenBytes)
 {
     SentPsnState& state = m_sentPsnState[psn];
     state.packet = packet != nullptr ? packet->Copy() : nullptr;
     state.payloadBytes = payloadBytes;
-    state.logicalBytes = logicalBytes;
+    state.resLenBytes = resLenBytes;
     state.acknowledged = false;
     state.selectivelyReportedMissing = false;
     state.retransmitPending = false;
@@ -539,12 +539,12 @@ void
 UbSelectiveRetransStrategy::OnNewDataPacketSent(uint64_t psn,
                                                 Ptr<Packet> packet,
                                                 uint32_t payloadBytes,
-                                                uint32_t logicalBytes)
+                                                uint32_t resLenBytes)
 {
     if (IsMarkPsnEnabled()) {
         MaybeMarkFirstNewSelectivePacket(psn);
     }
-    RetainSentPsn(psn, packet, payloadBytes, logicalBytes);
+    RetainSentPsn(psn, packet, payloadBytes, resLenBytes);
 }
 
 void
@@ -947,10 +947,10 @@ void
 UbRetransController::OnNewDataPacketSent(uint64_t psn,
                                          Ptr<Packet> packet,
                                          uint32_t payloadBytes,
-                                         uint32_t logicalBytes)
+                                         uint32_t resLenBytes)
 {
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes);
+        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, resLenBytes);
     }
 }
 

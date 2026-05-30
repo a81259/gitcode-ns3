@@ -2128,7 +2128,7 @@ public:
         request->SetRequestOpcode(TaOpcode::TA_OPCODE_WRITE);
         request->SetResponseBytes(0);
         request->SetNeedsTransactionResponse(true);
-        request->SetLogicalBytes(UB_MTU_BYTE * 4);
+        request->SetResLenBytes(UB_MTU_BYTE * 4);
         request->SetPayloadBytes(UB_MTU_BYTE * 4);
         request->SetCarrierBytes(UB_MTU_BYTE * 4);
 
@@ -2430,7 +2430,7 @@ public:
         Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
         NS_TEST_ASSERT_MSG_NE(retransmission,
                               nullptr,
-                              "zero-payload selective retransmission should not be blocked by logical bytes");
+                              "zero-payload selective retransmission should not be blocked by ResLen bytes");
         NS_TEST_ASSERT_MSG_EQ(cc->lastLimitedCheckBytes,
                               0u,
                               "retransmission CC limit check should use payload bytes");
@@ -3224,9 +3224,9 @@ class UbUrmaReadWqeMetadataPropagationTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(wqe->GetResponseBytes(),
                               payloadBytes,
                               "CreateWqe should initialize read response bytes");
-        NS_TEST_ASSERT_MSG_EQ(wqe->GetLogicalBytes(),
+        NS_TEST_ASSERT_MSG_EQ(wqe->GetResLenBytes(),
                               payloadBytes,
-                              "READ WQE logicalBytes should equal request bytes");
+                              "READ WQE resLenBytes should equal request bytes");
         NS_TEST_ASSERT_MSG_EQ(wqe->GetPayloadBytes(),
                               0u,
                               "READ WQE payloadBytes should be zero");
@@ -3267,9 +3267,9 @@ class UbUrmaReadWqeMetadataPropagationTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(segment->GetResponseBytes(),
                               payloadBytes,
                               "Segment should carry read response byte count");
-        NS_TEST_ASSERT_MSG_EQ(segment->GetLogicalBytes(),
+        NS_TEST_ASSERT_MSG_EQ(segment->GetResLenBytes(),
                               payloadBytes,
-                              "READ request slice logicalBytes should preserve request bytes");
+                              "READ request slice resLenBytes should preserve request bytes");
         NS_TEST_ASSERT_MSG_EQ(segment->GetPayloadBytes(),
                               0u,
                               "READ request slice payloadBytes should be zero");
@@ -3905,7 +3905,7 @@ class UbUrmaWriteOutOfOrderRequestSliceCompletionTest : public TestCase
         segment->SetRequestOpcode(TaOpcode::TA_OPCODE_WRITE);
         segment->SetResponseBytes(0);
         segment->SetNeedsTransactionResponse(true);
-        segment->SetLogicalBytes(requestBytes);
+        segment->SetResLenBytes(requestBytes);
         segment->SetPayloadBytes(requestBytes);
         segment->SetCarrierBytes(requestBytes);
         return segment;

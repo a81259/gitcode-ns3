@@ -47,7 +47,7 @@ GetPayloadBytesThisPacket(const Ptr<UbWqeSegment>& segment, uint32_t progressByt
 uint32_t
 GetWireLengthBytes(const Ptr<UbWqeSegment>& segment, uint32_t payloadBytes)
 {
-    return IsZeroPayloadReadRequest(segment) ? segment->GetLogicalBytes() : payloadBytes;
+    return IsZeroPayloadReadRequest(segment) ? segment->GetResLenBytes() : payloadBytes;
 }
 
 uint32_t
@@ -909,7 +909,7 @@ Ptr<Packet> UbTransportChannel::GenDataPacket(Ptr<UbWqeSegment> wqeSegment,
 
 Ptr<UbWqeSegment> UbTransportChannel::TrackInboundTaPacket(const UbTransportHeader& tpHeader,
                                                            const UbTransactionHeader& taHeader,
-                                                           uint32_t logicalBytes,
+                                                           uint32_t resLenBytes,
                                                            uint32_t payloadBytes,
                                                            uint32_t taskId)
 {
@@ -956,16 +956,16 @@ Ptr<UbWqeSegment> UbTransportChannel::TrackInboundTaPacket(const UbTransportHead
     {
         state.segment->SetRequestOpcode(taOpcode);
     }
-    state.segment->SetResponseBytes(isReadRequest ? logicalBytes : (isReadResponse ? payloadBytes : 0));
+    state.segment->SetResponseBytes(isReadRequest ? resLenBytes : (isReadResponse ? payloadBytes : 0));
     state.segment->SetNeedsTransactionResponse(
         taOpcode == TaOpcode::TA_OPCODE_WRITE || isReadRequest);
 
     state.bytesReceived += payloadBytes;
     if (isReadRequest)
     {
-        state.segment->SetSize(logicalBytes);
-        state.segment->SetWqeSize(logicalBytes);
-        state.segment->SetLogicalBytes(logicalBytes);
+        state.segment->SetSize(resLenBytes);
+        state.segment->SetWqeSize(resLenBytes);
+        state.segment->SetResLenBytes(resLenBytes);
         state.segment->SetPayloadBytes(0);
         state.segment->SetCarrierBytes(1);
     }
@@ -973,7 +973,7 @@ Ptr<UbWqeSegment> UbTransportChannel::TrackInboundTaPacket(const UbTransportHead
     {
         state.segment->SetSize(state.bytesReceived);
         state.segment->SetWqeSize(state.bytesReceived);
-        state.segment->SetLogicalBytes(state.bytesReceived);
+        state.segment->SetResLenBytes(state.bytesReceived);
         state.segment->SetPayloadBytes(state.bytesReceived);
         state.segment->SetCarrierBytes(state.bytesReceived);
     }
@@ -1070,7 +1070,7 @@ UbTransportChannel::GetResponseOpcodeForRetrans(bool selectiveAck) const
 }
 
 void
-UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t logicalBytes)
+UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t resLenBytes)
 {
     Ptr<Packet> packet = Create<Packet>(payloadBytes);
     UbTransportHeader tpHeader;
@@ -1079,7 +1079,7 @@ UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, ui
     tpHeader.SetDestTpn(m_dstTpn);
     tpHeader.SetPsn(static_cast<uint32_t>(psn));
     packet->AddHeader(tpHeader);
-    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, logicalBytes);
+    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, resLenBytes);
 }
 
 uint32_t
@@ -1434,7 +1434,7 @@ UbTransportChannel::ParseReceivedDataPacket(Ptr<Packet> packet,
     packet->RemoveHeader(ctx.transactionHeader);
     packet->RemoveHeader(ctx.maExtHeader);
     ctx.payloadBytes = packet->GetSize();
-    ctx.logicalBytes = ctx.maExtHeader.GetLength();
+    ctx.resLenBytes = ctx.maExtHeader.GetLength();
     ctx.psn = ctx.transportHeader.GetPsn();
     packet->PeekPacketTag(ctx.flowTag);
     return true;
@@ -1631,7 +1631,7 @@ UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
     UbFlowTag flowTag = ctx.flowTag;
     m_bufferedInboundPackets[ctx.psn] = {ctx.transportHeader,
                                          ctx.transactionHeader,
-                                         ctx.logicalBytes,
+                                         ctx.resLenBytes,
                                          ctx.payloadBytes,
                                          flowTag.GetFlowId()};
     if (outOfOrderPacket) {
@@ -1658,7 +1658,7 @@ UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
         Ptr<UbWqeSegment> completedTaUnit =
             TrackInboundTaPacket(bufferedIt->second.tpHeader,
                                  bufferedIt->second.taHeader,
-                                 bufferedIt->second.logicalBytes,
+                                 bufferedIt->second.resLenBytes,
                                  bufferedIt->second.payloadBytes,
                                  bufferedIt->second.taskId);
         if (completedTaUnit != nullptr) {

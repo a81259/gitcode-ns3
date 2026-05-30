@@ -741,14 +741,14 @@ public:
         return m_needsTransactionResponse;
     }
 
-    void SetLogicalBytes(uint32_t logicalBytes)
+    void SetResLenBytes(uint32_t resLenBytes)
     {
-        m_logicalBytes = logicalBytes;
+        m_resLenBytes = resLenBytes;
     }
 
-    uint32_t GetLogicalBytes() const
+    uint32_t GetResLenBytes() const
     {
-        return m_logicalBytes;
+        return m_resLenBytes;
     }
 
     void SetPayloadBytes(uint32_t payloadBytes)
@@ -800,7 +800,7 @@ private:
     uint32_t m_responseBytes = 0;
     uint64_t m_remoteAddress = 0;
     bool m_needsTransactionResponse = true;
-    uint32_t m_logicalBytes = 0;
+    uint32_t m_resLenBytes = 0;
     uint32_t m_payloadBytes = 0;
     uint32_t m_carrierBytes = 0;
 
@@ -1185,14 +1185,14 @@ public:
         return m_needsTransactionResponse;
     }
 
-    void SetLogicalBytes(uint32_t logicalBytes)
+    void SetResLenBytes(uint32_t resLenBytes)
     {
-        m_logicalBytes = logicalBytes;
+        m_resLenBytes = resLenBytes;
     }
 
-    uint32_t GetLogicalBytes() const
+    uint32_t GetResLenBytes() const
     {
-        return m_logicalBytes;
+        return m_resLenBytes;
     }
 
     void SetPayloadBytes(uint32_t payloadBytes)
@@ -1245,7 +1245,7 @@ private:
     uint32_t m_responseBytes{0};
     uint64_t m_remoteAddress{0};
     bool m_needsTransactionResponse{true};
-    uint32_t m_logicalBytes{0};
+    uint32_t m_resLenBytes{0};
     uint32_t m_payloadBytes{0};
     uint32_t m_carrierBytes{0};
 

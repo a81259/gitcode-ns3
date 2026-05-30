@@ -269,7 +269,7 @@ public:
     uint32_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
     void SetPsnSndUnaForTest(uint64_t psn) { m_psnSndUna = psn; }
     bool ResolveSelectiveAckBitmapBitsForTest(uint32_t& bits) const;
-    void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t logicalBytes);
+    void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t resLenBytes);
     uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
     uint32_t GetRawSelectiveRetransmissionQueueCountForTest() const;
     bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
@@ -324,7 +324,7 @@ private:
     {
         UbTransportHeader tpHeader;
         UbTransactionHeader taHeader;
-        uint32_t logicalBytes{0};
+        uint32_t resLenBytes{0};
         uint32_t payloadBytes{0};
         uint32_t taskId{0};
     };
@@ -342,7 +342,7 @@ private:
         UbFlowTag flowTag;
         uint64_t psn{0};
         uint32_t payloadBytes{0};
-        uint32_t logicalBytes{0};
+        uint32_t resLenBytes{0};
     };
 
     struct AckResponseContext
@@ -391,7 +391,7 @@ private:
     Ptr<UbTransaction> GetTransaction();
     Ptr<UbWqeSegment> TrackInboundTaPacket(const UbTransportHeader& tpHeader,
                                            const UbTransactionHeader& taHeader,
-                                           uint32_t logicalBytes,
+                                           uint32_t resLenBytes,
                                            uint32_t payloadBytes,
                                            uint32_t taskId);
     bool ShouldCompleteOnTpAck(const Ptr<UbWqeSegment>& segment) const;
