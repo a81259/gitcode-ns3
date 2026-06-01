@@ -774,7 +774,7 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
             }
             return packet;
         }
-        if (m_retrans->CanSendSelectiveRetransmission()) {
+        if (HasPendingSelectiveRetransmissionWork()) {
             return nullptr;
         }
     }
