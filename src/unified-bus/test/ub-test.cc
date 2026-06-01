@@ -1359,6 +1359,31 @@ public:
     }
 };
 
+class UbRetransDisabledDoesNotRetainSentPacketsTest : public TestCase
+{
+public:
+    UbRetransDisabledDoesNotRetainSentPacketsTest()
+        : TestCase("UnifiedBus - disabled retransmission does not retain sent packets")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(false));
+
+        Ptr<UbTransportChannel> txTp = CreateObject<UbTransportChannel>();
+        txTp->RetainSentPsnForTest(10, 64);
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(10),
+                              false,
+                              "disabled retransmission must not retain packet state");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbAckWithoutCetphCarriesNoCetphHeaderTest : public TestCase
 {
 public:
@@ -1438,6 +1463,37 @@ public:
         NS_TEST_ASSERT_MSG_EQ(ackTaHeader.GetTaOpcode(),
                               static_cast<uint8_t>(TaOpcode::TA_OPCODE_TRANSACTION_ACK),
                               "ACK_WITHOUT_CETPH should expose TA ACK immediately after TP header");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbRetransDisabledReceiveGapDoesNotEmitSackTest : public TestCase
+{
+public:
+    UbRetransDisabledReceiveGapDoesNotEmitSackTest()
+        : TestCase("UnifiedBus - disabled retransmission receive gap does not emit SACK")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(false));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(
+            rxTp->GetPendingAckCountForTest(),
+            0u,
+            "disabled retransmission should match main: out-of-order gap records state without ACK/SACK");
 
         Simulator::Destroy();
         Config::Reset();
@@ -6691,7 +6747,9 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSelectiveAckExtTphWireBitOrderTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbTransportResponseStatusFieldsTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbTransportRetransmissionModeDefaultsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledDoesNotRetainSentPacketsTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAckWithoutCetphCarriesNoCetphHeaderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledReceiveGapDoesNotEmitSackTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverTpsackGapTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverAckAfterGapClosesTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverExplicitBitmapWidthTest(), TestCase::Duration::QUICK);
