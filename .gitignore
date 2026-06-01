@@ -64,6 +64,18 @@ testpy-output/
 scratch/openusim-generated/
 scratch/debug*/
 scratch/archived/
+scratch/retrans/**
+!scratch/retrans/
+!scratch/retrans/README.md
+!scratch/retrans/retrans_fault_schema.md
+!scratch/retrans/SELE_fast/
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/network_attribute.txt
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/node.csv
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/topology.csv
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/routing_table.csv
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/traffic.csv
+!scratch/retrans/SELE_fast/non_first_tp_packet_loss_markpsn/retrans_fault.csv
 
 # Temporary and backup files
 *.tmp

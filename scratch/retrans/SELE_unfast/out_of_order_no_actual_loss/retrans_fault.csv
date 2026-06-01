@@ -1,2 +1,0 @@
-ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,delayNs,delayCount,comment
-sele_unfast_out_of_order_no_actual_loss,true,0,2,1,forward,DATA,1,any,0,700,1,delay PSN m+1 once so PSN m+2/m+3 arrive first

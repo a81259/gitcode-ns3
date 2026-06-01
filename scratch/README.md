@@ -97,7 +97,7 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `UsePacketSpray` (bool)
   - `UseShortestPaths` (bool)
   - `EnableRetrans`, `InitialRTO`, `MaxRetransAttempts`, `RetransExponentFactor`, `DefaultMaxWqeSegNum`, `DefaultMaxInflightPacketSize`
-  - `RetransmissionMode`, `TpOooThreshold`, `SelectiveAckBitmapBits`, `EnableFastSelectiveRetrans`
+  - `RetransmissionMode`, `TpOooThreshold`, `SelectiveAckBitmapBits`, `EnableFastSelectiveRetrans`, `EnableSelectiveMarkPsn`
 - Allocator:
   - `ns3::UbSwitchAllocator::AllocationTime` (Time)
 - App & API LD/ST knobs:
@@ -142,6 +142,7 @@ advanced settings may be written explicitly:
 ```text
 default ns3::UbTransportChannel::SelectiveAckBitmapBits "64"
 default ns3::UbTransportChannel::EnableFastSelectiveRetrans "true"
+default ns3::UbTransportChannel::EnableSelectiveMarkPsn "true"
 ```
 
 `SelectiveRetransmitNotify` is an ns-3 `TraceSource` on `UbTransportChannel`

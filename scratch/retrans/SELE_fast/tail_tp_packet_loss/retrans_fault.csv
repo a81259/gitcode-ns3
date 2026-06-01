@@ -1,3 +1,0 @@
-ruleId,enabled,taskId,nodeId,portId,direction,packetType,psn,lastPacket,dropCount,comment
-sele_fast_tail_tp_packet_loss_m_plus_1,true,0,2,1,forward,DATA,1,any,1,drop PSN m+1 once to generate TPSACK
-sele_fast_tail_tp_packet_loss_tail,true,0,2,1,forward,DATA,4,true,1,drop tail PSN m+4 once
