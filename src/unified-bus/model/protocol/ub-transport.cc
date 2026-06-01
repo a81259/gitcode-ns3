@@ -1313,6 +1313,20 @@ UbTransportChannel::AdvanceSenderAckFromPlainTpack(const TransportResponseContex
     return result;
 }
 
+UbRetransReceiveDecision
+UbTransportChannel::BuildCurrentAckDecision() const
+{
+    if (IsRetransEnabled()) {
+        return m_retrans->BuildReceiveDecisionForCurrentState();
+    }
+
+    UbRetransReceiveDecision decision;
+    decision.shouldAck = true;
+    decision.responsePsn = GetCumulativeAckPsnForRetrans();
+    decision.responseOpcode = GetResponseOpcodeForRetrans(false);
+    return decision;
+}
+
 void
 UbTransportChannel::CompleteAckedWqeSegments(const TransportResponseContext& ctx)
 {
@@ -1634,8 +1648,7 @@ UbTransportChannel::HandleRepeatedDataPacket(const ReceivedDataPacketContext& ct
         return false;
     }
 
-    const UbRetransReceiveDecision decision =
-        m_retrans->BuildReceiveDecisionForCurrentState();
+    const UbRetransReceiveDecision decision = BuildCurrentAckDecision();
     if (decision.suppressResponse) {
         if (decision.selectiveAck) {
             NS_LOG_WARN("Suppressing duplicate-packet TPSACK because SelectiveAckBitmapBits cannot be resolved");
@@ -1707,6 +1720,9 @@ UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
     if (outOfOrderPacket) {
         NS_LOG_DEBUG("Out-of-Order Packet,tpn:{" << m_tpn << "} psn:{"
                      << ctx.psn << "} expectedPsn:{" << m_psnRecvNxt << "}");
+        if (!IsRetransEnabled()) {
+            return false;
+        }
         return !decision.dropPacket;
     }
 
@@ -1741,7 +1757,9 @@ UbTransportChannel::UpdateReceiveWindowAndCollectCompletedTa(
     if (m_psnRecvNxt > oldRecvNxt) {
         NS_LOG_DEBUG("Updated m_psnRecvNxt from " << oldRecvNxt
                      << " to " << m_psnRecvNxt);
-        m_retrans->ClearNakSuppressionIfGapClosed(m_psnRecvNxt);
+        if (IsRetransEnabled()) {
+            m_retrans->ClearNakSuppressionIfGapClosed(m_psnRecvNxt);
+        }
         uint32_t shiftCount = m_psnRecvNxt - oldRecvNxt;
         RightShiftBitset(shiftCount);
         psnStart = oldRecvNxt;
@@ -1810,7 +1828,10 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
     }
 
     TraceReceivedDataPacket(ctx);
-    const UbRetransReceiveDecision receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
+    UbRetransReceiveDecision receiveDecision;
+    if (IsRetransEnabled()) {
+        receiveDecision = m_retrans->OnDataPacketReceived(ctx.psn);
+    }
     if (HandleImmediateRetransReceiveDecision(ctx, receiveDecision)) {
         return;
     }
@@ -1829,8 +1850,7 @@ void UbTransportChannel::RecvDataPacket(Ptr<Packet> p)
         return;
     }
     AckResponseContext response;
-    const UbRetransReceiveDecision ackDecision =
-        m_retrans->BuildReceiveDecisionForCurrentState();
+    const UbRetransReceiveDecision ackDecision = BuildCurrentAckDecision();
     if (!BuildAckResponseFromDecision(ackDecision, psnStart, psnEnd, response)) {
         return;
     }

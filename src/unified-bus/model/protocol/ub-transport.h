@@ -410,6 +410,7 @@ private:
                                  UbRetransAckResult& ackResult);
     UbRetransAckResult AdvanceSenderAckFromPlainTpack(const TransportResponseContext& ctx,
                                                       uint64_t previousSndUna);
+    UbRetransReceiveDecision BuildCurrentAckDecision() const;
     void FinalizeTransportAckProgress(const TransportResponseContext& ctx,
                                       uint64_t previousSndUna);
     void CompleteAckedWqeSegments(const TransportResponseContext& ctx);
