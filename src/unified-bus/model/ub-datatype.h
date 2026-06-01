@@ -743,6 +743,8 @@ public:
 
     void SetResLenBytes(uint32_t resLenBytes)
     {
+        // TODO: Rename ResLen/resLenBytes to ResponseLen/responseLenBytes in a dedicated
+        // mechanical cleanup. Keep the current API stable in the retransmission MR.
         m_resLenBytes = resLenBytes;
     }
 
@@ -1187,6 +1189,8 @@ public:
 
     void SetResLenBytes(uint32_t resLenBytes)
     {
+        // TODO: Rename ResLen/resLenBytes to ResponseLen/responseLenBytes in a dedicated
+        // mechanical cleanup. Keep the current API stable in the retransmission MR.
         m_resLenBytes = resLenBytes;
     }
 
