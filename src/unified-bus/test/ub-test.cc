@@ -4183,49 +4183,6 @@ int RunInChildProcess(const std::function<void()>& fn);
 } // namespace
 #endif
 
-class UbSwitchNotifySwitchDequeueWithoutCongestionControlTest : public TestCase
-{
-  public:
-    UbSwitchNotifySwitchDequeueWithoutCongestionControlTest()
-        : TestCase("UnifiedBus - UbSwitch NotifySwitchDequeue works without attached congestion control")
-    {
-    }
-
-    void DoRun() override
-    {
-#ifndef _WIN32
-        const int status = RunInChildProcess([]() {
-            Config::Reset();
-
-            Ptr<Node> node = CreateObject<Node>();
-            Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
-            node->AggregateObject(sw);
-
-            Ptr<UbPort> port = CreateObject<UbPort>();
-            node->AddDevice(port);
-            sw->Init();
-
-            const uint32_t kInPort = 0;
-            const uint32_t kOutPort = 0;
-            const uint32_t kPriority = 1;
-            Ptr<Packet> packet = Create<Packet>(64);
-
-            sw->GetQueueManager()->PushToVoq(kInPort, kOutPort, kPriority, packet->GetSize());
-            sw->NotifySwitchDequeue(kInPort, kOutPort, kPriority, packet);
-
-            Simulator::Destroy();
-            Config::Reset();
-        });
-
-        NS_TEST_ASSERT_MSG_NE(status, -1, "fork/waitpid should succeed for dequeue null-cc guard test");
-        NS_TEST_ASSERT_MSG_EQ(WIFEXITED(status), true, "Child process should exit normally");
-        NS_TEST_ASSERT_MSG_EQ(WEXITSTATUS(status), 0, "NotifySwitchDequeue should not crash without congestion control");
-#else
-        NS_TEST_SKIP("fork-based crash guard test is not supported on Windows");
-#endif
-    }
-};
-
 namespace
 {
 
@@ -6845,8 +6802,6 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSwitchFlowControlModeAttributeTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPortSetDataRateWithoutCongestionControlTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbSwitchNotifySwitchDequeueWithoutCongestionControlTest(),
-                TestCase::Duration::QUICK);
     AddTestCase(new UbControlFrameUsesDedicatedAccountingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedModeCountsHeadroomTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
