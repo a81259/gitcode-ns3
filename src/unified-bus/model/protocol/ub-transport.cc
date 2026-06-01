@@ -1249,7 +1249,7 @@ UbTransportChannel::HandleReceivedTpNak(const TransportResponseContext& ctx)
 
 bool
 UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
-                                            uint64_t,
+                                            uint64_t previousSndUna,
                                             UbRetransAckResult& ackResult)
 {
     if (ctx.hasCetph && !ctx.hasSaetph) {
@@ -1269,10 +1269,20 @@ UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
                      traceTag);
     }
 
+    if (!ctx.hasSaetph) {
+        ackResult = AdvanceSenderAckFromPlainTpack(ctx, previousSndUna);
+        return true;
+    }
+
+    if (!IsRetransEnabled()) {
+        ackResult.ignoreResponse = true;
+        return false;
+    }
+
     ackResult = m_retrans->OnTransportResponse(
         ctx.transportHeader,
         ctx.opcode,
-        ctx.hasSaetph ? &ctx.selectiveAckHeader : nullptr,
+        &ctx.selectiveAckHeader,
         ctx.hasCetph ? &ctx.congestionHeader : nullptr);
     if (ackResult.ignoreResponse) {
         return false;
@@ -1281,6 +1291,26 @@ UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
         TriggerTransportTransmit();
     }
     return true;
+}
+
+UbRetransAckResult
+UbTransportChannel::AdvanceSenderAckFromPlainTpack(const TransportResponseContext& ctx,
+                                                   uint64_t previousSndUna)
+{
+    UbRetransAckResult result;
+    result.previousSndUna = previousSndUna;
+
+    const uint64_t ackedThrough = ctx.transportHeader.GetPsn();
+    if (ackedThrough + 1 > m_psnSndUna) {
+        m_psnSndUna = ackedThrough + 1;
+    }
+
+    result.newSndUna = m_psnSndUna;
+    result.ackAdvanced = result.newSndUna > result.previousSndUna;
+    if (result.ackAdvanced && IsRetransEnabled()) {
+        m_retrans->OnSenderCumulativeAckProgress(result.previousSndUna, result.newSndUna);
+    }
+    return result;
 }
 
 void
@@ -1324,7 +1354,7 @@ UbTransportChannel::UpdateSenderAfterTransportAck(const TransportResponseContext
         m_tpFullFlag = false;
         ApplyNextWqeSegment();
     }
-    if (m_wqeSegmentVector.size() == 0) {
+    if (IsRetransEnabled() && m_wqeSegmentVector.size() == 0) {
         m_retrans->CancelTimer();
     }
 
@@ -1373,7 +1403,9 @@ UbTransportChannel::FinalizeTransportAckProgress(const TransportResponseContext&
         }
 
         // Only real ACK progress resets the RTO state and reschedules timeout.
-        m_retrans->RestartTimerAfterAckProgress();
+        if (IsRetransEnabled()) {
+            m_retrans->RestartTimerAfterAckProgress();
+        }
     }
 
     CompleteAckedWqeSegments(ctx);

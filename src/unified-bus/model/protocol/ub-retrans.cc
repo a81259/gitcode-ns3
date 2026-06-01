@@ -145,6 +145,24 @@ UbSelectiveRetransStrategy::AcknowledgeCumulativePsn(uint64_t ackPsn)
 }
 
 void
+UbSelectiveRetransStrategy::OnCumulativeAckProgress(uint64_t previousSndUna,
+                                                    uint64_t newSndUna)
+{
+    if (newSndUna <= previousSndUna) {
+        return;
+    }
+
+    for (uint64_t psn = previousSndUna; psn < newSndUna; ++psn) {
+        MarkPsnAcked(psn);
+        if (psn == UINT64_MAX) {
+            break;
+        }
+    }
+    RetireAckedStateBeforeSendUna();
+    CompactRetransmissionQueue();
+}
+
+void
 UbSelectiveRetransStrategy::AdvanceSendUnaFromAckState()
 {
     UbTransportChannel& transport = m_controller.GetTransport();
@@ -162,6 +180,7 @@ std::vector<uint64_t>
 UbSelectiveRetransStrategy::CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
                                                                const UbSelectiveAckExtTph& saetph)
 {
+    // TODO: Unwrap 24-bit wire PSNs into logical PSNs before interpreting TPSACK ranges.
     const uint64_t ackBase = tpHeader.GetPsn();
     const uint32_t bitmapBits = saetph.GetBitmapBitCount();
     const uint64_t representedEnd = ackBase + bitmapBits - 1;
@@ -914,17 +933,7 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
     UbRetransAckResult result;
     if (!m_enableRetrans)
     {
-        if (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
-            opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH) {
-            result.previousSndUna = m_transport.GetPsnSndUna();
-            if (tph.GetPsn() + 1 > m_transport.GetPsnSndUna()) {
-                m_transport.SetPsnSndUna(tph.GetPsn() + 1);
-            }
-            result.newSndUna = m_transport.GetPsnSndUna();
-            result.ackAdvanced = result.newSndUna > result.previousSndUna;
-        } else {
-            result.ignoreResponse = true;
-        }
+        result.ignoreResponse = true;
         return result;
     }
 
@@ -940,10 +949,6 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
                 opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
         NS_LOG_WARN("Dropping TPSACK in GBN retransmission mode.");
         result.ignoreResponse = true;
-    } else if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
-               (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
-                opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
-        result = m_selective->OnCumulativeAck(tph);
     } else if (m_retransmissionMode == UbRetransmissionMode::GBN &&
                (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
                 opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
@@ -955,6 +960,18 @@ UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
         result.ackAdvanced = result.newSndUna > result.previousSndUna;
     }
     return result;
+}
+
+void
+UbRetransController::OnSenderCumulativeAckProgress(uint64_t previousSndUna,
+                                                   uint64_t newSndUna)
+{
+    if (!m_enableRetrans || newSndUna <= previousSndUna) {
+        return;
+    }
+    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
+        m_selective->OnCumulativeAckProgress(previousSndUna, newSndUna);
+    }
 }
 
 UbRetransReceiveDecision

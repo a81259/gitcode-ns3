@@ -408,6 +408,8 @@ private:
     bool HandleReceivedAckOrSack(const TransportResponseContext& ctx,
                                  uint64_t previousSndUna,
                                  UbRetransAckResult& ackResult);
+    UbRetransAckResult AdvanceSenderAckFromPlainTpack(const TransportResponseContext& ctx,
+                                                      uint64_t previousSndUna);
     void FinalizeTransportAckProgress(const TransportResponseContext& ctx,
                                       uint64_t previousSndUna);
     void CompleteAckedWqeSegments(const TransportResponseContext& ctx);

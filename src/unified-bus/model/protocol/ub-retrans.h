@@ -79,6 +79,7 @@ public:
                        uint32_t payloadBytes);
     void MarkPsnAcked(uint64_t psn);
     void AcknowledgeCumulativePsn(uint64_t ackPsn);
+    void OnCumulativeAckProgress(uint64_t previousSndUna, uint64_t newSndUna);
     void AdvanceSendUnaFromAckState();
     std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
                                                              const UbSelectiveAckExtTph& saetph);
@@ -191,6 +192,7 @@ public:
                                            TpOpcode opcode,
                                            const UbSelectiveAckExtTph* saetph,
                                            const UbCongestionExtTph* cetph);
+    void OnSenderCumulativeAckProgress(uint64_t previousSndUna, uint64_t newSndUna);
     UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
     bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;
     UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
