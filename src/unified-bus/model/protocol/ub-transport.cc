@@ -501,13 +501,14 @@ UbTransportChannel::OnSelectiveRetransmissionPacketSent(uint64_t psn, uint32_t p
 }
 
 void
-UbTransportChannel::OnSenderSelectiveAck(TpOpcode opcode,
-                                         uint64_t psn,
-                                         const UbSelectiveAckExtTph& saetph,
-                                         const UbCongestionExtTph* cetph,
-                                         uint32_t retransmitBytes)
+UbTransportChannel::OnSenderReceivesTpsackCongestionFeedback(uint64_t psn,
+                                                             const UbCongestionExtTph& cetph,
+                                                             uint32_t retransmitBytes)
 {
-    m_congestionCtrl->OnSenderSelectiveAck(opcode, psn, saetph, cetph, retransmitBytes);
+    m_congestionCtrl->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH,
+                                                     static_cast<uint32_t>(psn),
+                                                     cetph,
+                                                     retransmitBytes);
 }
 
 /**

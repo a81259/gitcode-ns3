@@ -393,6 +393,7 @@ UbSelectiveRetransStrategy::OnTransportResponse(const UbTransportHeader& tpHeade
                                                 const UbSelectiveAckExtTph& saetph,
                                                 const UbCongestionExtTph* cetph)
 {
+    (void)opcode;
     UbRetransAckResult result;
     if (m_controller.GetRetransmissionMode() != UbRetransmissionMode::SELECTIVE) {
         return result;
@@ -412,7 +413,11 @@ UbSelectiveRetransStrategy::OnTransportResponse(const UbTransportHeader& tpHeade
     for (uint64_t psn : missingPsns) {
         retransmitBytes += GetRetainedPayloadBytes(psn);
     }
-    transport.OnSenderSelectiveAck(opcode, tpHeader.GetPsn(), saetph, cetph, retransmitBytes);
+    if (cetph != nullptr) {
+        transport.OnSenderReceivesTpsackCongestionFeedback(tpHeader.GetPsn(),
+                                                           *cetph,
+                                                           retransmitBytes);
+    }
     bool queuedFastRetransmission = false;
     if (m_controller.GetFastRetransEnable()) {
         const std::vector<uint64_t>& candidatePsns = IsMarkPsnEnabled() ? allMissingPsns : missingPsns;

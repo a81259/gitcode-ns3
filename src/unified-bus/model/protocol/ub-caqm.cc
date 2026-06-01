@@ -429,23 +429,18 @@ void UbHostCaqm::OnSenderCongestionNotification(TpOpcode opcode,
 }
 
 void
-UbHostCaqm::OnSenderSelectiveAck(TpOpcode opcode,
-                                 uint32_t cumulativePsn,
-                                 const UbSelectiveAckExtTph& saetph,
-                                 const UbCongestionExtTph* cetph,
-                                 uint32_t retransmitBytes)
+UbHostCaqm::OnSenderCongestionNotification(TpOpcode opcode,
+                                           uint32_t psn,
+                                           UbCongestionExtTph header,
+                                           uint32_t retransmitBytes)
 {
-    (void)saetph;
-    if (!m_congestionCtrlEnabled)
+    if (opcode != TpOpcode::TP_OPCODE_ACK_WITH_CETPH)
     {
         return;
     }
-
-    const bool hasCetph = opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH && cetph != nullptr;
-    const auto sentIt = m_psnSendTimeMap.find(cumulativePsn);
-    if (!hasCetph && sentIt != m_psnSendTimeMap.end())
+    if (!m_congestionCtrlEnabled)
     {
-        UpdateRttEstimate(Simulator::Now() - sentIt->second);
+        return;
     }
 
     if (m_dataByteSent >= retransmitBytes)
@@ -457,13 +452,14 @@ UbHostCaqm::OnSenderSelectiveAck(TpOpcode opcode,
         m_dataByteSent = 0;
     }
 
-    if (!hasCetph)
-    {
-        m_inFlight = std::min(m_inFlight, m_dataByteSent);
-        return;
-    }
+    m_inFlight = std::min(m_inFlight, m_dataByteSent);
+    ApplySenderCetphFeedback(psn, header);
+}
 
-    ApplySenderCetphFeedback(cumulativePsn, *cetph);
+void
+UbHostCaqm::OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size)
+{
+    OnSenderDataPacketSent(psn, size);
 }
 
 void UbHostCaqm::StateReset()

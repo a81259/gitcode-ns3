@@ -83,11 +83,11 @@ public:
     void OnSenderCongestionNotification(TpOpcode opcode,
                                         uint32_t psn,
                                         UbCongestionExtTph header) override;
-    void OnSenderSelectiveAck(TpOpcode opcode,
-                              uint32_t cumulativePsn,
-                              const UbSelectiveAckExtTph& saetph,
-                              const UbCongestionExtTph* cetph,
-                              uint32_t retransmitBytes) override;
+    void OnSenderCongestionNotification(TpOpcode opcode,
+                                        uint32_t psn,
+                                        UbCongestionExtTph header,
+                                        uint32_t retransmitBytes) override;
+    void OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size) override;
 
 private:
     void StateReset();

@@ -304,11 +304,9 @@ public:
     bool IsCcLimitedForRetransmission(uint32_t payloadBytes) const;
     void SetSendWindowLimited(bool limited);
     void OnSelectiveRetransmissionPacketSent(uint64_t psn, uint32_t payloadBytes);
-    void OnSenderSelectiveAck(TpOpcode opcode,
-                              uint64_t psn,
-                              const UbSelectiveAckExtTph& saetph,
-                              const UbCongestionExtTph* cetph,
-                              uint32_t retransmitBytes);
+    void OnSenderReceivesTpsackCongestionFeedback(uint64_t psn,
+                                                  const UbCongestionExtTph& cetph,
+                                                  uint32_t retransmitBytes);
     uint32_t GetPsnOooThresholdForRetrans() const;
     bool HasReceiveGapForRetrans() const;
     uint64_t GetCumulativeAckPsnForRetrans() const;

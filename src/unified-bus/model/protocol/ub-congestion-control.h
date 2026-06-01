@@ -83,18 +83,15 @@ public:
         (void)opcode;
     }
 
-    // 发送端收到选择性ACK反馈，用于处理TPSACK/TPSACK-CC的重传与拥塞控制联动
-    virtual void OnSenderSelectiveAck(TpOpcode opcode,
-                                      uint32_t cumulativePsn,
-                                      const UbSelectiveAckExtTph& saetph,
-                                      const UbCongestionExtTph* cetph,
-                                      uint32_t retransmitBytes)
+    // TPSACK-CC 在同一个反馈里同时携带 CETPH 和选择性重传扣账摘要。
+    // SAETPH bitmap 由重传层消费，CC 层只看到归一化后的 CETPH 与 missing bytes。
+    virtual void OnSenderCongestionNotification(TpOpcode opcode,
+                                                uint32_t psn,
+                                                UbCongestionExtTph header,
+                                                uint32_t retransmitBytes)
     {
-        (void)opcode;
-        (void)cumulativePsn;
-        (void)saetph;
-        (void)cetph;
         (void)retransmitBytes;
+        OnSenderCongestionNotification(opcode, psn, header);
     }
 
     // 发送端TP在发送工作清空后进入空闲态

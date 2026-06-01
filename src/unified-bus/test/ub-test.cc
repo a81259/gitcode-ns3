@@ -445,26 +445,25 @@ public:
         retransmissionNotifyCount++;
     }
 
-    void OnSenderSelectiveAck(TpOpcode opcode,
-                              uint32_t cumulativePsn,
-                              const UbSelectiveAckExtTph& saetph,
-                              const UbCongestionExtTph* cetph,
-                              uint32_t retransmitBytes) override
+    using UbCongestionControl::OnSenderCongestionNotification;
+    void OnSenderCongestionNotification(TpOpcode opcode,
+                                        uint32_t psn,
+                                        UbCongestionExtTph header,
+                                        uint32_t retransmitBytes) override
     {
         (void)opcode;
-        (void)cumulativePsn;
-        (void)saetph;
-        (void)cetph;
-        lastSelectiveAckRetransmitBytes = retransmitBytes;
-        selectiveAckNotifyCount++;
+        (void)psn;
+        (void)header;
+        lastCongestionNotificationRetransmitBytes = retransmitBytes;
+        congestionNotificationCount++;
     }
 
     uint32_t lastLimitedCheckBytes{0};
     uint32_t lastRetransmissionPsn{0};
     uint32_t lastRetransmissionBytes{0};
     uint32_t retransmissionNotifyCount{0};
-    uint32_t lastSelectiveAckRetransmitBytes{0};
-    uint32_t selectiveAckNotifyCount{0};
+    uint32_t lastCongestionNotificationRetransmitBytes{0};
+    uint32_t congestionNotificationCount{0};
 };
 
 Ptr<UbTransportChannel>
@@ -2508,12 +2507,12 @@ public:
 
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000));
 
-        NS_TEST_ASSERT_MSG_EQ(cc->selectiveAckNotifyCount,
+        NS_TEST_ASSERT_MSG_EQ(cc->congestionNotificationCount,
                               1u,
-                              "TPSACK should notify congestion control once");
-        NS_TEST_ASSERT_MSG_EQ(cc->lastSelectiveAckRetransmitBytes,
+                              "TPSACK-CC should notify congestion control once");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastCongestionNotificationRetransmitBytes,
                               0u,
-                              "TPSACK congestion accounting should use missing payload bytes");
+                              "TPSACK-CC congestion accounting should use missing payload bytes");
 
         Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
         NS_TEST_ASSERT_MSG_NE(retransmission,
@@ -2538,7 +2537,7 @@ class UbCaqmSelectiveAckWithCetphAccountingTest : public TestCase
 {
 public:
     UbCaqmSelectiveAckWithCetphAccountingTest()
-        : TestCase("UnifiedBus - CAQM accounts TPSACK-CC retransmission bytes")
+        : TestCase("UnifiedBus - CAQM accounts selective feedback without SAETPH dependency")
     {
     }
 
@@ -2558,19 +2557,13 @@ public:
                               "two sends should be durable accounting");
         NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(), 2000u, "two sends should be in flight");
 
-        UbSelectiveAckExtTph saetph;
-        saetph.SetBitmapBitCount(64);
-        saetph.SetMaxRcvPsn(11);
-        saetph.SetBitmapBit(0, true);
-        saetph.SetBitmapBit(1, false);
-
         UbCongestionExtTph cetph;
         cetph.SetAckSequence(1000);
         cetph.SetC(0);
         cetph.SetI(1);
         cetph.SetHint(0);
 
-        caqm->OnSenderSelectiveAck(TpOpcode::TP_OPCODE_SACK_WITH_CETPH, 10, saetph, &cetph, 1000);
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 10, cetph, 1000);
 
         NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
                               1000u,
@@ -2579,7 +2572,7 @@ public:
                               0u,
                               "inflight should be recomputed from adjusted bytes and CETPH ack sequence");
 
-        caqm->OnSenderSelectiveAck(TpOpcode::TP_OPCODE_SACK_WITH_CETPH, 10, saetph, &cetph, 0);
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 10, cetph, 0);
 
         NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
                               1000u,
@@ -2588,19 +2581,25 @@ public:
                               0u,
                               "duplicate selective feedback should keep inflight stable");
 
-        UbCongestionExtTph ackCetph;
-        ackCetph.SetAckSequence(1000);
-        ackCetph.SetC(0);
-        ackCetph.SetI(1);
-        ackCetph.SetHint(0);
-        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 10, ackCetph);
+        caqm->OnSenderRetransmissionPacketSent(11, 1000);
 
         NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              2000u,
+                              "selective retransmission send should re-enter CAQM sent accounting");
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
                               1000u,
-                              "normal ACK-CC must not resurrect removed retransmission bytes");
+                              "selective retransmission send should occupy CAQM inflight");
+
+        UbCongestionExtTph finalCetph;
+        finalCetph.SetAckSequence(2000);
+        finalCetph.SetC(0);
+        finalCetph.SetI(1);
+        finalCetph.SetHint(0);
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 11, finalCetph);
+
         NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
                               0u,
-                              "normal ACK-CC should preserve the recomputed inflight correction");
+                              "final CETPH should clear retransmitted inflight bytes");
 
         Simulator::Destroy();
         Config::Reset();
@@ -2611,7 +2610,7 @@ class UbTransportTpsackCcReportsRetransmitBytesOnceTest : public TestCase
 {
 public:
     UbTransportTpsackCcReportsRetransmitBytesOnceTest()
-        : TestCase("UnifiedBus - TPSACK-CC reports newly missing bytes once")
+        : TestCase("UnifiedBus - TPSACK-CC reports newly missing selective bytes once")
     {
     }
 
@@ -2638,12 +2637,12 @@ public:
         senderTp->RecvTpAck(sack->Copy());
         NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
                               1000u,
-                              "first TPSACK-CC should subtract newly missing bytes");
+                              "first TPSACK should report newly missing bytes");
 
         senderTp->RecvTpAck(sack->Copy());
         NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
                               1000u,
-                              "duplicate TPSACK-CC should not subtract the same missing PSN twice");
+                              "duplicate TPSACK should not report the same missing PSN twice");
 
         Simulator::Destroy();
         Config::Reset();
@@ -6854,6 +6853,24 @@ UbTestSuite::UbTestSuite()
 
 // Register the test suite
 static UbTestSuite g_ubTestSuite;
+
+class UbRetransCongestionControlRegressionTestSuite : public TestSuite
+{
+public:
+    UbRetransCongestionControlRegressionTestSuite()
+        : TestSuite("unified-bus-retrans-cc-regression", Type::UNIT)
+    {
+        AddTestCase(new UbSelectiveRetransmissionAccountsDcqcnSendStateTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbCaqmSelectiveAckWithCetphAccountingTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbTransportTpsackCcReportsRetransmitBytesOnceTest(),
+                    TestCase::Duration::QUICK);
+    }
+};
+
+static UbRetransCongestionControlRegressionTestSuite g_ubRetransCongestionControlRegressionTestSuite;
 
 class UbOutOfOrderRegressionTestSuite : public TestSuite
 {
