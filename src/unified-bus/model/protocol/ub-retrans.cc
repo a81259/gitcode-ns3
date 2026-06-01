@@ -124,6 +124,7 @@ UbSelectiveRetransStrategy::MarkPsnAcked(uint64_t psn)
         return;
     }
     it->second.acknowledged = true;
+    it->second.packet = nullptr;
     it->second.selectivelyReportedMissing = false;
     it->second.retransmitPending = false;
 }

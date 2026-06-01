@@ -2141,6 +2141,43 @@ public:
     }
 };
 
+class UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest : public TestCase
+{
+public:
+    UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest()
+        : TestCase("UnifiedBus - selective ACKed gap state keeps state but skips retransmit")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(10, 64);
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {1}));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(11),
+                              true,
+                              "ACKed PSN beyond a gap must keep state until the gap closes");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnRetransmitCountForTest(11),
+                              0u,
+                              "ACKed PSN must not be retransmitted");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbSelectiveSenderRetransmitsRetainedMissingPacketTest : public TestCase
 {
 public:
@@ -6765,6 +6802,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderCumulativeAckClearsRetainedStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderRetransmitsRetainedMissingPacketTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderQueueContractTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderDropsAckedStaleRetransmitEntriesTest(), TestCase::Duration::QUICK);
