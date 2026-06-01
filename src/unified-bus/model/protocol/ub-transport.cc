@@ -550,6 +550,18 @@ void UbTransportChannel::DoDispose()
     m_recvPsnWindow.Resize(0);
 }
 
+bool
+UbTransportChannel::IsRetransEnabled() const
+{
+    return m_retrans != nullptr && m_retrans->GetRetransEnable();
+}
+
+bool
+UbTransportChannel::HasPendingSelectiveRetransmissionWork() const
+{
+    return IsRetransEnabled() && m_retrans->CanSendSelectiveRetransmission();
+}
+
 /**
  * @brief Get next packet from transport channel queue
  * Called by Switch Allocator during scheduling to retrieve the next packet for transmission
@@ -655,9 +667,11 @@ UbTransportChannel::NotifyNewDataPacketSent(const NewDataSendContext& ctx,
 {
     // TODO: Keep Notify* helpers as logging/trace notifications only. Retransmission
     // and congestion-control state updates should live at the actual send trigger.
-    m_retrans->OnNewDataPacketSent(m_psnSndNxt,
-                                   packet,
-                                   ctx.payloadBytes);
+    if (IsRetransEnabled()) {
+        m_retrans->OnNewDataPacketSent(m_psnSndNxt,
+                                       packet,
+                                       ctx.payloadBytes);
+    }
 
     m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, ctx.progressBytes);
 
@@ -700,7 +714,9 @@ UbTransportChannel::AdvanceNewDataSendState(const NewDataSendContext& ctx,
                       static_cast<uint32_t>(m_wqeSegmentVector.size()),
                       static_cast<uint32_t>(m_ackQ.size()),
                       static_cast<uint32_t>(m_cnpQ.size()));
-    m_retrans->StartTimerIfNeeded();
+    if (IsRetransEnabled()) {
+        m_retrans->StartTimerIfNeeded();
+    }
 
     // Shallow pipeline keeps at most two active segments capable of sending new data.
     if (ctx.segment->IsSentCompleted() && GetActiveSendSegmentCount() < 2) {
@@ -750,15 +766,17 @@ Ptr<Packet> UbTransportChannel::GetNextPacket()
         return packet;
     }
 
-    packet = m_retrans->TryGetNextRetransmissionPacket();
-    if (packet != nullptr) {
-        if (HasPendingTransmitWork()) {
-            m_headArrivalTime = Simulator::Now();
+    if (IsRetransEnabled()) {
+        packet = m_retrans->TryGetNextRetransmissionPacket();
+        if (packet != nullptr) {
+            if (HasPendingTransmitWork()) {
+                m_headArrivalTime = Simulator::Now();
+            }
+            return packet;
         }
-        return packet;
-    }
-    if (m_retrans->CanSendSelectiveRetransmission()) {
-        return nullptr;
+        if (m_retrans->CanSendSelectiveRetransmission()) {
+            return nullptr;
+        }
     }
 
     return TryGetNextNewDataPacket();
@@ -848,7 +866,7 @@ uint32_t UbTransportChannel::GetNextPacketSize()
         return m_ackQ.front()->GetSize();
     }
     const uint32_t selectiveRetransmissionSize =
-        m_retrans->CanSendSelectiveRetransmission()
+        HasPendingSelectiveRetransmissionWork()
             ? m_retrans->GetNextSelectiveRetransmissionSize()
             : 0;
     if (selectiveRetransmissionSize > 0) {
@@ -1922,7 +1940,7 @@ bool UbTransportChannel::HasPendingTransmitWork()
     if (!m_ackQ.empty()) {
         return true;
     }
-    if (m_retrans->CanSendSelectiveRetransmission()) {
+    if (HasPendingSelectiveRetransmissionWork()) {
         return true;
     }
     if (m_wqeSegmentVector.empty()) {
@@ -1939,7 +1957,7 @@ bool UbTransportChannel::IsLimited()
     if (!m_ackQ.empty()) {
         return false;
     }
-    if (m_retrans->CanSendSelectiveRetransmission()) {
+    if (HasPendingSelectiveRetransmissionWork()) {
         const uint32_t payloadBytes = m_retrans->GetNextSelectiveRetransmissionPayloadBytes();
         if (m_congestionCtrl->IsCcLimited(payloadBytes)) {
             m_sendWindowLimited = true;

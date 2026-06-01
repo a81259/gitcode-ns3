@@ -382,6 +382,8 @@ private:
 
     void DoDispose() override;
 
+    bool IsRetransEnabled() const;
+    bool HasPendingSelectiveRetransmissionWork() const;
     bool HasPendingTransmitWork();
     Ptr<Packet> PopQueuedPacket(std::queue<Ptr<Packet>>& packetQ);
     Ptr<Packet> TryGetNextNewDataPacket();
