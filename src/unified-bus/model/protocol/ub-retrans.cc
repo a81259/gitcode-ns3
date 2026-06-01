@@ -925,40 +925,37 @@ UbRetransController::HasTimerRunning() const
 }
 
 UbRetransAckResult
-UbRetransController::OnTransportResponse(const UbTransportHeader& tph,
-                                         TpOpcode opcode,
-                                         const UbSelectiveAckExtTph* saetph,
-                                         const UbCongestionExtTph* cetph)
+UbRetransController::OnTransportNak(const UbTransportHeader& tph)
 {
     UbRetransAckResult result;
-    if (!m_enableRetrans)
-    {
+    if (!m_enableRetrans) {
         result.ignoreResponse = true;
         return result;
     }
-
-    if (opcode == TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH) {
+    if (m_retransmissionMode == UbRetransmissionMode::GBN) {
         result.triggerTransmit = m_gbn->HandleTpNak(tph.GetPsn());
-    } else if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE &&
-               (opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
-                opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
-        NS_ASSERT_MSG(saetph != nullptr, "SELECTIVE TPSACK processing requires SAETPH.");
-        result = m_selective->OnTransportResponse(tph, opcode, *saetph, cetph);
-    } else if (m_retransmissionMode == UbRetransmissionMode::GBN &&
-               (opcode == TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH ||
-                opcode == TpOpcode::TP_OPCODE_SACK_WITH_CETPH)) {
-        NS_LOG_WARN("Dropping TPSACK in GBN retransmission mode.");
-        result.ignoreResponse = true;
-    } else if (m_retransmissionMode == UbRetransmissionMode::GBN &&
-               (opcode == TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH ||
-                opcode == TpOpcode::TP_OPCODE_ACK_WITH_CETPH)) {
-        result.previousSndUna = m_transport.GetPsnSndUna();
-        if (tph.GetPsn() + 1 > m_transport.GetPsnSndUna()) {
-            m_transport.SetPsnSndUna(tph.GetPsn() + 1);
-        }
-        result.newSndUna = m_transport.GetPsnSndUna();
-        result.ackAdvanced = result.newSndUna > result.previousSndUna;
     }
+    return result;
+}
+
+UbRetransAckResult
+UbRetransController::OnTransportSelectiveAck(const UbTransportHeader& tph,
+                                             TpOpcode opcode,
+                                             const UbSelectiveAckExtTph& saetph,
+                                             const UbCongestionExtTph* cetph)
+{
+    UbRetransAckResult result;
+    if (!m_enableRetrans) {
+        result.ignoreResponse = true;
+        return result;
+    }
+    if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
+        return m_selective->OnTransportResponse(tph, opcode, saetph, cetph);
+    }
+    if (m_retransmissionMode == UbRetransmissionMode::GBN) {
+        NS_LOG_WARN("Dropping TPSACK in GBN retransmission mode.");
+    }
+    result.ignoreResponse = true;
     return result;
 }
 

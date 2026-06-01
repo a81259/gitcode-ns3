@@ -188,10 +188,11 @@ public:
     void CancelTimer();
     UbRetransTimeoutResult OnTimeout();
     bool HasTimerRunning() const;
-    UbRetransAckResult OnTransportResponse(const UbTransportHeader& tph,
-                                           TpOpcode opcode,
-                                           const UbSelectiveAckExtTph* saetph,
-                                           const UbCongestionExtTph* cetph);
+    UbRetransAckResult OnTransportNak(const UbTransportHeader& tph);
+    UbRetransAckResult OnTransportSelectiveAck(const UbTransportHeader& tph,
+                                               TpOpcode opcode,
+                                               const UbSelectiveAckExtTph& saetph,
+                                               const UbCongestionExtTph* cetph);
     void OnSenderCumulativeAckProgress(uint64_t previousSndUna, uint64_t newSndUna);
     UbRetransReceiveDecision OnDataPacketReceived(uint64_t psn);
     bool ResolveSelectiveAckBitmapBits(uint32_t& bits) const;

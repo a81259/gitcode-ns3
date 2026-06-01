@@ -1239,8 +1239,11 @@ UbTransportChannel::HandleReceivedTpNak(const TransportResponseContext& ctx)
                      FormatSimpleAckInfo("TPNAK", nakPsn), traceTag);
     }
 
-    const UbRetransAckResult ackResult =
-        m_retrans->OnTransportResponse(ctx.transportHeader, ctx.opcode, nullptr, nullptr);
+    if (!IsRetransEnabled()) {
+        return true;
+    }
+
+    const UbRetransAckResult ackResult = m_retrans->OnTransportNak(ctx.transportHeader);
     if (ackResult.triggerTransmit) {
         TriggerTransportTransmit();
     }
@@ -1279,10 +1282,10 @@ UbTransportChannel::HandleReceivedAckOrSack(const TransportResponseContext& ctx,
         return false;
     }
 
-    ackResult = m_retrans->OnTransportResponse(
+    ackResult = m_retrans->OnTransportSelectiveAck(
         ctx.transportHeader,
         ctx.opcode,
-        &ctx.selectiveAckHeader,
+        ctx.selectiveAckHeader,
         ctx.hasCetph ? &ctx.congestionHeader : nullptr);
     if (ackResult.ignoreResponse) {
         return false;
