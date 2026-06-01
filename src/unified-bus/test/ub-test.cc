@@ -1826,7 +1826,7 @@ public:
 
         for (uint32_t psn = 10; psn <= 13; ++psn)
         {
-            txTp->RetainSentPsnForTest(psn, 16, 16);
+            txTp->RetainSentPsnForTest(psn, 16);
         }
         txTp->SetPsnSndUnaForTest(10);
 
@@ -1870,7 +1870,7 @@ public:
 
         for (uint32_t psn = 10; psn <= 13; ++psn)
         {
-            txTp->RetainSentPsnForTest(psn, 16, 16);
+            txTp->RetainSentPsnForTest(psn, 16);
         }
         txTp->SetPsnSndUnaForTest(10);
 
@@ -1925,7 +1925,7 @@ public:
 
         for (uint32_t psn = 10; psn <= 12; ++psn)
         {
-            txTp->RetainSentPsnForTest(psn, 16, 16);
+            txTp->RetainSentPsnForTest(psn, 16);
         }
         txTp->SetPsnSndUnaForTest(10);
         g_selectiveRetransmitRecordsForTest.clear();
@@ -1990,8 +1990,8 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(63, 16, 16);
-        txTp->RetainSentPsnForTest(64, 16, 16);
+        txTp->RetainSentPsnForTest(63, 16);
+        txTp->RetainSentPsnForTest(64, 16);
         txTp->SetPsnSndUnaForTest(0);
 
         txTp->RecvTpAck(BuildTpsackBitmapForSender(0, 64, {0, 63}, 64));
@@ -2029,8 +2029,8 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(11, 16, 16);
-        txTp->RetainSentPsnForTest(12, 16, 16);
+        txTp->RetainSentPsnForTest(11, 16);
+        txTp->RetainSentPsnForTest(12, 16);
         txTp->SetPsnSndUnaForTest(10);
 
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64));
@@ -2068,7 +2068,7 @@ public:
 
         for (uint32_t psn = 10; psn <= 13; ++psn)
         {
-            txTp->RetainSentPsnForTest(psn, 16, 16);
+            txTp->RetainSentPsnForTest(psn, 16);
         }
         txTp->SetPsnSndUnaForTest(10);
 
@@ -2197,7 +2197,7 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(11, 128, 128);
+        txTp->RetainSentPsnForTest(11, 128);
         txTp->SetPsnSndUnaForTest(11);
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
 
@@ -2240,7 +2240,7 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(11, 64, 64);
+        txTp->RetainSentPsnForTest(11, 64);
         txTp->SetPsnSndUnaForTest(11);
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
         NS_TEST_ASSERT_MSG_EQ(txTp->GetRawSelectiveRetransmissionQueueCountForTest(),
@@ -2282,7 +2282,7 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(11, 64, 64);
+        txTp->RetainSentPsnForTest(11, 64);
         txTp->SetPsnSndUnaForTest(11);
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
         txTp->EnqueueAckForTest(BuildTpackForSender(10));
@@ -2330,8 +2330,8 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
-        txTp->RetainSentPsnForTest(10, 64, 64);
-        txTp->RetainSentPsnForTest(11, 64, 64);
+        txTp->RetainSentPsnForTest(10, 64);
+        txTp->RetainSentPsnForTest(11, 64);
         txTp->SetPsnSndUnaForTest(10);
 
         txTp->ReTxTimeout();
@@ -2370,7 +2370,7 @@ public:
         NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
 
         (void)cc->IsCcLimited(1);
-        txTp->RetainSentPsnForTest(11, 64, 64);
+        txTp->RetainSentPsnForTest(11, 64);
         txTp->SetPsnSndUnaForTest(11);
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
 
@@ -2409,8 +2409,8 @@ public:
         Ptr<RecordingRetransmissionCc> cc = CreateObject<RecordingRetransmissionCc>();
         txTp->SetCongestionControlForTest(cc);
 
-        txTp->RetainSentPsnForTest(10, 16, 16);
-        txTp->RetainSentPsnForTest(11, 0, 1000);
+        txTp->RetainSentPsnForTest(10, 16);
+        txTp->RetainSentPsnForTest(11, 0);
         txTp->SetPsnSndUnaForTest(10);
 
         txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000));
@@ -2425,7 +2425,7 @@ public:
         Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
         NS_TEST_ASSERT_MSG_NE(retransmission,
                               nullptr,
-                              "zero-payload selective retransmission should not be blocked by ResLen bytes");
+                              "zero-payload selective retransmission should not be blocked by payload-byte accounting");
         NS_TEST_ASSERT_MSG_EQ(cc->lastLimitedCheckBytes,
                               0u,
                               "retransmission CC limit check should use payload bytes");
@@ -2538,8 +2538,8 @@ public:
 
         caqm->OnSenderDataPacketSent(10, 1000);
         caqm->OnSenderDataPacketSent(11, 1000);
-        senderTp->RetainSentPsnForTest(10, 1000, 1000);
-        senderTp->RetainSentPsnForTest(11, 1000, 1000);
+        senderTp->RetainSentPsnForTest(10, 1000);
+        senderTp->RetainSentPsnForTest(11, 1000);
 
         Ptr<Packet> sack = BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000);
         senderTp->RecvTpAck(sack->Copy());

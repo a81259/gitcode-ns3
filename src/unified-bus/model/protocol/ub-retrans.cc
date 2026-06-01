@@ -105,13 +105,11 @@ UbSelectiveRetransStrategy::UbSelectiveRetransStrategy(UbRetransController& cont
 void
 UbSelectiveRetransStrategy::RetainSentPsn(uint64_t psn,
                                           Ptr<Packet> packet,
-                                          uint32_t payloadBytes,
-                                          uint32_t resLenBytes)
+                                          uint32_t payloadBytes)
 {
     SentPsnState& state = m_sentPsnState[psn];
     state.packet = packet != nullptr ? packet->Copy() : nullptr;
     state.payloadBytes = payloadBytes;
-    state.resLenBytes = resLenBytes;
     state.acknowledged = false;
     state.selectivelyReportedMissing = false;
     state.retransmitPending = false;
@@ -538,13 +536,12 @@ UbSelectiveRetransStrategy::BuildReceiveDecisionForCurrentState() const
 void
 UbSelectiveRetransStrategy::OnNewDataPacketSent(uint64_t psn,
                                                 Ptr<Packet> packet,
-                                                uint32_t payloadBytes,
-                                                uint32_t resLenBytes)
+                                                uint32_t payloadBytes)
 {
     if (IsMarkPsnEnabled()) {
         MaybeMarkFirstNewSelectivePacket(psn);
     }
-    RetainSentPsn(psn, packet, payloadBytes, resLenBytes);
+    RetainSentPsn(psn, packet, payloadBytes);
 }
 
 void
@@ -1007,8 +1004,7 @@ UbRetransController::BuildReceiveDecisionForCurrentState() const
 void
 UbRetransController::OnNewDataPacketSent(uint64_t psn,
                                          Ptr<Packet> packet,
-                                         uint32_t payloadBytes,
-                                         uint32_t resLenBytes)
+                                         uint32_t payloadBytes)
 {
     if (!m_enableRetrans)
     {
@@ -1016,7 +1012,7 @@ UbRetransController::OnNewDataPacketSent(uint64_t psn,
     }
 
     if (m_retransmissionMode == UbRetransmissionMode::SELECTIVE) {
-        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes, resLenBytes);
+        m_selective->OnNewDataPacketSent(psn, packet, payloadBytes);
     }
 }
 

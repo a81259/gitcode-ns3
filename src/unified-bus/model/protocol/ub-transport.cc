@@ -657,8 +657,7 @@ UbTransportChannel::NotifyNewDataPacketSent(const NewDataSendContext& ctx,
     // and congestion-control state updates should live at the actual send trigger.
     m_retrans->OnNewDataPacketSent(m_psnSndNxt,
                                    packet,
-                                   ctx.payloadBytes,
-                                   ctx.progressBytes);
+                                   ctx.payloadBytes);
 
     m_congestionCtrl->OnSenderDataPacketSent(m_psnSndNxt, ctx.progressBytes);
 
@@ -1091,7 +1090,7 @@ UbTransportChannel::GetResponseOpcodeForRetrans(bool selectiveAck) const
 }
 
 void
-UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t resLenBytes)
+UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes)
 {
     Ptr<Packet> packet = Create<Packet>(payloadBytes);
     UbTransportHeader tpHeader;
@@ -1100,7 +1099,7 @@ UbTransportChannel::RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, ui
     tpHeader.SetDestTpn(m_dstTpn);
     tpHeader.SetPsn(static_cast<uint32_t>(psn));
     packet->AddHeader(tpHeader);
-    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes, resLenBytes);
+    m_retrans->OnNewDataPacketSent(psn, packet, payloadBytes);
 }
 
 uint32_t

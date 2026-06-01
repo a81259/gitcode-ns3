@@ -76,8 +76,7 @@ public:
 
     void RetainSentPsn(uint64_t psn,
                        Ptr<Packet> packet,
-                       uint32_t payloadBytes,
-                       uint32_t resLenBytes);
+                       uint32_t payloadBytes);
     void MarkPsnAcked(uint64_t psn);
     void AcknowledgeCumulativePsn(uint64_t ackPsn);
     void AdvanceSendUnaFromAckState();
@@ -101,8 +100,7 @@ public:
     UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
     void OnNewDataPacketSent(uint64_t psn,
                              Ptr<Packet> packet,
-                             uint32_t payloadBytes,
-                             uint32_t resLenBytes);
+                             uint32_t payloadBytes);
     bool HasPendingRetransmission() const;
     bool CanSendRetransmission() const;
     uint32_t GetNextRetransmissionSize() const;
@@ -121,7 +119,6 @@ private:
     {
         Ptr<Packet> packet;
         uint32_t payloadBytes{0};
-        uint32_t resLenBytes{0};
         bool acknowledged{false};
         bool selectivelyReportedMissing{false};
         bool retransmitPending{false};
@@ -199,8 +196,7 @@ public:
     UbRetransReceiveDecision BuildReceiveDecisionForCurrentState() const;
     void OnNewDataPacketSent(uint64_t psn,
                              Ptr<Packet> packet,
-                             uint32_t payloadBytes,
-                             uint32_t resLenBytes);
+                             uint32_t payloadBytes);
     Ptr<Packet> TryGetNextRetransmissionPacket();
     bool HasPendingSelectiveRetransmission() const;
     bool CanSendSelectiveRetransmission() const;

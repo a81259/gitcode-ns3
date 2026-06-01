@@ -269,7 +269,7 @@ public:
     uint32_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
     void SetPsnSndUnaForTest(uint64_t psn) { m_psnSndUna = psn; }
     bool ResolveSelectiveAckBitmapBitsForTest(uint32_t& bits) const;
-    void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes, uint32_t resLenBytes);
+    void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes);
     uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
     uint32_t GetRawSelectiveRetransmissionQueueCountForTest() const;
     bool WasPsnSelectivelyReportedMissingForTest(uint64_t psn) const;
