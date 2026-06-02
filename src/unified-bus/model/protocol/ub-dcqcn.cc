@@ -494,6 +494,12 @@ UbHostDcqcn::OnSenderDataPacketSent(uint32_t psn, uint32_t size)
 }
 
 void
+UbHostDcqcn::OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size)
+{
+    OnSenderDataPacketSent(psn, size);
+}
+
+void
 UbHostDcqcn::OnSenderCongestionNotification(TpOpcode opcode,
                                             uint32_t psn,
                                             UbCongestionExtTph header)

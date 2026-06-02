@@ -2,9 +2,12 @@
 #include "ub-utils.h"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #ifdef NS3_MPI
 #include "ub-remote-link.h"
 #include "ns3/mpi-interface.h"
@@ -37,10 +40,85 @@ constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys =
      "LD/ST thread attributes moved to the UbLdstThread TypeId."},
 }};
 
+struct NetworkAttributeAlias
+{
+    const char* legacy;
+    const char* replacement;
+};
+
+constexpr std::array<NetworkAttributeAlias, 2> kNetworkAttributeAliases = {{
+    {"ns3::UbTransportChannel::InitialRTO", "ns3::UbTransportChannel::BaseRTO"},
+    {"ns3::UbTransportChannel::EnableFastSelectiveRetrans",
+     "ns3::UbTransportChannel::EnableFastRetrans"},
+}};
+
 std::string
 DisplayFilename(const std::string& filename)
 {
     return std::filesystem::path(filename).filename().string();
+}
+
+bool
+RewriteDefaultAttributeLine(std::string& line, const NetworkAttributeAlias& alias)
+{
+    const auto firstNonSpace = line.find_first_not_of(" \t");
+    if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
+    {
+        return false;
+    }
+
+    std::istringstream tokens(line.substr(firstNonSpace));
+    std::string directive;
+    std::string attribute;
+    tokens >> directive >> attribute;
+    if (directive != "default" || attribute != alias.legacy)
+    {
+        return false;
+    }
+
+    const auto attributePos = line.find(attribute, firstNonSpace + directive.size());
+    NS_ASSERT_MSG(attributePos != std::string::npos, "Parsed network attribute missing from line");
+    line.replace(attributePos, attribute.size(), alias.replacement);
+    return true;
+}
+
+std::string
+CreateConfigStoreInput(const std::string& filename, uint32_t& rewrittenAliasLines)
+{
+    std::ifstream input(filename.c_str());
+    NS_ASSERT_MSG(input.good(), "Can not open File: " << filename);
+
+    rewrittenAliasLines = 0;
+    std::ostringstream rewritten;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        for (const auto& alias : kNetworkAttributeAliases)
+        {
+            if (RewriteDefaultAttributeLine(line, alias))
+            {
+                ++rewrittenAliasLines;
+                break;
+            }
+        }
+        rewritten << line << '\n';
+    }
+
+    if (rewrittenAliasLines == 0)
+    {
+        return filename;
+    }
+
+    const auto uniqueSuffix =
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path rewrittenPath =
+        std::filesystem::temp_directory_path() /
+        ("ub-network-attribute-rewritten-" + uniqueSuffix + ".txt");
+
+    std::ofstream output(rewrittenPath.c_str(), std::ios::trunc);
+    NS_ASSERT_MSG(output.good(), "Can not create rewritten config file: " << rewrittenPath);
+    output << rewritten.str();
+    return rewrittenPath.string();
 }
 
 void
@@ -621,7 +699,8 @@ inline string UbUtils::Among(string s, string ts)
 }
 
 void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint32_t dst, uint32_t srcTpn,
-                           uint32_t dstTpn, PacketType type, uint32_t size, uint32_t taskId, UbPacketTraceTag traceTag)
+                           uint32_t dstTpn, PacketType type, uint32_t size, uint32_t taskId,
+                           std::string ackInfo, UbPacketTraceTag traceTag)
 {
     const char* pktType = "CONTROL";
     switch (type) {
@@ -631,13 +710,23 @@ void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint3
     case PacketType::ACK:
         pktType = "ACK";
         break;
+    case PacketType::NAK:
+        pktType = "NAK";
+        break;
+    case PacketType::SACK:
+        pktType = "SACK";
+        break;
     case PacketType::CONTROL_FRAME:
         break;
     }
 
     std::ostringstream oss;
     oss << "Uid:" << packetUid << " Psn:" << psn << " Src:" << src << " Dst:" << dst << " SrcTpn:" << srcTpn
-        << " DstTpn:" << dstTpn << " Type:" << pktType << " Size:" << size << " TaskId:" << taskId << '\n';
+        << " DstTpn:" << dstTpn << " Type:" << pktType;
+    if (!ackInfo.empty()) {
+        oss << " AckInfo:" << ackInfo;
+    }
+    oss << " Size:" << size << " TaskId:" << taskId << '\n';
     for (uint32_t i = 0; i < traceTag.GetTraceLenth(); i++) {
         uint32_t node = traceTag.GetNodeTrace(i);
         PortTrace trace = traceTag.GetPortTrace(node);
@@ -669,7 +758,8 @@ void UbUtils::TpRecvNotify(uint32_t packetUid, uint32_t psn, uint32_t src, uint3
         }
     }
     string info = oss.str();
-    string fileName = trace_path + "runlog/AllPacketTrace_" + pktType + "_node_" + to_string(src) + ".tr";
+    const char* fileType = (type == PacketType::NAK || type == PacketType::SACK) ? "ACK" : pktType;
+    string fileName = trace_path + "runlog/AllPacketTrace_" + fileType + "_node_" + to_string(src) + ".tr";
     PrintTraceInfoNoTs(fileName, info);
 }
 
@@ -683,6 +773,12 @@ void UbUtils::LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst, Pac
         break;
     case PacketType::ACK:
         pktType = "ACK";
+        break;
+    case PacketType::NAK:
+        pktType = "NAK";
+        break;
+    case PacketType::SACK:
+        pktType = "SACK";
         break;
     case PacketType::CONTROL_FRAME:
         break;
@@ -722,7 +818,8 @@ void UbUtils::LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst, Pac
         }
     }
     string info = oss.str();
-    string fileName = trace_path + "runlog/AllPacketTrace_" + pktType + "_node_" + to_string(src) + ".tr";
+    const char* fileType = (type == PacketType::NAK || type == PacketType::SACK) ? "ACK" : pktType;
+    string fileName = trace_path + "runlog/AllPacketTrace_" + fileType + "_node_" + to_string(src) + ".tr";
     PrintTraceInfoNoTs(fileName, info);
 }
 
@@ -1654,11 +1751,24 @@ void UbUtils::SetComponentsAttribute(const string &filename)
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
     ValidateLegacyNetworkAttributeKeys(filename);
-    Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
+    uint32_t rewrittenAliasLines = 0;
+    const std::string configStoreFilename = CreateConfigStoreInput(filename, rewrittenAliasLines);
+    if (rewrittenAliasLines > 0)
+    {
+        PrintTimestamp("[setup] Rewrite legacy network attribute aliases: " +
+                       std::to_string(rewrittenAliasLines));
+    }
+    Config::SetDefault("ns3::ConfigStore::Filename", StringValue(configStoreFilename));
     Config::SetDefault("ns3::ConfigStore::FileFormat", StringValue("RawText"));
     Config::SetDefault("ns3::ConfigStore::Mode", StringValue("Load"));
     ConfigStore config;
     config.ConfigureDefaults();
+    if (configStoreFilename != filename)
+    {
+        Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
+        std::error_code ec;
+        std::filesystem::remove(configStoreFilename, ec);
+    }
 }
 
 void UbUtils::TopoTraceConnect()

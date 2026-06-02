@@ -32,8 +32,9 @@
 #include "ns3/ub-transaction.h"
 #include "ns3/ub-datalink.h"
 
-#include <chrono>
 #include <atomic>
+#include <array>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
@@ -42,6 +43,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 #ifndef _WIN32
@@ -217,6 +219,258 @@ InstallStaticTpPair(const LocalTpTopology& topo)
                                kUrmaWriteRegressionSenderTpn,
                                receiverCc);
     }
+}
+
+void
+UseSelectiveRetransmissionForTest()
+{
+    Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(true));
+    Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                       EnumValue(UbRetransmissionMode::SELECTIVE));
+}
+
+Ptr<Packet>
+BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPacket)
+{
+    Ptr<Packet> data = Create<Packet>(16);
+    UbFlowTag flowTag(kUrmaWriteRegressionTaskId, 16);
+    data->AddPacketTag(flowTag);
+
+    UbMAExtTah maHeader;
+    maHeader.SetLength(16);
+    data->AddHeader(maHeader);
+
+    UbTransactionHeader taHeader;
+    taHeader.SetTaOpcode(TaOpcode::TA_OPCODE_WRITE);
+    taHeader.SetIniTaSsn(7);
+    taHeader.SetIniRcId(0);
+    data->AddHeader(taHeader);
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_RELIABLE_TA);
+    tpHeader.SetSrcTpn(kUrmaWriteRegressionSenderTpn);
+    tpHeader.SetDestTpn(kUrmaWriteRegressionReceiverTpn);
+    tpHeader.SetPsn(psn);
+    tpHeader.SetTpMsn(0);
+    tpHeader.SetLastPacket(lastPacket);
+    data->AddHeader(tpHeader);
+
+    UdpHeader udpHeader;
+    data->AddHeader(udpHeader);
+    UbPort::AddIpv4Header(data, NodeIdToIp(topo.sender->GetId()), NodeIdToIp(topo.receiver->GetId()));
+
+    UbIpBasedNetworkHeader networkHeader;
+    data->AddHeader(networkHeader);
+    UbDataLink::GenPacketHeader(data,
+                                false,
+                                false,
+                                kUrmaWriteRegressionPriority,
+                                kUrmaWriteRegressionPriority,
+                                false,
+                                true,
+                                UbDatalinkHeaderConfig::PACKET_IPV4);
+    return data;
+}
+
+struct DecodedReceiverAck
+{
+    UbTransportHeader tpHeader;
+    UbSelectiveAckExtTph selectiveAckHeader;
+    UbAckTransactionHeader taAckHeader;
+    bool hasSelectiveAck{false};
+};
+
+DecodedReceiverAck
+DecodeReceiverAck(Ptr<Packet> ack)
+{
+    DecodedReceiverAck decoded;
+    UbDatalinkPacketHeader dlHeader;
+    UbIpBasedNetworkHeader networkHeader;
+    Ipv4Header ipv4Header;
+    UdpHeader udpHeader;
+
+    ack->RemoveHeader(dlHeader);
+    ack->RemoveHeader(networkHeader);
+    ack->RemoveHeader(ipv4Header);
+    ack->RemoveHeader(udpHeader);
+    ack->RemoveHeader(decoded.tpHeader);
+
+    const uint8_t opcode = decoded.tpHeader.GetTPOpcode();
+    if (opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH))
+    {
+        decoded.hasSelectiveAck = true;
+        ack->RemoveHeader(decoded.selectiveAckHeader);
+    }
+    else if (opcode == static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH))
+    {
+        UbCongestionExtTph cetph;
+        ack->RemoveHeader(cetph);
+        decoded.hasSelectiveAck = true;
+        ack->RemoveHeader(decoded.selectiveAckHeader);
+    }
+
+    ack->RemoveHeader(decoded.taAckHeader);
+    return decoded;
+}
+
+Ptr<Packet>
+BuildTpsackForSender(uint32_t ackPsn, bool ackBaseReceived, bool withCetph)
+{
+    Ptr<Packet> packet = Create<Packet>(0);
+
+    UbAckTransactionHeader taAck;
+    taAck.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+    packet->AddHeader(taAck);
+
+    UbSelectiveAckExtTph saetph;
+    saetph.SetBitmapBitCount(64);
+    saetph.SetMaxRcvPsn(ackPsn);
+    saetph.SetBitmapBit(0, ackBaseReceived);
+    packet->AddHeader(saetph);
+
+    if (withCetph)
+    {
+        UbCongestionExtTph cetph;
+        cetph.SetAckSequence(0);
+        packet->AddHeader(cetph);
+    }
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetTPOpcode(withCetph ? TpOpcode::TP_OPCODE_SACK_WITH_CETPH
+                                   : TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH);
+    tpHeader.SetSrcTpn(kUrmaWriteRegressionReceiverTpn);
+    tpHeader.SetDestTpn(kUrmaWriteRegressionSenderTpn);
+    tpHeader.SetPsn(ackPsn);
+    packet->AddHeader(tpHeader);
+    return packet;
+}
+
+Ptr<Packet>
+BuildTpsackBitmapForSender(uint32_t ackPsn,
+                           uint32_t maxRcvPsn,
+                           const std::vector<uint32_t>& receivedOffsets,
+                           uint32_t bitmapBits = 64,
+                           bool withCetph = false,
+                           uint32_t ackSequence = 0)
+{
+    Ptr<Packet> packet = Create<Packet>(0);
+
+    UbAckTransactionHeader taAck;
+    taAck.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+    packet->AddHeader(taAck);
+
+    UbSelectiveAckExtTph saetph;
+    saetph.SetBitmapBitCount(bitmapBits);
+    saetph.SetMaxRcvPsn(maxRcvPsn);
+    for (uint32_t offset : receivedOffsets)
+    {
+        saetph.SetBitmapBit(offset, true);
+    }
+    packet->AddHeader(saetph);
+
+    if (withCetph)
+    {
+        UbCongestionExtTph cetph;
+        cetph.SetAckSequence(ackSequence);
+        packet->AddHeader(cetph);
+    }
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetTPOpcode(withCetph ? TpOpcode::TP_OPCODE_SACK_WITH_CETPH
+                                   : TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH);
+    tpHeader.SetSrcTpn(kUrmaWriteRegressionReceiverTpn);
+    tpHeader.SetDestTpn(kUrmaWriteRegressionSenderTpn);
+    tpHeader.SetPsn(ackPsn);
+    packet->AddHeader(tpHeader);
+    return packet;
+}
+
+Ptr<Packet>
+BuildTpackForSender(uint32_t ackPsn)
+{
+    Ptr<Packet> packet = Create<Packet>(0);
+
+    UbAckTransactionHeader taAck;
+    taAck.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+    packet->AddHeader(taAck);
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH);
+    tpHeader.SetSrcTpn(kUrmaWriteRegressionReceiverTpn);
+    tpHeader.SetDestTpn(kUrmaWriteRegressionSenderTpn);
+    tpHeader.SetPsn(ackPsn);
+    packet->AddHeader(tpHeader);
+    return packet;
+}
+
+struct SelectiveRetransmitTraceRecord
+{
+    uint32_t nodeId;
+    uint32_t tpn;
+    uint64_t psn;
+    uint32_t payloadBytes;
+};
+
+static std::vector<SelectiveRetransmitTraceRecord> g_selectiveRetransmitRecordsForTest;
+
+void
+RecordSelectiveRetransmitForTest(uint32_t nodeId, uint32_t tpn, uint64_t psn, uint32_t payloadBytes)
+{
+    g_selectiveRetransmitRecordsForTest.push_back({nodeId, tpn, psn, payloadBytes});
+}
+
+class RecordingRetransmissionCc : public UbCongestionControl
+{
+public:
+    static TypeId GetTypeId()
+    {
+        static TypeId tid =
+            TypeId("ns3::RecordingRetransmissionCc")
+                .SetParent<UbCongestionControl>()
+                .SetGroupName("UnifiedBus")
+                .AddConstructor<RecordingRetransmissionCc>();
+        return tid;
+    }
+
+    bool IsCcLimited(uint32_t bytes) override
+    {
+        lastLimitedCheckBytes = bytes;
+        return bytes > 0;
+    }
+
+    void OnSenderRetransmissionPacketSent(uint32_t psn, uint32_t size) override
+    {
+        lastRetransmissionPsn = psn;
+        lastRetransmissionBytes = size;
+        retransmissionNotifyCount++;
+    }
+
+    using UbCongestionControl::OnSenderCongestionNotification;
+    void OnSenderCongestionNotification(TpOpcode opcode,
+                                        uint32_t psn,
+                                        UbCongestionExtTph header,
+                                        uint32_t retransmitBytes) override
+    {
+        (void)opcode;
+        (void)psn;
+        (void)header;
+        lastCongestionNotificationRetransmitBytes = retransmitBytes;
+        congestionNotificationCount++;
+    }
+
+    uint32_t lastLimitedCheckBytes{0};
+    uint32_t lastRetransmissionPsn{0};
+    uint32_t lastRetransmissionBytes{0};
+    uint32_t retransmissionNotifyCount{0};
+    uint32_t lastCongestionNotificationRetransmitBytes{0};
+    uint32_t congestionNotificationCount{0};
+};
+
+Ptr<UbTransportChannel>
+CreateSelectiveReceiverTp(const LocalTpTopology& topo)
+{
+    InstallStaticTpPair(topo);
+    return topo.receiver->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionReceiverTpn);
 }
 
 } // namespace
@@ -512,7 +766,7 @@ class UbDcqcnCnpHeaderRoundTripTest : public TestCase
 {
 public:
     UbDcqcnCnpHeaderRoundTripTest()
-        : TestCase("UnifiedBus - DCQCN CNP header round-trips ECN/location in spec layout")
+        : TestCase("UnifiedBus - DCQCN CNP header round-trips ECN and location in spec layout")
     {
     }
 
@@ -883,6 +1137,302 @@ public:
     }
 };
 
+class UbSelectiveAckExtTphRoundTripTest : public TestCase
+{
+public:
+    UbSelectiveAckExtTphRoundTripTest()
+        : TestCase("UnifiedBus - SAETPH round-trips bitmap sizes")
+    {
+    }
+
+    void DoRun() override
+    {
+        const std::array<uint32_t, 5> bitCounts = {64, 128, 256, 512, 1024};
+        for (uint32_t bits : bitCounts)
+        {
+            UbSelectiveAckExtTph out;
+            out.SetBitmapBitCount(bits);
+            out.SetMaxRcvPsn(0x123456);
+            out.SetBitmapBit(0, true);
+            out.SetBitmapBit(bits - 1, true);
+
+            Ptr<Packet> packet = Create<Packet>(0);
+            packet->AddHeader(out);
+
+            UbSelectiveAckExtTph in;
+            packet->RemoveHeader(in);
+
+            NS_TEST_ASSERT_MSG_EQ(in.GetBitmapBitCount(), bits, "bitmap size should survive round trip");
+            NS_TEST_ASSERT_MSG_EQ(in.GetMaxRcvPsn(), 0x123456u, "MaxRcvPSN should survive round trip");
+            NS_TEST_ASSERT_MSG_EQ(in.GetBitmapBit(0), true, "first bit should survive round trip");
+            NS_TEST_ASSERT_MSG_EQ(in.GetBitmapBit(bits - 1), true, "last bit should survive round trip");
+        }
+    }
+};
+
+class UbSelectiveAckExtTphBitmapBoundaryTest : public TestCase
+{
+public:
+    UbSelectiveAckExtTphBitmapBoundaryTest()
+        : TestCase("UnifiedBus - SAETPH bitmap has no offset equal to bit count")
+    {
+    }
+
+    void DoRun() override
+    {
+        UbSelectiveAckExtTph header;
+        header.SetBitmapBitCount(64);
+        header.SetBitmapBit(63, true);
+
+        NS_TEST_ASSERT_MSG_EQ(header.GetBitmapBit(63), true, "offset 63 should be valid");
+        NS_TEST_ASSERT_MSG_EQ(header.GetBitmapBit(64), false, "offset 64 must be outside a 64-bit bitmap");
+    }
+};
+
+class UbSelectiveAckExtTphEncodingTest : public TestCase
+{
+public:
+    UbSelectiveAckExtTphEncodingTest()
+        : TestCase("UnifiedBus - SAETPH bitmap-size encoding is spec visible")
+    {
+    }
+
+    void DoRun() override
+    {
+        const std::array<std::pair<uint32_t, uint8_t>, 5> cases = {{
+            {64, 0},
+            {128, 1},
+            {256, 2},
+            {512, 3},
+            {1024, 4},
+        }};
+
+        for (auto [bits, encoded] : cases)
+        {
+            UbSelectiveAckExtTph header;
+            header.SetBitmapBitCount(bits);
+            NS_TEST_ASSERT_MSG_EQ(header.GetEncodedBitmapSize(),
+                                  encoded,
+                                  "SAETPH size encoding must match the UB spec table");
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(UbSelectiveAckExtTph::IsSupportedEncodedBitmapSize(5),
+                              false,
+                              "encoding 5 is reserved");
+        NS_TEST_ASSERT_MSG_EQ(UbSelectiveAckExtTph::IsSupportedEncodedBitmapSize(6),
+                              false,
+                              "encoding 6 is reserved");
+        NS_TEST_ASSERT_MSG_EQ(UbSelectiveAckExtTph::IsSupportedEncodedBitmapSize(7),
+                              false,
+                              "encoding 7 is reserved");
+
+        NS_TEST_ASSERT_MSG_EQ(UbSelectiveAckExtTph::IsSupportedBitmapBitCount(65),
+                              false,
+                              "65 bits is not an encodable SAETPH bitmap width");
+
+        bool invalidSetterThrew = false;
+        try
+        {
+            UbSelectiveAckExtTph header;
+            header.SetBitmapBitCount(65);
+        }
+        catch (const std::invalid_argument&)
+        {
+            invalidSetterThrew = true;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(invalidSetterThrew,
+                              true,
+                              "unsupported explicit width must fail instead of serializing any valid size");
+    }
+};
+
+class UbSelectiveAckExtTphReservedEncodingRejectTest : public TestCase
+{
+public:
+    UbSelectiveAckExtTphReservedEncodingRejectTest()
+        : TestCase("UnifiedBus - SAETPH reserved bitmap-size encodings are malformed")
+    {
+    }
+
+    void DoRun() override
+    {
+        const std::array<uint8_t, 2> malformedSizeBytes = {5, 0x80};
+
+        for (uint8_t malformedSizeByte : malformedSizeBytes)
+        {
+            Ptr<Packet> packet = Create<Packet>(0);
+            const uint8_t malformed[] = {malformedSizeByte, 0, 0, 0};
+            packet->AddAtEnd(Create<Packet>(malformed, sizeof(malformed)));
+
+            bool deserializeThrew = false;
+            try
+            {
+                UbSelectiveAckExtTph decoded;
+                packet->RemoveHeader(decoded);
+            }
+            catch (const std::invalid_argument&)
+            {
+                deserializeThrew = true;
+            }
+
+            NS_TEST_ASSERT_MSG_EQ(deserializeThrew,
+                                  true,
+                                  "reserved SAETPH bitmap-size bits must be rejected");
+        }
+    }
+};
+
+class UbSelectiveAckExtTphWireBitOrderTest : public TestCase
+{
+public:
+    UbSelectiveAckExtTphWireBitOrderTest()
+        : TestCase("UnifiedBus - SAETPH bitmap serialization is LSB-first within each byte")
+    {
+    }
+
+    void DoRun() override
+    {
+        UbSelectiveAckExtTph header;
+        header.SetBitmapBitCount(64);
+        header.SetMaxRcvPsn(0);
+        header.SetBitmapBit(0, true);
+        header.SetBitmapBit(1, true);
+        header.SetBitmapBit(7, true);
+
+        Ptr<Packet> packet = Create<Packet>(0);
+        packet->AddHeader(header);
+
+        std::array<uint8_t, 12> bytes{};
+        const uint32_t copied = packet->CopyData(bytes.data(), bytes.size());
+
+        NS_TEST_ASSERT_MSG_EQ(copied, bytes.size(), "serialized 64-bit SAETPH should be 12 bytes");
+        NS_TEST_ASSERT_MSG_EQ(bytes[0], 0u, "64-bit SAETPH should use encoded bitmap size 0");
+        NS_TEST_ASSERT_MSG_EQ(bytes[4],
+                              0x83u,
+                              "bitmap offsets 0, 1, and 7 should serialize as byte 0x83");
+    }
+};
+
+class UbTransportResponseStatusFieldsTest : public TestCase
+{
+public:
+    UbTransportResponseStatusFieldsTest()
+        : TestCase("UnifiedBus - transport response status fields are explicit")
+    {
+    }
+
+    void DoRun() override
+    {
+        UbTransportHeader header;
+        header.SetTPOpcode(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH);
+        header.SetRspSt(0);
+        header.SetRspInfo(0);
+
+        Ptr<Packet> packet = Create<Packet>(0);
+        packet->AddHeader(header);
+
+        UbTransportHeader decoded;
+        packet->RemoveHeader(decoded);
+
+        NS_TEST_ASSERT_MSG_EQ(decoded.GetRspSt(), 0u, "TPSACK RSPST should be zero");
+        NS_TEST_ASSERT_MSG_EQ(decoded.GetRspInfo(), 0u, "TPSACK RSPINFO should be zero");
+    }
+};
+
+class UbTransportRetransmissionModeDefaultsTest : public TestCase
+{
+public:
+    UbTransportRetransmissionModeDefaultsTest()
+        : TestCase("UnifiedBus - selective retransmission mode is opt-in")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<UbTransportChannel> tp = CreateObject<UbTransportChannel>();
+
+        EnumValue<UbRetransmissionMode> mode;
+        tp->GetAttribute("RetransmissionMode", mode);
+        NS_TEST_ASSERT_MSG_EQ(static_cast<uint32_t>(mode.Get()),
+                              static_cast<uint32_t>(UbRetransmissionMode::GBN),
+                              "default should preserve GBN behavior");
+
+        UintegerValue bitmapBits;
+        tp->GetAttribute("SelectiveAckBitmapBits", bitmapBits);
+        NS_TEST_ASSERT_MSG_EQ(bitmapBits.Get(),
+                              0u,
+                              "default selective ACK bitmap width should be AUTO");
+
+        tp->SetAttribute("SelectiveAckBitmapBits", UintegerValue(64));
+        tp->GetAttribute("SelectiveAckBitmapBits", bitmapBits);
+        NS_TEST_ASSERT_MSG_EQ(bitmapBits.Get(),
+                              64u,
+                              "explicit selective ACK bitmap width should be settable");
+        NS_TEST_ASSERT_MSG_EQ(tp->SetAttributeFailSafe("SelectiveAckBitmapBits", UintegerValue(65)),
+                              false,
+                              "invalid explicit selective ACK bitmap width should be rejected");
+
+        BooleanValue fastRetrans;
+        tp->GetAttribute("EnableFastRetrans", fastRetrans);
+        NS_TEST_ASSERT_MSG_EQ(fastRetrans.Get(),
+                              false,
+                              "fast retransmission should be opt-in");
+
+        tp->SetAttribute("EnableFastRetrans", BooleanValue(true));
+        tp->GetAttribute("EnableFastRetrans", fastRetrans);
+        NS_TEST_ASSERT_MSG_EQ(fastRetrans.Get(),
+                              true,
+                              "fast retransmission should be settable");
+
+        BooleanValue retrans;
+        tp->GetAttribute("EnableRetrans", retrans);
+        NS_TEST_ASSERT_MSG_EQ(retrans.Get(),
+                              false,
+                              "transport retransmission should preserve the legacy opt-in default");
+
+        tp->SetAttribute("EnableRetrans", BooleanValue(true));
+        tp->GetAttribute("EnableRetrans", retrans);
+        NS_TEST_ASSERT_MSG_EQ(retrans.Get(),
+                              true,
+                              "EnableRetrans should preserve the legacy TypeId attribute");
+
+        NS_TEST_ASSERT_MSG_EQ(
+            UbTransportChannel::IsTransportResponseOpcode(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
+            true,
+            "TPSACK should be a transport response");
+        NS_TEST_ASSERT_MSG_EQ(
+            UbTransportChannel::IsTransportResponseOpcode(TpOpcode::TP_OPCODE_SACK_WITH_CETPH),
+            true,
+            "TPSACK-CC should be a transport response");
+    }
+};
+
+class UbRetransDisabledDoesNotRetainSentPacketsTest : public TestCase
+{
+public:
+    UbRetransDisabledDoesNotRetainSentPacketsTest()
+        : TestCase("UnifiedBus - disabled retransmission does not retain sent packets")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(false));
+
+        Ptr<UbTransportChannel> txTp = CreateObject<UbTransportChannel>();
+        txTp->RetainSentPsnForTest(10, 64);
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(10),
+                              false,
+                              "disabled retransmission must not retain packet state");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbAckWithoutCetphCarriesNoCetphHeaderTest : public TestCase
 {
 public:
@@ -962,6 +1512,1187 @@ public:
         NS_TEST_ASSERT_MSG_EQ(ackTaHeader.GetTaOpcode(),
                               static_cast<uint8_t>(TaOpcode::TA_OPCODE_TRANSACTION_ACK),
                               "ACK_WITHOUT_CETPH should expose TA ACK immediately after TP header");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbRetransDisabledReceiveGapDoesNotEmitSackTest : public TestCase
+{
+public:
+    UbRetransDisabledReceiveGapDoesNotEmitSackTest()
+        : TestCase("UnifiedBus - disabled retransmission receive gap does not emit SACK")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(false));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(
+            rxTp->GetPendingAckCountForTest(),
+            0u,
+            "disabled retransmission should match main: out-of-order gap records state without ACK/SACK");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverTpsackGapTest : public TestCase
+{
+public:
+    UbSelectiveReceiverTpsackGapTest()
+        : TestCase("UnifiedBus - selective receiver emits TPSACK for receive gap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(), 1u, "PSN 0 should produce TPACK");
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(), 1u, "PSN 2 should produce TPSACK while PSN 1 is missing");
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
+                              "selective gap response should use TPSACK without CETPH when CC is disabled");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetPsn(), 0u, "TPSACK RTPH.PSN should name the contiguous ACK base");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetRspSt(), 0u, "TPSACK RSPST should be zero");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetRspInfo(), 0u, "TPSACK RSPINFO should be zero");
+        NS_TEST_ASSERT_MSG_EQ(ack.hasSelectiveAck, true, "TPSACK should carry SAETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBitCount(),
+                              1024u,
+                              "AUTO should cap the default 2048 receive window to a 1024-bit SAETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetMaxRcvPsn(), 2u, "MaxRcvPSN should track the highest observed PSN");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(0), true, "PSN 0 should be marked received");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(1), false, "PSN 1 should remain missing");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(2), true, "PSN 2 should be marked received");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverAckAfterGapClosesTest : public TestCase
+{
+public:
+    UbSelectiveReceiverAckAfterGapClosesTest()
+        : TestCase("UnifiedBus - selective receiver returns to TPACK after receive gap closes")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 1, false));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(), 1u, "Filling the receive gap should produce an ACK");
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH),
+                              "closed gap should use ordinary TPACK without CETPH when CC is disabled");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetPsn(), 2u, "TPACK should acknowledge through the buffered PSN 2");
+        NS_TEST_ASSERT_MSG_EQ(ack.hasSelectiveAck, false, "ordinary TPACK should not carry SAETPH");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverExplicitBitmapWidthTest : public TestCase
+{
+public:
+    UbSelectiveReceiverExplicitBitmapWidthTest()
+        : TestCase("UnifiedBus - selective receiver honors explicit SAETPH bitmap width")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::SelectiveAckBitmapBits", UintegerValue(64));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.hasSelectiveAck, true, "selective gap response should carry SAETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBitCount(),
+                              64u,
+                              "explicit SelectiveAckBitmapBits=64 should select 64-bit SAETPH");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverFirstPacketLossTest : public TestCase
+{
+public:
+    UbSelectiveReceiverFirstPacketLossTest()
+        : TestCase("UnifiedBus - selective receiver represents first-packet loss without ACK underflow")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(),
+                              1u,
+                              "First observed out-of-order packet should produce TPSACK");
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
+                              "first-packet loss response should use TPSACK");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetPsn(),
+                              0u,
+                              "RTPH.PSN should stay at 0 instead of underflowing when PSN 0 is missing");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetMaxRcvPsn(), 2u, "MaxRcvPSN should report the observed PSN");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(0),
+                              false,
+                              "BitMap[0] should be negative evidence for missing PSN 0");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(2),
+                              true,
+                              "BitMap[2] should mark observed PSN 2");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverDuplicateGapTpsackTest : public TestCase
+{
+public:
+    UbSelectiveReceiverDuplicateGapTpsackTest()
+        : TestCase("UnifiedBus - selective receiver repeats TPSACK for duplicate packet while gap remains")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(),
+                              1u,
+                              "Duplicate out-of-order packet should still enqueue one response");
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
+                              "duplicate packet should repeat TPSACK while PSN 1 remains missing");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(1),
+                              false,
+                              "Repeated TPSACK should preserve the missing PSN evidence");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(2),
+                              true,
+                              "Repeated TPSACK should preserve received duplicate evidence");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveReceiverTpsackWithCetphOrderTest : public TestCase
+{
+public:
+    UbSelectiveReceiverTpsackWithCetphOrderTest()
+        : TestCase("UnifiedBus - selective receiver serializes TPSACK-CC with CETPH before SAETPH")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITH_CETPH),
+                              "CAQM-enabled selective gap response should use TPSACK with CETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.hasSelectiveAck,
+                              true,
+                              "TPSACK-CC should still expose SAETPH after CETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetMaxRcvPsn(), 2u, "SAETPH should parse after CETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetBitmapBit(2),
+                              true,
+                              "SAETPH bitmap should survive TPSACK-CC header ordering");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbTransportRecvTpsackDoesNotMisparseSaetphTest : public TestCase
+{
+public:
+    UbTransportRecvTpsackDoesNotMisparseSaetphTest()
+        : TestCase("UnifiedBus - sender transport safely consumes TPSACK headers")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->SetPsnSndUnaForTest(0);
+        txTp->RecvTpAck(BuildTpsackForSender(0, false, false));
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              0u,
+                              "First-packet-loss TPSACK must not move cumulative sender ACK state");
+
+        txTp->RecvTpAck(BuildTpsackForSender(0, true, false));
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              1u,
+                              "TPSACK with BitMap[0]=1 may advance cumulative sender ACK state");
+
+        txTp->RecvTpAck(BuildTpsackForSender(1, true, true));
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              2u,
+                              "TPSACK-CC should remove CETPH and SAETPH before TAACK");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSwitchDispatchesTpsackAsTransportResponseTest : public TestCase
+{
+public:
+    UbSwitchDispatchesTpsackAsTransportResponseTest()
+        : TestCase("UnifiedBus - local sink dispatches TPSACK to transport response path")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        txTp->SetPsnSndUnaForTest(0);
+
+        Ptr<Packet> packet = BuildTpsackForSender(0, true, false);
+        UdpHeader udpHeader;
+        packet->AddHeader(udpHeader);
+        UbPort::AddIpv4Header(packet, NodeIdToIp(topo.receiver->GetId()), NodeIdToIp(topo.sender->GetId()));
+        UbIpBasedNetworkHeader networkHeader;
+        packet->AddHeader(networkHeader);
+        UbDataLink::GenPacketHeader(packet,
+                                    false,
+                                    true,
+                                    kUrmaWriteRegressionPriority,
+                                    kUrmaWriteRegressionPriority,
+                                    false,
+                                    true,
+                                    UbDatalinkHeaderConfig::PACKET_IPV4);
+
+        topo.sender->GetObject<UbSwitch>()->SwitchHandlePacket(topo.senderPort, packet);
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              1u,
+                              "TPSACK reaching local sink should advance only through RecvTpAck");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbGbnReceiverKeepsOutOfOrderAckSilentTest : public TestCase
+{
+public:
+    UbGbnReceiverKeepsOutOfOrderAckSilentTest()
+        : TestCase("UnifiedBus - default GBN receiver keeps out-of-order ACK silent")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> rxTp =
+            topo.receiver->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionReceiverTpn);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(), 1u, "PSN 0 should still produce ordinary TPACK");
+        rxTp->PopAckForTest();
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 2, true));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(),
+                              0u,
+                              "default GBN mode should keep existing silent out-of-order behavior");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderRecordsMissingWithoutFastRetransmitTest : public TestCase
+{
+public:
+    UbSelectiveSenderRecordsMissingWithoutFastRetransmitTest()
+        : TestCase("UnifiedBus - sender records TPSACK holes without fast selective retransmission")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(false));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        for (uint32_t psn = 10; psn <= 13; ++psn)
+        {
+            txTp->RetainSentPsnForTest(psn, 16);
+        }
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 13, {0, 2, 3}));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(11),
+                              true,
+                              "TPSACK [1,0,1,1] should mark PSN 11 as reported missing");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              0u,
+                              "fast selective retransmission disabled should not enqueue immediately");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              11u,
+                              "BitMap[0]=1 should cumulatively advance through the ACK base only");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderFastRetransmitQueuesMissingOnceTest : public TestCase
+{
+public:
+    UbSelectiveSenderFastRetransmitQueuesMissingOnceTest()
+        : TestCase("UnifiedBus - sender fast selective retransmission queues missing PSNs once")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        for (uint32_t psn = 10; psn <= 13; ++psn)
+        {
+            txTp->RetainSentPsnForTest(psn, 16);
+        }
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 13, {0, 2, 3}));
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 13, {0, 2, 3}));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(11),
+                              true,
+                              "TPSACK should mark PSN 11 as reported missing");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              1u,
+                              "duplicate TPSACK should not enqueue a second retransmission");
+
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission, nullptr, "queued selective retransmission should produce a packet");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              0u,
+                              "dequeueing selective retransmission should drain the queue");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnRetransmitCountForTest(11),
+                              1u,
+                              "selective retransmission should update retransmit count once");
+        txTp->ReTxTimeout();
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              1u,
+                              "RTO should requeue an unacknowledged PSN after fast retransmission dequeue");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveRetransmitTraceReportsSparsePsnTest : public TestCase
+{
+public:
+    UbSelectiveRetransmitTraceReportsSparsePsnTest()
+        : TestCase("UnifiedBus - selective retransmission trace reports sparse missing PSN")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        for (uint32_t psn = 10; psn <= 12; ++psn)
+        {
+            txTp->RetainSentPsnForTest(psn, 16);
+        }
+        txTp->SetPsnSndUnaForTest(10);
+        g_selectiveRetransmitRecordsForTest.clear();
+        txTp->TraceConnectWithoutContext("SelectiveRetransmitNotify",
+                                         MakeCallback(&RecordSelectiveRetransmitForTest));
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 12, {0, 2}));
+
+        while (txTp->GetPendingSelectiveRetransmissionCountForTest() > 0)
+        {
+            Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+            NS_TEST_ASSERT_MSG_NE(retransmission, nullptr, "pending sparse retransmission should dequeue");
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(g_selectiveRetransmitRecordsForTest.size(),
+                              1u,
+                              "TPSACK [1,0,1] should produce exactly one retransmission trace");
+        const SelectiveRetransmitTraceRecord traced =
+            g_selectiveRetransmitRecordsForTest.empty()
+                ? SelectiveRetransmitTraceRecord{0,
+                                                 0,
+                                                 std::numeric_limits<uint64_t>::max(),
+                                                 0}
+                : g_selectiveRetransmitRecordsForTest.front();
+        NS_TEST_ASSERT_MSG_EQ(traced.nodeId,
+                              topo.sender->GetId(),
+                              "trace should report the sender node id");
+        NS_TEST_ASSERT_MSG_EQ(traced.tpn,
+                              kUrmaWriteRegressionSenderTpn,
+                              "trace should report the sender TPN");
+        NS_TEST_ASSERT_MSG_EQ(traced.psn,
+                              11u,
+                              "TPSACK [1,0,1] should retransmit only PSN 11");
+        NS_TEST_ASSERT_MSG_EQ(traced.payloadBytes,
+                              16u,
+                              "trace should report the retained packet payload bytes");
+
+        Simulator::Destroy();
+        Config::Reset();
+        g_selectiveRetransmitRecordsForTest.clear();
+    }
+};
+
+class UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest : public TestCase
+{
+public:
+    UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest()
+        : TestCase("UnifiedBus - sender ignores TPSACK zero padding beyond MaxRcvPSN")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(63, 16);
+        txTp->RetainSentPsnForTest(64, 16);
+        txTp->SetPsnSndUnaForTest(0);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(0, 64, {0, 63}, 64));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(64),
+                              false,
+                              "offset equal to bitmap width should be outside the represented TPSACK interval");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              0u,
+                              "sender should not enqueue padding bits beyond MaxRcvPSN");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest : public TestCase
+{
+public:
+    UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest()
+        : TestCase("UnifiedBus - sender ignores TPSACK zero padding beyond MaxRcvPSN")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(11, 16);
+        txTp->RetainSentPsnForTest(12, 16);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(11),
+                              true,
+                              "zero bit at or below MaxRcvPSN should report a missing PSN");
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(12),
+                              false,
+                              "zero bit beyond MaxRcvPSN should be padding, not missing evidence");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderCumulativeAckClearsRetainedStateTest : public TestCase
+{
+public:
+    UbSelectiveSenderCumulativeAckClearsRetainedStateTest()
+        : TestCase("UnifiedBus - sender cumulative ACK clears retained PSN state")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        for (uint32_t psn = 10; psn <= 13; ++psn)
+        {
+            txTp->RetainSentPsnForTest(psn, 16);
+        }
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpackForSender(13));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              14u,
+                              "TPACK PSN 13 should advance cumulative sender ACK state to 14");
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(10), false, "acked PSN 10 should be removed");
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(13), false, "acked PSN 13 should be removed");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest : public TestCase
+{
+public:
+    UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest()
+        : TestCase("UnifiedBus - selective ACKed gap state keeps state but skips retransmit")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(10, 64);
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {1}));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(11),
+                              true,
+                              "ACKed PSN beyond a gap must keep state until the gap closes");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnRetransmitCountForTest(11),
+                              0u,
+                              "ACKed PSN must not be retransmitted");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderRetransmitsRetainedMissingPacketTest : public TestCase
+{
+public:
+    UbSelectiveSenderRetransmitsRetainedMissingPacketTest()
+        : TestCase("UnifiedBus - sender selective retransmission replays retained missing packet")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        Ptr<UbWqeSegment> request = CreateObject<UbWqeSegment>();
+        request->SetSrc(topo.sender->GetId());
+        request->SetDest(topo.receiver->GetId());
+        request->SetSport(topo.senderPort->GetIfIndex());
+        request->SetDport(topo.receiverPort->GetIfIndex());
+        request->SetType(TaOpcode::TA_OPCODE_WRITE);
+        request->SetSize(UB_MTU_BYTE * 4);
+        request->SetPriority(kUrmaWriteRegressionPriority);
+        request->SetTaskId(kUrmaWriteRegressionTaskId);
+        request->SetWqeSize(UB_MTU_BYTE * 4);
+        request->SetJettyNum(kUrmaWriteRegressionJettyNum);
+        request->SetTaMsn(0);
+        request->SetTaSsn(0);
+        request->SetOrderType(OrderType::ORDER_NO);
+        request->SetTpn(kUrmaWriteRegressionSenderTpn);
+        request->SetTpMsn(txTp->GetMsnCnt());
+        request->SetPsnStart(txTp->GetPsnCnt());
+        request->SetSegmentKind(UbTransactionSegmentKind::REQUEST);
+        request->SetOriginJettyNum(kUrmaWriteRegressionJettyNum);
+        request->SetRequestTassn(0);
+        request->SetRequestOpcode(TaOpcode::TA_OPCODE_WRITE);
+        request->SetResponseBytes(0);
+        request->SetNeedsTransactionResponse(true);
+        request->SetResLenBytes(UB_MTU_BYTE * 4);
+        request->SetPayloadBytes(UB_MTU_BYTE * 4);
+        request->SetCarrierBytes(UB_MTU_BYTE * 4);
+
+        txTp->UpdatePsnCnt(request->GetPsnSize());
+        txTp->UpDateMsnCnt(1);
+        txTp->PushWqeSegment(request);
+
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            Ptr<Packet> sent = txTp->GetNextPacketForTest();
+            NS_TEST_ASSERT_MSG_NE(sent, nullptr, "initial send should retain each PSN");
+        }
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(0, 3, {0, 2, 3}));
+        NS_TEST_ASSERT_MSG_EQ(txTp->IsEmpty(),
+                              false,
+                              "pending selective retransmission should make TP non-empty before dequeue");
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission, nullptr, "missing PSN should be retransmitted");
+
+        UbDatalinkPacketHeader dlHeader;
+        UbIpBasedNetworkHeader networkHeader;
+        Ipv4Header ipv4Header;
+        UdpHeader udpHeader;
+        UbTransportHeader tpHeader;
+        retransmission->RemoveHeader(dlHeader);
+        retransmission->RemoveHeader(networkHeader);
+        retransmission->RemoveHeader(ipv4Header);
+        retransmission->RemoveHeader(udpHeader);
+        retransmission->RemoveHeader(tpHeader);
+
+        NS_TEST_ASSERT_MSG_EQ(tpHeader.GetPsn(),
+                              1u,
+                              "selective retransmission should replay only the missing PSN");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnRetransmitCountForTest(1),
+                              1u,
+                              "missing retained PSN should record one retransmission");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnRetransmitCountForTest(2),
+                              0u,
+                              "selectively acknowledged PSN should not be retransmitted");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderQueueContractTest : public TestCase
+{
+public:
+    UbSelectiveSenderQueueContractTest()
+        : TestCase("UnifiedBus - sender selective retransmission participates in TP queue contract")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(11, 128);
+        txTp->SetPsnSndUnaForTest(11);
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->IsEmpty(),
+                              false,
+                              "pending selective retransmission should make TP non-empty");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetNextPacketSize(),
+                              128u + UbTransportHeader().GetSerializedSize(),
+                              "next packet size should report the retained retransmission packet");
+        NS_TEST_ASSERT_MSG_EQ(txTp->IsLimited(),
+                              false,
+                              "selective retransmission should bypass new-PSN inflight limit when CC allows");
+
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission, nullptr, "queue contract should allow dequeuing retransmission");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderDropsAckedStaleRetransmitEntriesTest : public TestCase
+{
+public:
+    UbSelectiveSenderDropsAckedStaleRetransmitEntriesTest()
+        : TestCase("UnifiedBus - sender drops stale selective retransmission entries after ACK")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(11);
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetRawSelectiveRetransmissionQueueCountForTest(),
+                              1u,
+                              "TPSACK should create one raw queue entry before ACK cleanup");
+
+        txTp->RecvTpAck(BuildTpackForSender(11));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              0u,
+                              "ACKed retransmission entry should no longer be live");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetRawSelectiveRetransmissionQueueCountForTest(),
+                              0u,
+                              "ACK cleanup should compact stale selective retransmission queue entries");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderQueuePriorityTest : public TestCase
+{
+public:
+    UbSelectiveSenderQueuePriorityTest()
+        : TestCase("UnifiedBus - sender queue priority keeps control responses before selective retransmission")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(11);
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
+        txTp->EnqueueAckForTest(BuildTpackForSender(10));
+        txTp->EnqueueCnpForTest(Create<Packet>(1));
+
+        Ptr<Packet> first = txTp->GetNextPacketForTest();
+        Ptr<Packet> second = txTp->GetNextPacketForTest();
+        Ptr<Packet> third = txTp->GetNextPacketForTest();
+
+        NS_TEST_ASSERT_MSG_EQ(first->GetSize(), 1u, "CNP queue should have highest priority");
+
+        UbTransportHeader secondTpHeader;
+        second->RemoveHeader(secondTpHeader);
+        NS_TEST_ASSERT_MSG_EQ(secondTpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_ACK_WITHOUT_CETPH),
+                              "ACK/TPSACK response queue should precede selective retransmission");
+
+        UbTransportHeader thirdTpHeader;
+        third->RemoveHeader(thirdTpHeader);
+        NS_TEST_ASSERT_MSG_EQ(thirdTpHeader.GetPsn(),
+                              11u,
+                              "selective retransmission should run after control responses");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderRtoEnqueuesOutstandingPsnsTest : public TestCase
+{
+public:
+    UbSelectiveSenderRtoEnqueuesOutstandingPsnsTest()
+        : TestCase("UnifiedBus - selective RTO enqueues retained outstanding PSNs")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(10, 64);
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->ReTxTimeout();
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              2u,
+                              "selective RTO should enqueue all unacknowledged retained PSNs");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveRetransmissionAccountsDcqcnSendStateTest : public TestCase
+{
+public:
+    UbSelectiveRetransmissionAccountsDcqcnSendStateTest()
+        : TestCase("UnifiedBus - selective retransmission updates DCQCN sender accounting")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<UbHostDcqcn> cc = DynamicCast<UbHostDcqcn>(txTp->GetCongestionCtrlForTest());
+        NS_TEST_ASSERT_MSG_NE(cc, nullptr, "Sender TP should bind a host DCQCN instance");
+
+        (void)cc->IsCcLimited(1);
+        txTp->RetainSentPsnForTest(11, 64);
+        txTp->SetPsnSndUnaForTest(11);
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}));
+
+        const Time beforeRetransmit = cc->GetNextAvailableSendTimeForTest();
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission, nullptr, "selective retransmission should dequeue under DCQCN");
+        NS_TEST_ASSERT_MSG_GT(cc->GetNextAvailableSendTimeForTest(),
+                              beforeRetransmit,
+                              "selective retransmission should advance DCQCN pacing debt");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest : public TestCase
+{
+public:
+    UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest()
+        : TestCase("UnifiedBus - selective retransmission congestion control uses payload bytes")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        Ptr<RecordingRetransmissionCc> cc = CreateObject<RecordingRetransmissionCc>();
+        txTp->SetCongestionControlForTest(cc);
+
+        txTp->RetainSentPsnForTest(10, 16);
+        txTp->RetainSentPsnForTest(11, 0);
+        txTp->SetPsnSndUnaForTest(10);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000));
+
+        NS_TEST_ASSERT_MSG_EQ(cc->congestionNotificationCount,
+                              1u,
+                              "TPSACK-CC should notify congestion control once");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastCongestionNotificationRetransmitBytes,
+                              0u,
+                              "TPSACK-CC congestion accounting should use missing payload bytes");
+
+        Ptr<Packet> retransmission = txTp->GetNextPacketForTest();
+        NS_TEST_ASSERT_MSG_NE(retransmission,
+                              nullptr,
+                              "zero-payload selective retransmission should not be blocked by payload-byte accounting");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastLimitedCheckBytes,
+                              0u,
+                              "retransmission CC limit check should use payload bytes");
+        NS_TEST_ASSERT_MSG_EQ(cc->retransmissionNotifyCount,
+                              1u,
+                              "dequeued selective retransmission should notify congestion control");
+        NS_TEST_ASSERT_MSG_EQ(cc->lastRetransmissionBytes,
+                              0u,
+                              "retransmission send accounting should use payload bytes");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbCaqmSelectiveAckWithCetphAccountingTest : public TestCase
+{
+public:
+    UbCaqmSelectiveAckWithCetphAccountingTest()
+        : TestCase("UnifiedBus - CAQM accounts selective feedback without SAETPH dependency")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
+
+        Ptr<UbHostCaqm> caqm = DynamicCast<UbHostCaqm>(UbCongestionControl::Create(UB_DEVICE));
+        NS_TEST_ASSERT_MSG_NE(caqm, nullptr, "CAQM host factory should return a concrete host object");
+
+        caqm->OnSenderDataPacketSent(10, 1000);
+        caqm->OnSenderDataPacketSent(11, 1000);
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              2000u,
+                              "two sends should be durable accounting");
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(), 2000u, "two sends should be in flight");
+
+        UbCongestionExtTph cetph;
+        cetph.SetAckSequence(1000);
+        cetph.SetC(0);
+        cetph.SetI(1);
+        cetph.SetHint(0);
+
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 10, cetph, 1000);
+
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              1000u,
+                              "missing bytes should be removed from durable accounting once");
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
+                              0u,
+                              "inflight should be recomputed from adjusted bytes and CETPH ack sequence");
+
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 10, cetph, 0);
+
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              1000u,
+                              "duplicate selective feedback should not subtract again");
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
+                              0u,
+                              "duplicate selective feedback should keep inflight stable");
+
+        caqm->OnSenderRetransmissionPacketSent(11, 1000);
+
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              2000u,
+                              "selective retransmission send should re-enter CAQM sent accounting");
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
+                              1000u,
+                              "selective retransmission send should occupy CAQM inflight");
+
+        UbCongestionExtTph finalCetph;
+        finalCetph.SetAckSequence(2000);
+        finalCetph.SetC(0);
+        finalCetph.SetI(1);
+        finalCetph.SetHint(0);
+        caqm->OnSenderCongestionNotification(TpOpcode::TP_OPCODE_ACK_WITH_CETPH, 11, finalCetph);
+
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetInflightForTest(),
+                              0u,
+                              "final CETPH should clear retransmitted inflight bytes");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbTransportTpsackCcReportsRetransmitBytesOnceTest : public TestCase
+{
+public:
+    UbTransportTpsackCcReportsRetransmitBytesOnceTest()
+        : TestCase("UnifiedBus - TPSACK-CC reports newly missing selective bytes once")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("CAQM"));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(false));
+
+        Ptr<UbTransportChannel> senderTp = CreateObject<UbTransportChannel>();
+        Ptr<UbHostCaqm> caqm = DynamicCast<UbHostCaqm>(UbCongestionControl::Create(UB_DEVICE));
+        NS_TEST_ASSERT_MSG_NE(caqm, nullptr, "CAQM host factory should return a concrete host object");
+        senderTp->SetCongestionControlForTest(caqm);
+
+        caqm->OnSenderDataPacketSent(10, 1000);
+        caqm->OnSenderDataPacketSent(11, 1000);
+        senderTp->RetainSentPsnForTest(10, 1000);
+        senderTp->RetainSentPsnForTest(11, 1000);
+
+        Ptr<Packet> sack = BuildTpsackBitmapForSender(10, 11, {0}, 64, true, 1000);
+        senderTp->RecvTpAck(sack->Copy());
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              1000u,
+                              "first TPSACK should report newly missing bytes");
+
+        senderTp->RecvTpAck(sack->Copy());
+        NS_TEST_ASSERT_MSG_EQ(caqm->GetDataByteSentForTest(),
+                              1000u,
+                              "duplicate TPSACK should not report the same missing PSN twice");
 
         Simulator::Destroy();
         Config::Reset();
@@ -1629,9 +3360,9 @@ class UbUrmaReadWqeMetadataPropagationTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(wqe->GetResponseBytes(),
                               payloadBytes,
                               "CreateWqe should initialize read response bytes");
-        NS_TEST_ASSERT_MSG_EQ(wqe->GetLogicalBytes(),
+        NS_TEST_ASSERT_MSG_EQ(wqe->GetResLenBytes(),
                               payloadBytes,
-                              "READ WQE logicalBytes should equal request bytes");
+                              "READ WQE resLenBytes should equal request bytes");
         NS_TEST_ASSERT_MSG_EQ(wqe->GetPayloadBytes(),
                               0u,
                               "READ WQE payloadBytes should be zero");
@@ -1672,9 +3403,9 @@ class UbUrmaReadWqeMetadataPropagationTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(segment->GetResponseBytes(),
                               payloadBytes,
                               "Segment should carry read response byte count");
-        NS_TEST_ASSERT_MSG_EQ(segment->GetLogicalBytes(),
+        NS_TEST_ASSERT_MSG_EQ(segment->GetResLenBytes(),
                               payloadBytes,
-                              "READ request slice logicalBytes should preserve request bytes");
+                              "READ request slice resLenBytes should preserve request bytes");
         NS_TEST_ASSERT_MSG_EQ(segment->GetPayloadBytes(),
                               0u,
                               "READ request slice payloadBytes should be zero");
@@ -2165,6 +3896,7 @@ class UbUrmaReadMultiSliceRequestPacketSemanticsTest : public TestCase
                                     PacketType type,
                                     uint32_t payloadBytes,
                                     uint32_t taskId,
+                                    std::string,
                                     UbPacketTraceTag)
     {
         if (type != PacketType::PACKET || taskId != kUrmaReadMultiPacketTaskId)
@@ -2309,7 +4041,7 @@ class UbUrmaWriteOutOfOrderRequestSliceCompletionTest : public TestCase
         segment->SetRequestOpcode(TaOpcode::TA_OPCODE_WRITE);
         segment->SetResponseBytes(0);
         segment->SetNeedsTransactionResponse(true);
-        segment->SetLogicalBytes(requestBytes);
+        segment->SetResLenBytes(requestBytes);
         segment->SetPayloadBytes(requestBytes);
         segment->SetCarrierBytes(requestBytes);
         return segment;
@@ -2499,49 +4231,6 @@ int RunInChildProcess(const std::function<void()>& fn);
 
 } // namespace
 #endif
-
-class UbSwitchNotifySwitchDequeueWithoutCongestionControlTest : public TestCase
-{
-  public:
-    UbSwitchNotifySwitchDequeueWithoutCongestionControlTest()
-        : TestCase("UnifiedBus - UbSwitch NotifySwitchDequeue works without attached congestion control")
-    {
-    }
-
-    void DoRun() override
-    {
-#ifndef _WIN32
-        const int status = RunInChildProcess([]() {
-            Config::Reset();
-
-            Ptr<Node> node = CreateObject<Node>();
-            Ptr<UbSwitch> sw = CreateObject<UbSwitch>();
-            node->AggregateObject(sw);
-
-            Ptr<UbPort> port = CreateObject<UbPort>();
-            node->AddDevice(port);
-            sw->Init();
-
-            const uint32_t kInPort = 0;
-            const uint32_t kOutPort = 0;
-            const uint32_t kPriority = 1;
-            Ptr<Packet> packet = Create<Packet>(64);
-
-            sw->GetQueueManager()->PushToVoq(kInPort, kOutPort, kPriority, packet->GetSize());
-            sw->NotifySwitchDequeue(kInPort, kOutPort, kPriority, packet);
-
-            Simulator::Destroy();
-            Config::Reset();
-        });
-
-        NS_TEST_ASSERT_MSG_NE(status, -1, "fork/waitpid should succeed for dequeue null-cc guard test");
-        NS_TEST_ASSERT_MSG_EQ(WIFEXITED(status), true, "Child process should exit normally");
-        NS_TEST_ASSERT_MSG_EQ(WEXITSTATUS(status), 0, "NotifySwitchDequeue should not crash without congestion control");
-#else
-        NS_TEST_SKIP("fork-based crash guard test is not supported on Windows");
-#endif
-    }
-};
 
 namespace
 {
@@ -2882,7 +4571,7 @@ class UbQueueManagerDynamicPfcDecisionApiTest : public TestCase
 {
   public:
     UbQueueManagerDynamicPfcDecisionApiTest()
-        : TestCase("UnifiedBus - queue manager exposes unified dynamic PFC pause/resume decisions")
+        : TestCase("UnifiedBus - queue manager exposes unified dynamic PFC pause resume decisions")
     {
     }
 
@@ -2931,7 +4620,7 @@ class UbQueueManagerPaperPfcDecisionApiTest : public TestCase
 {
   public:
     UbQueueManagerPaperPfcDecisionApiTest()
-        : TestCase("UnifiedBus - queue manager exposes unified paper PFC pause/resume decisions")
+        : TestCase("UnifiedBus - queue manager exposes unified paper PFC pause resume decisions")
     {
     }
 
@@ -5101,7 +6790,43 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphRoundTripTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphBitmapBoundaryTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphEncodingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphReservedEncodingRejectTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphWireBitOrderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportResponseStatusFieldsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportRetransmissionModeDefaultsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledDoesNotRetainSentPacketsTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAckWithoutCetphCarriesNoCetphHeaderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledReceiveGapDoesNotEmitSackTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverTpsackGapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverAckAfterGapClosesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverExplicitBitmapWidthTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverFirstPacketLossTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverDuplicateGapTpsackTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverTpsackWithCetphOrderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportRecvTpsackDoesNotMisparseSaetphTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchDispatchesTpsackAsTransportResponseTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbGbnReceiverKeepsOutOfOrderAckSilentTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRecordsMissingWithoutFastRetransmitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderFastRetransmitQueuesMissingOnceTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmitTraceReportsSparsePsnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderCumulativeAckClearsRetainedStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRetransmitsRetainedMissingPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderQueueContractTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderDropsAckedStaleRetransmitEntriesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderQueuePriorityTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRtoEnqueuesOutstandingPsnsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmissionAccountsDcqcnSendStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmSelectiveAckWithCetphAccountingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportTpsackCcReportsRetransmitBytesOnceTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpOpcodeIsValidTransportOpcodeTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchDoesNotRemarkMarkedFecnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSenderCutsRateOnCnpTest(), TestCase::Duration::QUICK);
@@ -5133,8 +6858,6 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSwitchFlowControlModeAttributeTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPortSetDataRateWithoutCongestionControlTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbSwitchNotifySwitchDequeueWithoutCongestionControlTest(),
-                TestCase::Duration::QUICK);
     AddTestCase(new UbControlFrameUsesDedicatedAccountingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedModeCountsHeadroomTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
@@ -5188,6 +6911,24 @@ UbTestSuite::UbTestSuite()
 // Register the test suite
 static UbTestSuite g_ubTestSuite;
 
+class UbRetransCongestionControlRegressionTestSuite : public TestSuite
+{
+public:
+    UbRetransCongestionControlRegressionTestSuite()
+        : TestSuite("unified-bus-retrans-cc-regression", Type::UNIT)
+    {
+        AddTestCase(new UbSelectiveRetransmissionAccountsDcqcnSendStateTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbCaqmSelectiveAckWithCetphAccountingTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbTransportTpsackCcReportsRetransmitBytesOnceTest(),
+                    TestCase::Duration::QUICK);
+    }
+};
+
+static UbRetransCongestionControlRegressionTestSuite g_ubRetransCongestionControlRegressionTestSuite;
+
 UbDcqcnMarkingTestSuite::UbDcqcnMarkingTestSuite()
     : TestSuite("unified-bus-dcqcn-marking", Type::UNIT)
 {
@@ -5203,6 +6944,8 @@ class UbOutOfOrderRegressionTestSuite : public TestSuite
         : TestSuite("unified-bus-transport-ooo-regression", Type::UNIT)
     {
         AddTestCase(new UbUrmaWriteOutOfOrderRequestSliceCompletionTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
                     TestCase::Duration::QUICK);
     }
 };
@@ -5726,9 +7469,11 @@ class UbQuickExampleSameCasePathSystemTest : public TestCase
             (repoRoot / "scratch/2nodes_single-tp/../2nodes_single-tp").lexically_normal();
         auto [status, output] =
             RunQuickExampleCommand(CreateTempDirFilename(GetName() + ".log"),
-                                   "\"" + sameCasePath.string() + "\" --stop-ms=1",
+                                   "--case-path=\"" +
+                                       (repoRoot / "scratch/2nodes_single-tp").string() + "\" \"" +
+                                       sameCasePath.string() + "\" --stop-ms=1",
                                    "",
-                                   "scratch/2nodes_single-tp");
+                                   "");
 
         NS_TEST_ASSERT_MSG_EQ(status,
                               0,
@@ -5839,10 +7584,10 @@ class UbQuickExampleLegacyNetworkAttributeHintSystemTest : public TestCase
     }
 };
 
-class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
+class UbQuickExampleDisabledRetransStopsOnDropSystemTest : public TestCase
 {
   public:
-    UbQuickExampleDropWithoutRetransFailsFastSystemTest()
+    UbQuickExampleDisabledRetransStopsOnDropSystemTest()
         : TestCase("UnifiedBus - ub-quick-example stops when packet drops with retransmission disabled")
     {
     }
@@ -5862,6 +7607,9 @@ class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
         ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
 
         auto [status, output] =
             RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
@@ -5879,11 +7627,11 @@ class UbQuickExampleDropWithoutRetransFailsFastSystemTest : public TestCase
     }
 };
 
-class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
+class UbQuickExampleConfiguredGbnRetransCanContinueSystemTest : public TestCase
 {
   public:
-    UbQuickExampleDropWithRetransCanContinueSystemTest()
-        : TestCase("UnifiedBus - ub-quick-example does not fail-fast on packet drop when retransmission is enabled")
+    UbQuickExampleConfiguredGbnRetransCanContinueSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example accepts GBN retransmission config")
     {
     }
 
@@ -5900,11 +7648,11 @@ class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
                       "default ns3::UbSwitch::FlowControl \"CBFC\"",
                       "default ns3::UbSwitch::FlowControl \"NONE\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
-                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
-                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
-        ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
                       "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::EnableRetrans \"false\"",
+                      "default ns3::UbTransportChannel::EnableRetrans \"true\"");
         ReplaceInFile(caseDir / "network_attribute.txt",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
                       "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
@@ -5920,8 +7668,56 @@ class UbQuickExampleDropWithRetransCanContinueSystemTest : public TestCase
 
         NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
                               std::string::npos,
-                              "retrans-enabled run should not print the fail-fast diagnostic");
-        NS_TEST_ASSERT_MSG_EQ(status, 0, "retrans-enabled run should not fail-fast");
+                              "GBN retransmission run should not print the disabled-retrans diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "GBN retransmission run should not fail-fast");
+    }
+};
+
+class UbQuickExampleSelectiveRetransConfigSystemTest : public TestCase
+{
+  public:
+    UbQuickExampleSelectiveRetransConfigSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example accepts selective retransmission config")
+    {
+    }
+
+    void DoRun() override
+    {
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const std::string trafficCsv =
+            "taskId,sourceNode,destNode,dataSize(Byte),opType,priority,delay,phaseId,dependOnPhases\n"
+            "0,0,1,131072,URMA_WRITE,7,10ns,10,\n";
+        const std::filesystem::path caseDir =
+            CopyCaseDirWithTrafficFile(kLocalSingleThreadQuickExampleCase, trafficCsv);
+
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbSwitch::FlowControl \"CBFC\"",
+                      "default ns3::UbSwitch::FlowControl \"NONE\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"7\"",
+                      "default ns3::UbTransportChannel::MaxRetransAttempts \"64\"");
+        ReplaceInFile(caseDir / "network_attribute.txt",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"1048576\"",
+                      "default ns3::UbQueueManager::ReservePerQueueBytes \"512\"");
+        std::ofstream config(caseDir / "network_attribute.txt", std::ios::app);
+        config << "\ndefault ns3::UbTransportChannel::EnableRetrans \"true\"\n";
+        config << "default ns3::UbTransportChannel::RetransmissionMode \"SELECTIVE\"\n";
+        config << "default ns3::UbTransportChannel::EnableFastRetrans \"true\"\n";
+        config.close();
+
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--mtp-threads=1 --stop-ms=5",
+                                               "",
+                                               caseDir);
+
+        std::error_code ec;
+        std::filesystem::remove_all(caseDir, ec);
+
+        NS_TEST_ASSERT_MSG_EQ(output.find("Packet dropped while retransmission is disabled"),
+                              std::string::npos,
+                              "selective retransmission run should not print the disabled-retrans diagnostic");
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "selective retransmission run should not fail-fast");
     }
 };
 
@@ -6222,9 +8018,11 @@ class UbQuickExampleSystemTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLegacyNetworkAttributeHintSystemTest(),
                     TestCase::Duration::QUICK);
-        AddTestCase(new UbQuickExampleDropWithoutRetransFailsFastSystemTest(),
+        AddTestCase(new UbQuickExampleDisabledRetransStopsOnDropSystemTest(),
                     TestCase::Duration::QUICK);
-        AddTestCase(new UbQuickExampleDropWithRetransCanContinueSystemTest(),
+        AddTestCase(new UbQuickExampleConfiguredGbnRetransCanContinueSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleSelectiveRetransConfigSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLocalSingleUrmaWriteSystemTest(),
                     TestCase::Duration::QUICK);

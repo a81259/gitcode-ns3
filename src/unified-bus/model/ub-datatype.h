@@ -129,11 +129,23 @@ enum class TpOpcode : uint8_t {
     TP_OPCODE_RELIABLE_TA = 0x1,        // 可靠TA数据包（典型数据包）
     TP_OPCODE_ACK_WITHOUT_CETPH = 0x2,  // 不带CETPH的TP ACK（典型ACK）
     TP_OPCODE_ACK_WITH_CETPH = 0x3,     // 带CETPH的TP ACK
-    TP_OPCODE_RESERVED1 = 0x4,          // 保留
+    // TODO(retrans): 按 UB Base Spec 2.0 对齐 TPNAK 的报文字段编码。
+    // 规范中 0x4 为 Reserved，普通 TPNAK 应表示为 TPOpcode=0x2 且 RSPST=3'b011。
+    TP_OPCODE_NAK_WITHOUT_CETPH = 0x4,  // 不带CETPH的TP NAK
     TP_OPCODE_SACK_WITHOUT_CETPH = 0x5, // 不带CETPH的TP SACK
     TP_OPCODE_SACK_WITH_CETPH = 0x6,    // 带CETPH的TP SACK
     TP_OPCODE_RESERVED2 = 0x7,          // 保留
     TP_OPCODE_CNP = 0x8                 // CNP拥塞通知包
+};
+
+enum class UbRetransmissionMode : uint8_t {
+    GBN = 0,
+    SELECTIVE = 1,
+};
+
+enum class UbRetransTimeoutMode : uint8_t {
+    STATIC = 0,
+    DYNAMIC = 1,
 };
 
 // 定义NLP常量，便于使用
@@ -731,14 +743,16 @@ public:
         return m_needsTransactionResponse;
     }
 
-    void SetLogicalBytes(uint32_t logicalBytes)
+    void SetResLenBytes(uint32_t resLenBytes)
     {
-        m_logicalBytes = logicalBytes;
+        // TODO: Rename ResLen/resLenBytes to ResponseLen/responseLenBytes in a dedicated
+        // mechanical cleanup. Keep the current API stable in the retransmission MR.
+        m_resLenBytes = resLenBytes;
     }
 
-    uint32_t GetLogicalBytes() const
+    uint32_t GetResLenBytes() const
     {
-        return m_logicalBytes;
+        return m_resLenBytes;
     }
 
     void SetPayloadBytes(uint32_t payloadBytes)
@@ -790,7 +804,7 @@ private:
     uint32_t m_responseBytes = 0;
     uint64_t m_remoteAddress = 0;
     bool m_needsTransactionResponse = true;
-    uint32_t m_logicalBytes = 0;
+    uint32_t m_resLenBytes = 0;
     uint32_t m_payloadBytes = 0;
     uint32_t m_carrierBytes = 0;
 
@@ -1175,14 +1189,16 @@ public:
         return m_needsTransactionResponse;
     }
 
-    void SetLogicalBytes(uint32_t logicalBytes)
+    void SetResLenBytes(uint32_t resLenBytes)
     {
-        m_logicalBytes = logicalBytes;
+        // TODO: Rename ResLen/resLenBytes to ResponseLen/responseLenBytes in a dedicated
+        // mechanical cleanup. Keep the current API stable in the retransmission MR.
+        m_resLenBytes = resLenBytes;
     }
 
-    uint32_t GetLogicalBytes() const
+    uint32_t GetResLenBytes() const
     {
-        return m_logicalBytes;
+        return m_resLenBytes;
     }
 
     void SetPayloadBytes(uint32_t payloadBytes)
@@ -1235,7 +1251,7 @@ private:
     uint32_t m_responseBytes{0};
     uint64_t m_remoteAddress{0};
     bool m_needsTransactionResponse{true};
-    uint32_t m_logicalBytes{0};
+    uint32_t m_resLenBytes{0};
     uint32_t m_payloadBytes{0};
     uint32_t m_carrierBytes{0};
 

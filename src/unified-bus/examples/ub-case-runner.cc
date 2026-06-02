@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ub-case-runner.h"
 
+#include "ns3/boolean.h"
 #include "ns3/command-line.h"
 #include "ns3/node-list.h"
-#include "ns3/boolean.h"
 #include "ns3/ub-app.h"
 #include "ns3/ub-traffic-gen.h"
 #include "ns3/ub-transport.h"
@@ -591,6 +591,7 @@ PhaseTiming RunScenario(const QuickExampleOptions& options,
     RngSeedManager::SetSeed(options.rngRun);
 
     timing.simulationStart = std::chrono::high_resolution_clock::now();
+    UbUtils::ResetRuntimeDropDiagnostics();
     BuildScenarioFromConfig(options.configPath);
     ResetDropAbortState();
     GetDropAbortState().retransEnabled = IsRetransEnabledForRun();
