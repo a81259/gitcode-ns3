@@ -870,9 +870,9 @@ public:
         Config::Reset();
         GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
         GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
-        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(0));
-        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(1));
-        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(0.0));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(8192));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(16384));
+        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(1.0));
 
         LocalTpTopology topo = BuildLocalTpTopology();
         Ptr<UbSwitch> sw = topo.switch0->GetObject<UbSwitch>();
@@ -931,6 +931,56 @@ public:
         NS_TEST_ASSERT_MSG_EQ(packet->GetSize(),
                               4096u,
                               "DCQCN no-mark path should preserve payload size");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest : public TestCase
+{
+public:
+    UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest()
+        : TestCase("UnifiedBus - DCQCN switch marks with probability one above Kmax")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+        GlobalValue::Bind("UB_CC_ALGO", StringValue("DCQCN"));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KminBytes", UintegerValue(1024));
+        Config::SetDefault("ns3::UbSwitchDcqcn::KmaxBytes", UintegerValue(2048));
+        Config::SetDefault("ns3::UbSwitchDcqcn::Pmax", DoubleValue(0.0));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbSwitch> sw = topo.switch0->GetObject<UbSwitch>();
+        Ptr<Packet> packet = Create<Packet>(4096);
+
+        UbIpBasedNetworkHeader nth;
+        nth.SetMode(0);
+        nth.SetFecn(0);
+        packet->AddHeader(nth);
+
+        UbDatalinkPacketHeader dl;
+        dl.SetConfig(static_cast<uint8_t>(UbDatalinkHeaderConfig::PACKET_IPV4));
+        dl.SetPacketVL(1);
+        packet->AddHeader(dl);
+
+        sw->SendPacket(packet,
+                       topo.switch0DevicePort->GetIfIndex(),
+                       topo.switch0CorePort->GetIfIndex(),
+                       1);
+
+        packet->RemoveHeader(dl);
+        packet->RemoveHeader(nth);
+        NS_TEST_ASSERT_MSG_EQ(nth.GetMode(),
+                              0b100,
+                              "DCQCN should mark every packet once backlog exceeds Kmax");
+        NS_TEST_ASSERT_MSG_NE(nth.GetFecn(),
+                              0u,
+                              "DCQCN should not cap the above-Kmax marking probability at Pmax");
 
         Simulator::Destroy();
         Config::Reset();
@@ -6717,6 +6767,12 @@ public:
     UbTestSuite();
 };
 
+class UbDcqcnMarkingTestSuite : public TestSuite
+{
+  public:
+    UbDcqcnMarkingTestSuite();
+};
+
 UbTestSuite::UbTestSuite()
     : TestSuite("unified-bus", Type::UNIT)
 {
@@ -6731,6 +6787,7 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbDcqcnCnpHeaderRoundTripTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchMarksFecnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchNoMarkPreservesPacketHeadersTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveAckExtTphRoundTripTest(), TestCase::Duration::QUICK);
@@ -6871,6 +6928,14 @@ public:
 };
 
 static UbRetransCongestionControlRegressionTestSuite g_ubRetransCongestionControlRegressionTestSuite;
+
+UbDcqcnMarkingTestSuite::UbDcqcnMarkingTestSuite()
+    : TestSuite("unified-bus-dcqcn-marking", Type::UNIT)
+{
+    AddTestCase(new UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest(), TestCase::Duration::QUICK);
+}
+
+static UbDcqcnMarkingTestSuite g_ubDcqcnMarkingTestSuite;
 
 class UbOutOfOrderRegressionTestSuite : public TestSuite
 {
