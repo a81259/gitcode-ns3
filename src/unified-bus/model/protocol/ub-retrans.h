@@ -81,9 +81,9 @@ public:
     void AcknowledgeCumulativePsn(uint64_t ackPsn);
     void OnCumulativeAckProgress(uint64_t previousSndUna, uint64_t newSndUna);
     void AdvanceSendUnaFromAckState();
-    std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+    std::vector<uint64_t> CollectMissingPsnsFromSelectiveAck(uint64_t ackBase,
                                                              const UbSelectiveAckExtTph& saetph);
-    std::vector<uint64_t> GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+    std::vector<uint64_t> GetMissingPsnsFromSelectiveAck(uint64_t ackBase,
                                                          const UbSelectiveAckExtTph& saetph) const;
     bool QueueRetransmission(uint64_t psn);
     void CompactRetransmissionQueue();
@@ -128,7 +128,7 @@ private:
 
     void RetireAckedStateBeforeSendUna();
     bool IsMarkPsnEnabled() const;
-    bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(const UbTransportHeader& tpHeader,
+    bool SelectiveAckReportsReceivedAtOrAboveMarkPsn(uint64_t ackBase,
                                                      const UbSelectiveAckExtTph& saetph) const;
     void EnterMarkPsnRetransPhase();
     void FinishMarkPsnRetransPhaseIfDone();

@@ -793,7 +793,7 @@ private:
     // ========== TA层静态信息 (调度时设置，之后不变) ==========
     bool m_canSend = false;
     uint32_t m_jettyNum;
-    uint16_t m_taMsn;      // TA层消息序号 (Message Sequence Number)
+    uint64_t m_taMsn;      // TA层消息序号 (Message Sequence Number)
     uint32_t m_taSsnStart; // TA层起始分段序号 (Segment Sequence Number)
     uint32_t m_taSsnSize;  // TA层分段数量
     OrderType m_order = OrderType::ORDER_NO;
@@ -974,12 +974,12 @@ public:
         return m_jettyNum;
     }
 
-    uint16_t GetTaMsn() const
+    uint64_t GetTaMsn() const
     {
         return m_taMsn;
     }
 
-    uint16_t GetTaSsn() const
+    uint32_t GetTaSsn() const
     {
         return m_taSsn;
     }
@@ -989,23 +989,23 @@ public:
         m_jettyNum = n;
     }
 
-    void SetTaMsn(const uint16_t msn)
+    void SetTaMsn(uint64_t msn)
     {
         m_taMsn = msn;
     }
 
-    void SetTaSsn(const uint16_t ssn)
+    void SetTaSsn(uint32_t ssn)
     {
         m_taSsn = ssn;
     }
 
     // ========== TP层静态信息 ==========
-    uint32_t GetTpMsn() const
+    uint64_t GetTpMsn() const
     {
         return m_tpMsn;
     }
 
-    uint32_t GetPsnStart() const
+    uint64_t GetPsnStart() const
     {
         return m_psnStart;
     }
@@ -1015,12 +1015,12 @@ public:
         return m_psnSize;
     }
 
-    void SetTpMsn(uint32_t msn)
+    void SetTpMsn(uint64_t msn)
     {
         m_tpMsn = msn;
     }
 
-    void SetPsnStart(uint32_t start)
+    void SetPsnStart(uint64_t start)
     {
         m_psnStart = start;
     }
@@ -1242,8 +1242,8 @@ private:
 
     // ========== TA层信息 ==========
     uint32_t m_jettyNum;                // 来源Jetty标号，报文头中需要携带
-    uint16_t m_taMsn{0};                // 所属WQE的TA层消息序号
-    uint16_t m_taSsn{0};                // 本分段的TA层分段序号
+    uint64_t m_taMsn{0};                // 所属WQE的TA层消息序号
+    uint32_t m_taSsn{0};                // 本分段的TA层分段序号
     UbTransactionSegmentKind m_segmentKind{UbTransactionSegmentKind::REQUEST};
     uint32_t m_originJettyNum{UINT32_MAX};
     uint32_t m_requestTassn{UINT32_MAX};
@@ -1256,8 +1256,8 @@ private:
     uint32_t m_carrierBytes{0};
 
     // ========== TP层静态信息 (调度时设置，之后不变) ==========
-    uint32_t m_tpMsn{0};    // TP层消息序号
-    uint32_t m_psnStart{0}; // TP层起始包序号 (Packet Sequence Number)
+    uint64_t m_tpMsn{0};    // TP层消息序号
+    uint64_t m_psnStart{0}; // TP层起始包序号 (Packet Sequence Number)
     uint32_t m_psnSize{0};  // TP层包数量
 
     // ========== TP层动态信息 (发送时实时更新) ==========

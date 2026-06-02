@@ -10,6 +10,7 @@
 #include "ns3/test.h"
 #include "ns3/ub-app.h"
 #include "ns3/ub-traffic-gen.h"
+#include "ns3/ub-caqm.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
 #include "ns3/config.h"
@@ -23,6 +24,7 @@
 #include "ns3/ub-flow-control.h"
 #include "ns3/ub-function.h"
 #include "ns3/ub-link.h"
+#include "ns3/ub-modulo-sequence.h"
 #include "ns3/ub-port.h"
 #include "ns3/ub-queue-manager.h"
 #include "ns3/ub-routing-process.h"
@@ -230,19 +232,26 @@ UseSelectiveRetransmissionForTest()
 }
 
 Ptr<Packet>
-BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPacket)
+BuildReceiverDataPacketWithSequences(const LocalTpTopology& topo,
+                                     uint32_t psn,
+                                     bool lastPacket,
+                                     uint32_t tpMsn,
+                                     uint16_t iniTaSsn,
+                                     uint32_t payloadBytes = 16,
+                                     uint32_t resLenBytes = 16,
+                                     uint32_t taskId = kUrmaWriteRegressionTaskId)
 {
-    Ptr<Packet> data = Create<Packet>(16);
-    UbFlowTag flowTag(kUrmaWriteRegressionTaskId, 16);
+    Ptr<Packet> data = Create<Packet>(payloadBytes);
+    UbFlowTag flowTag(taskId, resLenBytes);
     data->AddPacketTag(flowTag);
 
     UbMAExtTah maHeader;
-    maHeader.SetLength(16);
+    maHeader.SetLength(resLenBytes);
     data->AddHeader(maHeader);
 
     UbTransactionHeader taHeader;
     taHeader.SetTaOpcode(TaOpcode::TA_OPCODE_WRITE);
-    taHeader.SetIniTaSsn(7);
+    taHeader.SetIniTaSsn(iniTaSsn);
     taHeader.SetIniRcId(0);
     data->AddHeader(taHeader);
 
@@ -251,7 +260,7 @@ BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPack
     tpHeader.SetSrcTpn(kUrmaWriteRegressionSenderTpn);
     tpHeader.SetDestTpn(kUrmaWriteRegressionReceiverTpn);
     tpHeader.SetPsn(psn);
-    tpHeader.SetTpMsn(0);
+    tpHeader.SetTpMsn(tpMsn);
     tpHeader.SetLastPacket(lastPacket);
     data->AddHeader(tpHeader);
 
@@ -270,6 +279,12 @@ BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPack
                                 true,
                                 UbDatalinkHeaderConfig::PACKET_IPV4);
     return data;
+}
+
+Ptr<Packet>
+BuildReceiverDataPacket(const LocalTpTopology& topo, uint32_t psn, bool lastPacket)
+{
+    return BuildReceiverDataPacketWithSequences(topo, psn, lastPacket, 0, 7);
 }
 
 struct DecodedReceiverAck
@@ -399,6 +414,24 @@ BuildTpackForSender(uint32_t ackPsn)
     tpHeader.SetSrcTpn(kUrmaWriteRegressionReceiverTpn);
     tpHeader.SetDestTpn(kUrmaWriteRegressionSenderTpn);
     tpHeader.SetPsn(ackPsn);
+    packet->AddHeader(tpHeader);
+    return packet;
+}
+
+Ptr<Packet>
+BuildTpnakForSender(uint32_t nakPsn)
+{
+    Ptr<Packet> packet = Create<Packet>(0);
+
+    UbAckTransactionHeader taAck;
+    taAck.SetTaOpcode(TaOpcode::TA_OPCODE_TRANSACTION_ACK);
+    packet->AddHeader(taAck);
+
+    UbTransportHeader tpHeader;
+    tpHeader.SetTPOpcode(TpOpcode::TP_OPCODE_NAK_WITHOUT_CETPH);
+    tpHeader.SetSrcTpn(kUrmaWriteRegressionReceiverTpn);
+    tpHeader.SetDestTpn(kUrmaWriteRegressionSenderTpn);
+    tpHeader.SetPsn(nakPsn);
     packet->AddHeader(tpHeader);
     return packet;
 }
@@ -1137,6 +1170,81 @@ public:
     }
 };
 
+class UbCaqmReceiverAggregatesLogicalPsnAcrossWrapTest : public TestCase
+{
+public:
+    UbCaqmReceiverAggregatesLogicalPsnAcrossWrapTest()
+        : TestCase("UnifiedBus - CAQM receiver aggregates logical PSN ranges across wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(true));
+
+        Ptr<UbHostCaqm> caqm = CreateObject<UbHostCaqm>();
+
+        UbIpBasedNetworkHeader header;
+        header.SetC(1);
+        header.SetI(0);
+        header.SetHint(0);
+
+        caqm->OnReceiverDataPacketReceived(0xFFFFFEull, 16, header);
+        caqm->OnReceiverDataPacketReceived(0xFFFFFFull, 16, header);
+        caqm->OnReceiverDataPacketReceived(0x1000000ull, 16, header);
+        caqm->OnReceiverDataPacketReceived(0x1000001ull, 16, header);
+
+        UbCongestionExtTph cetph =
+            caqm->OnReceiverPrepareAckCongestionHeader(0xFFFFFEull, 0x1000002ull);
+
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetAckSequence(),
+                              64u,
+                              "CAQM should count all packets in the logical PSN range");
+        NS_TEST_ASSERT_MSG_EQ(cetph.GetC(),
+                              4u,
+                              "CAQM should aggregate CE evidence across PSN wire wrap");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbModuloSequenceUnwrapTest : public TestCase
+{
+public:
+    UbModuloSequenceUnwrapTest()
+        : TestCase("UnifiedBus - modulo sequence maps wire ids to logical ids")
+    {
+    }
+
+    void DoRun() override
+    {
+        using UbTaSsnSequenceForTest = UbModuloSequence<16, uint32_t>;
+
+        NS_TEST_ASSERT_MSG_EQ(UbModuloSequence<24>::ToWire(0x1000001ull),
+                              1u,
+                              "24-bit wire value should keep low bits");
+        NS_TEST_ASSERT_MSG_EQ(UbModuloSequence<24>::Unwrap(1, 0x1000000ull),
+                              0x1000001ull,
+                              "wire PSN 1 should unwrap after 24-bit wrap");
+        NS_TEST_ASSERT_MSG_EQ(UbTaSsnSequenceForTest::Unwrap(1, 0x10000u),
+                              0x10001u,
+                              "wire TASSN 1 should unwrap after 16-bit wrap");
+        auto inWindow = UbModuloSequence<24>::UnwrapInWindow(1, 0x1000000ull, 0x1000004ull);
+        NS_TEST_ASSERT_MSG_EQ(inWindow.has_value(),
+                              true,
+                              "wire PSN 1 should unwrap inside the sender window");
+        NS_TEST_ASSERT_MSG_EQ(*inWindow,
+                              0x1000001ull,
+                              "window unwrap should return the logical PSN");
+        auto outsideWindow = UbModuloSequence<24>::UnwrapInWindow(10, 0x1000000ull, 0x1000004ull);
+        NS_TEST_ASSERT_MSG_EQ(outsideWindow.has_value(),
+                              false,
+                              "wire PSN outside the sender window should be rejected");
+    }
+};
+
 class UbSelectiveAckExtTphRoundTripTest : public TestCase
 {
 public:
@@ -1594,6 +1702,89 @@ public:
     }
 };
 
+class UbReceiverUnwrapsDataPsnAcrossWireWrapTest : public TestCase
+{
+public:
+    UbReceiverUnwrapsDataPsnAcrossWireWrapTest()
+        : TestCase("UnifiedBus - receiver unwraps RTPH PSN across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+        rxTp->SetPsnRecvNxtForTest(0x1000000ull);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 0, false));
+        rxTp->PopAckForTest();
+        rxTp->RecvDataPacket(BuildReceiverDataPacket(topo, 1, true));
+
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPsnRecvNxtForTest(),
+                              0x1000002ull,
+                              "wire PSN 1 should advance logical recv next after 24-bit wrap");
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetPsn(),
+                              1u,
+                              "receiver ACK should serialize low 24 bits of the logical PSN");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbReceiverRejectsOutOfWindowFuturePsnWithoutPollutingMaxRcvPsnTest : public TestCase
+{
+public:
+    UbReceiverRejectsOutOfWindowFuturePsnWithoutPollutingMaxRcvPsnTest()
+        : TestCase("UnifiedBus - receiver rejected future PSN does not pollute MaxRcvPSN")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::TpOooThreshold", UintegerValue(4));
+        Config::SetDefault("ns3::UbTransportChannel::SelectiveAckBitmapBits",
+                           UintegerValue(64));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+        rxTp->SetPsnRecvNxtForTest(0x1000000ull);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacketWithSequences(topo, 0x10, false, 0, 0));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(),
+                              0u,
+                              "future PSN outside receive window should be rejected without ACK");
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacketWithSequences(topo, 1, false, 0, 1));
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetPendingAckCountForTest(),
+                              1u,
+                              "valid in-window gap should still produce TPSACK");
+
+        DecodedReceiverAck ack = DecodeReceiverAck(rxTp->PopAckForTest());
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetTPOpcode(),
+                              static_cast<uint8_t>(TpOpcode::TP_OPCODE_SACK_WITHOUT_CETPH),
+                              "valid in-window gap should use TPSACK");
+        NS_TEST_ASSERT_MSG_EQ(ack.tpHeader.GetPsn(),
+                              0xFFFFFFu,
+                              "TPSACK RTPH.PSN should serialize logical recvNxt - 1");
+        NS_TEST_ASSERT_MSG_EQ(ack.hasSelectiveAck, true, "TPSACK should carry SAETPH");
+        NS_TEST_ASSERT_MSG_EQ(ack.selectiveAckHeader.GetMaxRcvPsn(),
+                              1u,
+                              "rejected future PSN must not pollute MaxRcvPSN");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbSelectiveReceiverAckAfterGapClosesTest : public TestCase
 {
 public:
@@ -1808,6 +1999,8 @@ public:
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
 
+        txTp->RetainSentPsnForTest(0, 16);
+        txTp->RetainSentPsnForTest(1, 16);
         txTp->SetPsnSndUnaForTest(0);
         txTp->RecvTpAck(BuildTpsackForSender(0, false, false));
         NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
@@ -1848,6 +2041,7 @@ public:
 
         Ptr<UbTransportChannel> txTp =
             topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+        txTp->RetainSentPsnForTest(0, 16);
         txTp->SetPsnSndUnaForTest(0);
 
         Ptr<Packet> packet = BuildTpsackForSender(0, true, false);
@@ -2146,6 +2340,214 @@ public:
         NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(12),
                               false,
                               "zero bit beyond MaxRcvPSN should be padding, not missing evidence");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderUnwrapsTpsackAcrossWirePsnWrapTest : public TestCase
+{
+public:
+    UbSelectiveSenderUnwrapsTpsackAcrossWirePsnWrapTest()
+        : TestCase("UnifiedBus - sender unwraps TPSACK wire PSNs across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        constexpr uint64_t ackBase = 0xFFFFFE;
+        for (uint64_t psn = ackBase; psn <= ackBase + 3; ++psn)
+        {
+            txTp->RetainSentPsnForTest(psn, 16);
+        }
+        txTp->SetPsnSndUnaForTest(ackBase);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(static_cast<uint32_t>(ackBase),
+                                                   static_cast<uint32_t>(ackBase + 3),
+                                                   {0, 1, 3},
+                                                   64));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              ackBase + 2,
+                              "contiguous bitmap bits should ACK through the wrapped wire PSN");
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(ackBase + 2),
+                              true,
+                              "zero bit after wire wrap should mark the logical PSN missing");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              1u,
+                              "wrapped TPSACK should queue one logical missing PSN");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderIgnoresOutOfWindowTpsackAcrossWireWrapTest : public TestCase
+{
+public:
+    UbSelectiveSenderIgnoresOutOfWindowTpsackAcrossWireWrapTest()
+        : TestCase("UnifiedBus - sender ignores out-of-window TPSACK across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(0x1000000ull, 16);
+        txTp->RetainSentPsnForTest(0x1000001ull, 16);
+        txTp->SetPsnSndUnaForTest(0x1000000ull);
+        txTp->SetPsnSndNxtForTest(0x1000002ull);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(3, 3, {0}, 64));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              0x1000000ull,
+                              "out-of-window TPSACK must not advance sender ACK state");
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(0x1000000ull),
+                              true,
+                              "out-of-window TPSACK must not retire retained PSN 0x1000000");
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(0x1000001ull),
+                              true,
+                              "out-of-window TPSACK must not retire retained PSN 0x1000001");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSelectiveSenderAcceptsTpsackAtCurrentAckBaseTest : public TestCase
+{
+public:
+    UbSelectiveSenderAcceptsTpsackAtCurrentAckBaseTest()
+        : TestCase("UnifiedBus - sender accepts TPSACK at current cumulative ACK base")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(10, 16);
+        txTp->RetainSentPsnForTest(11, 16);
+        txTp->SetPsnSndUnaForTest(11);
+        txTp->SetPsnSndNxtForTest(12);
+
+        txTp->RecvTpAck(BuildTpsackBitmapForSender(10, 11, {0}, 64));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              11u,
+                              "TPSACK at sndUna - 1 must not change cumulative ACK state");
+        NS_TEST_ASSERT_MSG_EQ(txTp->WasPsnSelectivelyReportedMissingForTest(11),
+                              true,
+                              "TPSACK at sndUna - 1 should still report the next PSN missing");
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPendingSelectiveRetransmissionCountForTest(),
+                              1u,
+                              "valid TPSACK at current ACK base should queue the missing PSN");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbSenderUnwrapsPlainTpackAcrossWirePsnWrapTest : public TestCase
+{
+public:
+    UbSenderUnwrapsPlainTpackAcrossWirePsnWrapTest()
+        : TestCase("UnifiedBus - sender unwraps plain TPACK across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->RetainSentPsnForTest(0x1000000ull, 16);
+        txTp->RetainSentPsnForTest(0x1000001ull, 16);
+        txTp->SetPsnSndUnaForTest(0x1000000ull);
+        txTp->SetPsnSndNxtForTest(0x1000002ull);
+
+        txTp->RecvTpAck(BuildTpackForSender(1));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndUnaForTest(),
+                              0x1000002ull,
+                              "wire TPACK PSN 1 should ACK through logical PSN 0x1000001");
+        NS_TEST_ASSERT_MSG_EQ(txTp->HasRetainedPsnForTest(0x1000000ull),
+                              false,
+                              "plain TPACK across wrap should retire retained logical PSN 0x1000000");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbGbnSenderUnwrapsTpnakAcrossWirePsnWrapTest : public TestCase
+{
+public:
+    UbGbnSenderUnwrapsTpnakAcrossWirePsnWrapTest()
+        : TestCase("UnifiedBus - GBN sender unwraps TPNAK across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        Config::SetDefault("ns3::UbTransportChannel::EnableRetrans", BooleanValue(true));
+        Config::SetDefault("ns3::UbTransportChannel::RetransmissionMode",
+                           EnumValue(UbRetransmissionMode::GBN));
+        Config::SetDefault("ns3::UbTransportChannel::EnableFastRetrans",
+                           BooleanValue(true));
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        InstallStaticTpPair(topo);
+        Ptr<UbTransportChannel> txTp =
+            topo.sender->GetObject<UbController>()->GetTpByTpn(kUrmaWriteRegressionSenderTpn);
+
+        txTp->SetPsnSndUnaForTest(0x1000000ull);
+        txTp->SetPsnSndNxtForTest(0x1000004ull);
+        txTp->RecvTpAck(BuildTpnakForSender(1));
+
+        NS_TEST_ASSERT_MSG_EQ(txTp->GetPsnSndNxtForTest(),
+                              0x1000001ull,
+                              "wire TPNAK PSN 1 should reset GBN send next to logical 0x1000001");
 
         Simulator::Destroy();
         Config::Reset();
@@ -3415,6 +3817,148 @@ class UbUrmaReadWqeMetadataPropagationTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(segment->NeedsTransactionResponse(),
                               true,
                               "Segment should preserve response-required flag");
+    }
+};
+
+class UbRemoteAddressUsesSegmentTaSsnTest : public TestCase
+{
+public:
+    UbRemoteAddressUsesSegmentTaSsnTest()
+        : TestCase("UnifiedBus - remote address offset uses segment TASSN")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<Node> node = CreateObject<Node>();
+        Ptr<UbTransaction> transaction = CreateObject<UbTransaction>();
+        node->AggregateObject(transaction);
+
+        Ptr<UbWqeSegment> request = CreateObject<UbWqeSegment>();
+        request->SetSegmentKind(UbTransactionSegmentKind::REQUEST);
+        request->SetRemoteAddress(0x10000000ull);
+        request->SetTaSsn(3);
+        request->SetRequestTassn(1);
+
+        const uint64_t expected = 0x10000000ull + 3ull * UB_WQE_TA_SEGMENT_BYTE;
+        NS_TEST_ASSERT_MSG_EQ(transaction->DeriveRemoteAddressForTest(request),
+                              expected,
+                              "remote address should use the concrete request segment TASSN");
+
+        Simulator::Destroy();
+    }
+};
+
+class UbWqeSegmentKeepsLogicalTaSequencesTest : public TestCase
+{
+public:
+    UbWqeSegmentKeepsLogicalTaSequencesTest()
+        : TestCase("UnifiedBus - WQE segment keeps logical TA sequence values")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<UbWqeSegment> segment = CreateObject<UbWqeSegment>();
+        segment->SetTaMsn(0x1000001ull);
+        segment->SetTaSsn(0x10001u);
+        segment->SetRequestTassn(0x10001u);
+        segment->SetTpMsn(0x1000001ull);
+        segment->SetPsnStart(0x1000001ull);
+
+        NS_TEST_ASSERT_MSG_EQ(segment->GetTaMsn(),
+                              0x1000001ull,
+                              "TA MSN should remain logical in WQE segment state");
+        NS_TEST_ASSERT_MSG_EQ(segment->GetTaSsn(),
+                              0x10001u,
+                              "TASSN should remain logical in WQE segment state");
+        NS_TEST_ASSERT_MSG_EQ(segment->GetRequestTassn(),
+                              0x10001u,
+                              "request TASSN should remain logical in WQE segment state");
+        NS_TEST_ASSERT_MSG_EQ(segment->GetTpMsn(),
+                              0x1000001ull,
+                              "TPMSN should remain logical in WQE segment state");
+        NS_TEST_ASSERT_MSG_EQ(segment->GetPsnStart(),
+                              0x1000001ull,
+                              "PSN start should remain logical in WQE segment state");
+    }
+};
+
+class UbJettyCompletesLogicalTassnAcrossWireWrapTest : public TestCase
+{
+public:
+    UbJettyCompletesLogicalTassnAcrossWireWrapTest()
+        : TestCase("UnifiedBus - Jetty completes logical TASSN across 16-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<UbJetty> jetty = CreateObject<UbJetty>();
+        jetty->Init();
+        jetty->SetTaSsnSendWindowForTest(0x10000u, 0x10002u);
+
+        const bool complete = jetty->ProcessWqeSegmentComplete(0x10000u);
+
+        NS_TEST_ASSERT_MSG_EQ(complete,
+                              true,
+                              "logical TASSN 0x10000 should be accepted after 16-bit wire wrap");
+        NS_TEST_ASSERT_MSG_EQ(jetty->GetTaSsnSndUnaForTest(),
+                              0x10001u,
+                              "Jetty send una should advance in logical TASSN space");
+    }
+};
+
+class UbReceiverKeepsInboundTpMsnLogicalKeyAcrossWireWrapTest : public TestCase
+{
+public:
+    UbReceiverKeepsInboundTpMsnLogicalKeyAcrossWireWrapTest()
+        : TestCase("UnifiedBus - inbound TA key uses logical TPMSN across 24-bit wrap")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+        GlobalValue::Bind("UB_CC_ENABLED", BooleanValue(false));
+        UseSelectiveRetransmissionForTest();
+
+        LocalTpTopology topo = BuildLocalTpTopology();
+        Ptr<UbTransportChannel> rxTp = CreateSelectiveReceiverTp(topo);
+        rxTp->SetPsnRecvNxtForTest(0x1000000ull);
+        rxTp->SetInboundTpMsnReferenceForTest(kUrmaWriteRegressionSenderTpn, 0);
+        rxTp->SetInboundTaSsnReferenceForTest(kUrmaWriteRegressionSenderTpn,
+                                              kUrmaWriteRegressionJettyNum,
+                                              0);
+
+        rxTp->RecvDataPacket(BuildReceiverDataPacketWithSequences(topo,
+                                                                  0,
+                                                                  false,
+                                                                  0,
+                                                                  0,
+                                                                  16,
+                                                                  32,
+                                                                  9100));
+        rxTp->PopAckForTest();
+        rxTp->SetInboundTpMsnReferenceForTest(kUrmaWriteRegressionSenderTpn, 0x1000000ull);
+        rxTp->SetInboundTaSsnReferenceForTest(kUrmaWriteRegressionSenderTpn,
+                                              kUrmaWriteRegressionJettyNum,
+                                              0x10000u);
+        rxTp->RecvDataPacket(BuildReceiverDataPacketWithSequences(topo,
+                                                                  1,
+                                                                  false,
+                                                                  0,
+                                                                  0,
+                                                                  16,
+                                                                  32,
+                                                                  9101));
+
+        NS_TEST_ASSERT_MSG_EQ(rxTp->GetInboundTaUnitCountForTest(),
+                              2u,
+                              "same low wire TPMSN values after wrap should not collide in inbound TA map");
+
+        Simulator::Destroy();
+        Config::Reset();
     }
 };
 
@@ -6790,6 +7334,8 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmReceiverAggregatesLogicalPsnAcrossWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbModuloSequenceUnwrapTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveAckExtTphRoundTripTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveAckExtTphBitmapBoundaryTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveAckExtTphEncodingTest(), TestCase::Duration::QUICK);
@@ -6801,6 +7347,9 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbAckWithoutCetphCarriesNoCetphHeaderTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbRetransDisabledReceiveGapDoesNotEmitSackTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverTpsackGapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverUnwrapsDataPsnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverRejectsOutOfWindowFuturePsnWithoutPollutingMaxRcvPsnTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverAckAfterGapClosesTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverExplicitBitmapWidthTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveReceiverFirstPacketLossTest(), TestCase::Duration::QUICK);
@@ -6814,6 +7363,13 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSelectiveRetransmitTraceReportsSparsePsnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderUnwrapsTpsackAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderIgnoresOutOfWindowTpsackAcrossWireWrapTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderAcceptsTpsackAtCurrentAckBaseTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSenderUnwrapsPlainTpackAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbGbnSenderUnwrapsTpnakAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderCumulativeAckClearsRetainedStateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSelectiveSenderRetransmitsRetainedMissingPacketTest(), TestCase::Duration::QUICK);
@@ -6841,6 +7397,10 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbDcqcnCompletedFlowReleasesHostActiveSlotTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnIdleFlowCancelsRecoveryStateTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadWqeMetadataPropagationTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRemoteAddressUsesSegmentTaSsnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbWqeSegmentKeepsLogicalTaSequencesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbJettyCompletesLogicalTassnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverKeepsInboundTpMsnLogicalKeyAcrossWireWrapTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaWriteCompletionNeedsTransactionResponseTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadCompletionNeedsReadResponseTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbUrmaReadMultiPacketResponseCountTest(), TestCase::Duration::QUICK);
@@ -6928,6 +7488,35 @@ public:
 };
 
 static UbRetransCongestionControlRegressionTestSuite g_ubRetransCongestionControlRegressionTestSuite;
+
+class UbModuloSequenceRegressionTestSuite : public TestSuite
+{
+public:
+    UbModuloSequenceRegressionTestSuite()
+        : TestSuite("unified-bus-modulo-sequence-regression", Type::UNIT)
+    {
+        AddTestCase(new UbModuloSequenceUnwrapTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbReceiverUnwrapsDataPsnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbReceiverRejectsOutOfWindowFuturePsnWithoutPollutingMaxRcvPsnTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveSenderUnwrapsTpsackAcrossWirePsnWrapTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveSenderIgnoresOutOfWindowTpsackAcrossWireWrapTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSelectiveSenderAcceptsTpsackAtCurrentAckBaseTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbSenderUnwrapsPlainTpackAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbGbnSenderUnwrapsTpnakAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbCaqmReceiverAggregatesLogicalPsnAcrossWrapTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbWqeSegmentKeepsLogicalTaSequencesTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbJettyCompletesLogicalTassnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbReceiverKeepsInboundTpMsnLogicalKeyAcrossWireWrapTest(),
+                    TestCase::Duration::QUICK);
+    }
+};
+
+static UbModuloSequenceRegressionTestSuite g_ubModuloSequenceRegressionTestSuite;
 
 UbDcqcnMarkingTestSuite::UbDcqcnMarkingTestSuite()
     : TestSuite("unified-bus-dcqcn-marking", Type::UNIT)

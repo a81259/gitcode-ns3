@@ -237,7 +237,7 @@ void UbHostCaqm::OnSenderDataPacketSent(uint32_t psn, uint32_t size)
 }
 
 // 接收端接到数据包后记录数据
-void UbHostCaqm::OnReceiverDataPacketReceived(uint32_t psn,
+void UbHostCaqm::OnReceiverDataPacketReceived(uint64_t psn,
                                               uint32_t size,
                                               UbIpBasedNetworkHeader header)
 {
@@ -263,12 +263,12 @@ void UbHostCaqm::OnReceiverDataPacketReceived(uint32_t psn,
 }
 
 // 接收端生成拥塞控制算法需要的ack header
-UbCongestionExtTph UbHostCaqm::OnReceiverPrepareAckCongestionHeader(uint32_t psnStart,
-                                                                    uint32_t psnEnd)
+UbCongestionExtTph UbHostCaqm::OnReceiverPrepareAckCongestionHeader(uint64_t psnStart,
+                                                                    uint64_t psnEnd)
 {
     UbCongestionExtTph cetph;
     if (m_congestionCtrlEnabled) {
-        for (uint32_t i = psnStart; i < psnEnd; i++) {
+        for (uint64_t i = psnStart; i < psnEnd; i++) {
             m_dataByteRecvd += m_recvdPsnPacketSizeMap[i];
             m_recvdPsnPacketSizeMap.erase(i);
             uint8_t C = m_recvdPsnCMap[i];
@@ -303,7 +303,13 @@ UbCongestionExtTph UbHostCaqm::OnReceiverPrepareAckCongestionHeader(uint32_t psn
         cetph.SetC(m_CE);
         cetph.SetI(m_IE);
         cetph.SetHint(m_HintE);
-        utils::UbUtils::CaqmAckNotify(m_src, m_tpn, psnStart, psnEnd, m_CE, m_IE, m_HintE);
+        utils::UbUtils::CaqmAckNotify(m_src,
+                                      m_tpn,
+                                      static_cast<uint32_t>(psnStart & 0xFFFFFFull),
+                                      static_cast<uint32_t>(psnEnd & 0xFFFFFFull),
+                                      m_CE,
+                                      m_IE,
+                                      m_HintE);
         m_CE = 0;
         m_IE = 0;
         m_HintE = 0;

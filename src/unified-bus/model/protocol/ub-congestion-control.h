@@ -57,7 +57,7 @@ public:
     virtual void OnSwitchPostDequeue(uint32_t inPort, uint32_t outPort, Ptr<Packet> p) {}
 
     // 接收端接到数据包后记录数据
-    virtual void OnReceiverDataPacketReceived(uint32_t psn,
+    virtual void OnReceiverDataPacketReceived(uint64_t psn,
                                               uint32_t size,
                                               UbIpBasedNetworkHeader header)
     {
@@ -67,8 +67,8 @@ public:
     }
 
     // 接收端生成ack上的拥塞反馈头
-    virtual UbCongestionExtTph OnReceiverPrepareAckCongestionHeader(uint32_t psnStart,
-                                                                    uint32_t psnEnd)
+    virtual UbCongestionExtTph OnReceiverPrepareAckCongestionHeader(uint64_t psnStart,
+                                                                    uint64_t psnEnd)
     {
         throw std::runtime_error("Congestion Ctrl not available");
     }

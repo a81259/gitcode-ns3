@@ -4,6 +4,7 @@
 #include "ns3/assert.h"
 #include "ns3/log.h"
 #include "ns3/simulator.h"
+#include "ns3/ub-modulo-sequence.h"
 #include "ns3/ub-transport.h"
 
 #include <algorithm>
@@ -12,6 +13,12 @@
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE("UbRetransController");
+
+namespace {
+
+using UbTpPsnSequence = UbModuloSequence<24, uint64_t>;
+
+} // namespace
 
 UbGbnRetransStrategy::UbGbnRetransStrategy(UbRetransController& controller)
     : m_controller(controller)
@@ -178,14 +185,14 @@ UbSelectiveRetransStrategy::AdvanceSendUnaFromAckState()
 }
 
 std::vector<uint64_t>
-UbSelectiveRetransStrategy::CollectMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+UbSelectiveRetransStrategy::CollectMissingPsnsFromSelectiveAck(uint64_t ackBase,
                                                                const UbSelectiveAckExtTph& saetph)
 {
-    // TODO: Unwrap 24-bit wire PSNs into logical PSNs before interpreting TPSACK ranges.
-    const uint64_t ackBase = tpHeader.GetPsn();
     const uint32_t bitmapBits = saetph.GetBitmapBitCount();
     const uint64_t representedEnd = ackBase + bitmapBits - 1;
-    const uint64_t lastCandidate = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
+    const uint64_t maxRcvPsn =
+        UbTpPsnSequence::UnwrapAtOrAfter(saetph.GetMaxRcvPsn(), ackBase);
+    const uint64_t lastCandidate = std::min<uint64_t>(maxRcvPsn, representedEnd);
     const bool baseIsMissingEvidence = ackBase == 0 && !saetph.GetBitmapBit(0);
     uint64_t firstCandidate = baseIsMissingEvidence ? 0 : ackBase + 1;
     std::vector<uint64_t> missingPsns;
@@ -224,13 +231,14 @@ UbSelectiveRetransStrategy::CollectMissingPsnsFromSelectiveAck(const UbTransport
 }
 
 std::vector<uint64_t>
-UbSelectiveRetransStrategy::GetMissingPsnsFromSelectiveAck(const UbTransportHeader& tpHeader,
+UbSelectiveRetransStrategy::GetMissingPsnsFromSelectiveAck(uint64_t ackBase,
                                                            const UbSelectiveAckExtTph& saetph) const
 {
-    const uint64_t ackBase = tpHeader.GetPsn();
     const uint32_t bitmapBits = saetph.GetBitmapBitCount();
     const uint64_t representedEnd = ackBase + bitmapBits - 1;
-    const uint64_t lastCandidate = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
+    const uint64_t maxRcvPsn =
+        UbTpPsnSequence::UnwrapAtOrAfter(saetph.GetMaxRcvPsn(), ackBase);
+    const uint64_t lastCandidate = std::min<uint64_t>(maxRcvPsn, representedEnd);
     const bool baseIsMissingEvidence = ackBase == 0 && !saetph.GetBitmapBit(0);
     const uint64_t firstCandidate = baseIsMissingEvidence ? 0 : ackBase + 1;
     std::vector<uint64_t> missingPsns;
@@ -401,20 +409,33 @@ UbSelectiveRetransStrategy::OnTransportResponse(const UbTransportHeader& tpHeade
 
     UbTransportChannel& transport = m_controller.GetTransport();
     result.previousSndUna = transport.GetPsnSndUna();
-    const std::vector<uint64_t> allMissingPsns = GetMissingPsnsFromSelectiveAck(tpHeader, saetph);
-    if (SelectiveAckReportsReceivedAtOrAboveMarkPsn(tpHeader, saetph)) {
+    const uint64_t ackBaseLowerBound =
+        result.previousSndUna == 0 ? 0 : result.previousSndUna - 1;
+    const auto logicalAckBase =
+        UbTpPsnSequence::UnwrapInWindow(tpHeader.GetPsn(),
+                                        ackBaseLowerBound,
+                                        transport.GetPsnSndNxt());
+    if (!logicalAckBase.has_value())
+    {
+        result.newSndUna = result.previousSndUna;
+        result.ignoreResponse = true;
+        return result;
+    }
+    const uint64_t ackBase = *logicalAckBase;
+    const std::vector<uint64_t> allMissingPsns = GetMissingPsnsFromSelectiveAck(ackBase, saetph);
+    if (SelectiveAckReportsReceivedAtOrAboveMarkPsn(ackBase, saetph)) {
         EnterMarkPsnRetransPhase();
     }
     if (saetph.GetBitmapBit(0)) {
-        AcknowledgeCumulativePsn(tpHeader.GetPsn());
+        AcknowledgeCumulativePsn(ackBase);
     }
-    std::vector<uint64_t> missingPsns = CollectMissingPsnsFromSelectiveAck(tpHeader, saetph);
+    std::vector<uint64_t> missingPsns = CollectMissingPsnsFromSelectiveAck(ackBase, saetph);
     uint32_t retransmitBytes = 0;
     for (uint64_t psn : missingPsns) {
         retransmitBytes += GetRetainedPayloadBytes(psn);
     }
     if (cetph != nullptr) {
-        transport.OnSenderReceivesTpsackCongestionFeedback(tpHeader.GetPsn(),
+        transport.OnSenderReceivesTpsackCongestionFeedback(ackBase,
                                                            *cetph,
                                                            retransmitBytes);
     }
@@ -448,7 +469,8 @@ UbSelectiveRetransStrategy::OnCumulativeAck(const UbTransportHeader& tpHeader)
 
     UbTransportChannel& transport = m_controller.GetTransport();
     result.previousSndUna = transport.GetPsnSndUna();
-    AcknowledgeCumulativePsn(tpHeader.GetPsn());
+    const uint64_t ackPsn = UbTpPsnSequence::Unwrap(tpHeader.GetPsn(), result.previousSndUna);
+    AcknowledgeCumulativePsn(ackPsn);
     AdvanceSendUnaFromAckState();
     CompactRetransmissionQueue();
     result.newSndUna = transport.GetPsnSndUna();
@@ -511,7 +533,7 @@ UbSelectiveRetransStrategy::BuildSelectiveAckHeader(uint64_t ackBase) const
     const UbTransportChannel& transport = m_controller.GetTransport();
     UbSelectiveAckExtTph header;
     header.SetBitmapBitCount(GetSelectiveAckBitmapBits());
-    header.SetMaxRcvPsn(static_cast<uint32_t>(transport.GetMaxRcvPsnForRetrans()));
+    header.SetMaxRcvPsn(UbTpPsnSequence::ToWire(transport.GetMaxRcvPsnForRetrans()));
 
     const uint32_t bitmapBits = header.GetBitmapBitCount();
     const uint64_t maxEvidencePsn =
@@ -592,17 +614,18 @@ UbSelectiveRetransStrategy::IsMarkPsnEnabled() const
 
 bool
 UbSelectiveRetransStrategy::SelectiveAckReportsReceivedAtOrAboveMarkPsn(
-    const UbTransportHeader& tpHeader,
+    uint64_t ackBase,
     const UbSelectiveAckExtTph& saetph) const
 {
     if (!IsMarkPsnEnabled() || !m_markPsnValid) {
         return false;
     }
 
-    const uint64_t ackBase = tpHeader.GetPsn();
     const uint32_t bitmapBits = saetph.GetBitmapBitCount();
     const uint64_t representedEnd = ackBase + bitmapBits - 1;
-    const uint64_t visibleEnd = std::min<uint64_t>(saetph.GetMaxRcvPsn(), representedEnd);
+    const uint64_t maxRcvPsn =
+        UbTpPsnSequence::UnwrapAtOrAfter(saetph.GetMaxRcvPsn(), ackBase);
+    const uint64_t visibleEnd = std::min<uint64_t>(maxRcvPsn, representedEnd);
 
     for (uint64_t psn = ackBase; psn <= visibleEnd; ++psn) {
         const uint32_t offset = static_cast<uint32_t>(psn - ackBase);
@@ -939,7 +962,15 @@ UbRetransController::OnTransportNak(const UbTransportHeader& tph)
         return result;
     }
     if (m_retransmissionMode == UbRetransmissionMode::GBN) {
-        result.triggerTransmit = m_gbn->HandleTpNak(tph.GetPsn());
+        const auto logicalNakPsn =
+            UbTpPsnSequence::UnwrapInWindow(tph.GetPsn(),
+                                            m_transport.GetPsnSndUna(),
+                                            m_transport.GetPsnSndNxt());
+        if (!logicalNakPsn.has_value()) {
+            result.ignoreResponse = true;
+            return result;
+        }
+        result.triggerTransmit = m_gbn->HandleTpNak(*logicalNakPsn);
     }
     return result;
 }

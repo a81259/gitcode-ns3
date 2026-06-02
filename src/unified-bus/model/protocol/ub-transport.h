@@ -241,7 +241,7 @@ public:
     uint32_t GetSrc() { return m_src; }
     uint32_t GetDest() { return m_dest; }
 
-    uint32_t GetMsnCnt() { return m_tpMsnCnt; }
+    uint64_t GetMsnCnt() { return m_tpMsnCnt; }
     uint32_t GetDstTpn() { return m_dstTpn; }
     void UpDateMsnCnt(uint32_t num) { m_tpMsnCnt += num; }
 
@@ -266,8 +266,29 @@ public:
     uint32_t GetPendingAckCountForTest() const { return static_cast<uint32_t>(m_ackQ.size()); }
     Ptr<Packet> PopAckForTest() { return GetNextPacket(); }
     uint32_t GetPendingCnpCountForTest() const { return static_cast<uint32_t>(m_cnpQ.size()); }
-    uint32_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
+    uint64_t GetPsnSndUnaForTest() const { return m_psnSndUna; }
     void SetPsnSndUnaForTest(uint64_t psn) { m_psnSndUna = psn; }
+    uint64_t GetPsnSndNxtForTest() const { return m_psnSndNxt; }
+    void SetPsnSndNxtForTest(uint64_t psn) { m_psnSndNxt = psn; }
+    uint64_t GetPsnRecvNxtForTest() const { return m_psnRecvNxt; }
+    void SetPsnRecvNxtForTest(uint64_t psn)
+    {
+        m_psnRecvNxt = psn;
+        m_maxRcvPsn = psn == 0 ? 0 : psn - 1;
+        m_recvPsnWindow.Reset(m_psnRecvNxt);
+    }
+    void SetInboundTpMsnReferenceForTest(uint32_t srcTpn, uint64_t reference)
+    {
+        m_inboundTpMsnReferences[srcTpn] = reference;
+    }
+    void SetInboundTaSsnReferenceForTest(uint32_t srcTpn, uint32_t iniRcId, uint32_t reference)
+    {
+        m_inboundTaSsnReferences[std::make_pair(srcTpn, iniRcId)] = reference;
+    }
+    uint32_t GetInboundTaUnitCountForTest() const
+    {
+        return static_cast<uint32_t>(m_inboundTaUnits.size());
+    }
     bool ResolveSelectiveAckBitmapBitsForTest(uint32_t& bits) const;
     void RetainSentPsnForTest(uint64_t psn, uint32_t payloadBytes);
     uint32_t GetPendingSelectiveRetransmissionCountForTest() const;
@@ -425,12 +446,12 @@ private:
     bool UpdateReceiveWindowAndCollectCompletedTa(
         const ReceivedDataPacketContext& ctx,
         const UbRetransReceiveDecision& decision,
-        uint32_t& psnStart,
-        uint32_t& psnEnd,
+        uint64_t& psnStart,
+        uint64_t& psnEnd,
         std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
     bool BuildAckResponseFromDecision(const UbRetransReceiveDecision& decision,
-                                      uint32_t psnStart,
-                                      uint32_t psnEnd,
+                                      uint64_t psnStart,
+                                      uint64_t psnEnd,
                                       AckResponseContext& response);
     void CompleteInboundTaUnits(const std::vector<Ptr<UbWqeSegment>>& completedTaUnits);
 
@@ -474,7 +495,9 @@ private:
     Ipv4Address m_dip;        // Destination IP address
 
     std::vector<Ptr<UbWqeSegment>> m_remoteRequest; // FIFO
-    std::map<std::pair<uint32_t, uint32_t>, InboundTaUnitState> m_inboundTaUnits;
+    std::map<std::pair<uint32_t, uint64_t>, InboundTaUnitState> m_inboundTaUnits;
+    std::map<uint32_t, uint64_t> m_inboundTpMsnReferences;
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> m_inboundTaSsnReferences;
     std::map<uint64_t, BufferedInboundPacket> m_bufferedInboundPackets;
 
     // Queue parameters

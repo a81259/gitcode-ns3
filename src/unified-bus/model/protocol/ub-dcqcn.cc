@@ -401,7 +401,7 @@ UbHostDcqcn::OnSenderTransportIdle()
 }
 
 void
-UbHostDcqcn::OnReceiverDataPacketReceived(uint32_t psn,
+UbHostDcqcn::OnReceiverDataPacketReceived(uint64_t psn,
                                           uint32_t size,
                                           UbIpBasedNetworkHeader header)
 {
@@ -444,7 +444,7 @@ UbHostDcqcn::OnReceiverDataPacketReceived(uint32_t psn,
 }
 
 UbCongestionExtTph
-UbHostDcqcn::OnReceiverPrepareAckCongestionHeader(uint32_t psnStart, uint32_t psnEnd)
+UbHostDcqcn::OnReceiverPrepareAckCongestionHeader(uint64_t psnStart, uint64_t psnEnd)
 {
     (void)psnStart;
     (void)psnEnd;
