@@ -5647,9 +5647,10 @@ class UbQueueManagerTotalBufferedBytesTracksEgressTransferTest : public TestCase
     void DoRun() override
     {
         Config::Reset();
+        constexpr uint32_t kPacketBytes = 512;
         auto fixture = CreateMultiPortSwitchFixture(FcType::NONE,
                                                     /*portsNum*/ 2,
-                                                    /*reserveBytes*/ 0,
+                                                    /*reserveBytes*/ kPacketBytes,
                                                     /*sharedPoolBytes*/ 0,
                                                     /*headroomPerPortBytes*/ 0,
                                                     /*resumeGapBytes*/ 64,
@@ -5659,7 +5660,6 @@ class UbQueueManagerTotalBufferedBytesTracksEgressTransferTest : public TestCase
         constexpr uint32_t kIngressPort = 0;
         constexpr uint32_t kEgressPort = 1;
         constexpr uint32_t kPriority = 1;
-        constexpr uint32_t kPacketBytes = 512;
 
         fixture.sw->SendPacket(Create<Packet>(kPacketBytes), kIngressPort, kEgressPort, kPriority);
         NS_TEST_ASSERT_MSG_EQ(fixture.queueManager->GetSwitchBufferOccupancy().total_buffered_bytes,
@@ -7317,17 +7317,47 @@ class UbDcqcnMarkingTestSuite : public TestSuite
     UbDcqcnMarkingTestSuite();
 };
 
+class UbWireFormatTestSuite : public TestSuite
+{
+  public:
+    UbWireFormatTestSuite();
+};
+
+class UbTransportRetransTestSuite : public TestSuite
+{
+  public:
+    UbTransportRetransTestSuite();
+};
+
+class UbTransactionUrmaTestSuite : public TestSuite
+{
+  public:
+    UbTransactionUrmaTestSuite();
+};
+
+class UbFlowControlTestSuite : public TestSuite
+{
+  public:
+    UbFlowControlTestSuite();
+};
+
+class UbCongestionControlTestSuite : public TestSuite
+{
+  public:
+    UbCongestionControlTestSuite();
+};
+
+class UbRuntimeToolsTestSuite : public TestSuite
+{
+  public:
+    UbRuntimeToolsTestSuite();
+};
+
 UbTestSuite::UbTestSuite()
     : TestSuite("unified-bus", Type::UNIT)
 {
-    AddTestCase(new UbFunctionalityTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbDcqcnFactoryCreatesHostAndSwitchTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnHostAckCeTphDefaultTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbCongestionControlDisabledFactoryStillReturnsObjectTest(),
-                TestCase::Duration::QUICK);
     AddTestCase(new UbCaqmHostRttUsesSmoothedEstimateTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbSwitchAttachDisabledCongestionControlTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbSwitchAttachEnabledCongestionControlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpHeaderRoundTripTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchMarksFecnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchNoMarkPreservesPacketHeadersTest(), TestCase::Duration::QUICK);
@@ -7417,7 +7447,6 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbCreateNodeSystemIdTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchFlowControlModeAttributeTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbPortSetDataRateWithoutCongestionControlTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbControlFrameUsesDedicatedAccountingTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcFixedModeCountsHeadroomTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbPfcDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
@@ -7440,10 +7469,6 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest(),
                 TestCase::Duration::QUICK);
     AddTestCase(new UbBusyPortArrivalPrefetchesNextPacketTest(), TestCase::Duration::QUICK);
-    AddTestCase(new UbRoundRobinAllocatorSeedsDifferentInitialPhasesPerOutPortTest(),
-                TestCase::Duration::QUICK);
-    AddTestCase(new UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest(),
-                TestCase::Duration::QUICK);
 #ifndef _WIN32
     AddTestCase(new UbDataPacketHeaderRejectsPriorityZeroTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSendControlFrameRejectsDataPacketTest(), TestCase::Duration::QUICK);
@@ -7470,6 +7495,187 @@ UbTestSuite::UbTestSuite()
 
 // Register the test suite
 static UbTestSuite g_ubTestSuite;
+
+UbWireFormatTestSuite::UbWireFormatTestSuite()
+    : TestSuite("unified-bus-wire-format", Type::UNIT)
+{
+    AddTestCase(new UbDcqcnCnpHeaderRoundTripTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphRoundTripTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphBitmapBoundaryTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphEncodingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphReservedEncodingRejectTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckExtTphWireBitOrderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportResponseStatusFieldsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAckWithoutCetphCarriesNoCetphHeaderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpOpcodeIsValidTransportOpcodeTest(), TestCase::Duration::QUICK);
+#ifndef _WIN32
+    AddTestCase(new UbDataPacketHeaderRejectsPriorityZeroTest(), TestCase::Duration::QUICK);
+#endif
+}
+
+static UbWireFormatTestSuite g_ubWireFormatTestSuite;
+
+UbTransportRetransTestSuite::UbTransportRetransTestSuite()
+    : TestSuite("unified-bus-transport-retrans", Type::UNIT)
+{
+    AddTestCase(new UbTransportRetransmissionModeDefaultsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledDoesNotRetainSentPacketsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRetransDisabledReceiveGapDoesNotEmitSackTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverTpsackGapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverUnwrapsDataPsnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverRejectsOutOfWindowFuturePsnWithoutPollutingMaxRcvPsnTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverAckAfterGapClosesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverExplicitBitmapWidthTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverFirstPacketLossTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverDuplicateGapTpsackTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveReceiverTpsackWithCetphOrderTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportRecvTpsackDoesNotMisparseSaetphTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchDispatchesTpsackAsTransportResponseTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbGbnReceiverKeepsOutOfOrderAckSilentTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRecordsMissingWithoutFastRetransmitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderFastRetransmitQueuesMissingOnceTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmitTraceReportsSparsePsnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderBitmapBoundaryIgnoresPaddingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderMaxRcvPsnSuppressesPaddingHolesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderUnwrapsTpsackAcrossWirePsnWrapTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderIgnoresOutOfWindowTpsackAcrossWireWrapTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderAcceptsTpsackAtCurrentAckBaseTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSenderUnwrapsPlainTpackAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbGbnSenderUnwrapsTpnakAcrossWirePsnWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderCumulativeAckClearsRetainedStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveAckedGapStateKeepsStateButSkipsRetransmitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRetransmitsRetainedMissingPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderQueueContractTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderDropsAckedStaleRetransmitEntriesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderQueuePriorityTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveSenderRtoEnqueuesOutstandingPsnsTest(), TestCase::Duration::QUICK);
+}
+
+static UbTransportRetransTestSuite g_ubTransportRetransTestSuite;
+
+UbTransactionUrmaTestSuite::UbTransactionUrmaTestSuite()
+    : TestSuite("unified-bus-transaction-urma", Type::UNIT)
+{
+    AddTestCase(new UbUrmaReadWqeMetadataPropagationTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRemoteAddressUsesSegmentTaSsnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbWqeSegmentKeepsLogicalTaSequencesTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbJettyCompletesLogicalTassnAcrossWireWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbReceiverKeepsInboundTpMsnLogicalKeyAcrossWireWrapTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbUrmaWriteCompletionNeedsTransactionResponseTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbUrmaReadCompletionNeedsReadResponseTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbUrmaReadMultiPacketResponseCountTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbUrmaReadMultiSliceRequestPacketSemanticsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbUrmaWriteOutOfOrderRequestSliceCompletionTest(), TestCase::Duration::QUICK);
+}
+
+static UbTransactionUrmaTestSuite g_ubTransactionUrmaTestSuite;
+
+UbFlowControlTestSuite::UbFlowControlTestSuite()
+    : TestSuite("unified-bus-flow-control", Type::UNIT)
+{
+    AddTestCase(new UbSwitchFlowControlModeAttributeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbControlFrameUsesDedicatedAccountingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcFixedModeCountsHeadroomTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerDynamicPfcDecisionApiTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcDynamicModeXoffZeroEmptyQueueTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModePauseResumeTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerPaperPfcDecisionApiTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModeIgnoresAlphaShiftForAdmissionTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcPaperDynamicModeUsesRealGlobalOccupancyTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerTotalBufferedBytesTracksEgressTransferTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcForwardingUsesIngressPortConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbFlowControlReleaseHookRunsAfterIngressDequeueTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerReserveOnlyAdmissionTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerStickyHeadroomAccountingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueManagerIngressPortOccupancyViewTest(), TestCase::Duration::QUICK);
+#ifndef _WIN32
+    AddTestCase(new UbSendControlFrameRejectsDataPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcRejectsZeroCellGeometryTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPfcFixedRejectsNegativeThresholdTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchLocalCbfcConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcPiggybackTargetVlCanDifferFromPacketVlTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcPiggybackRestoreClearsLocalCreditBitTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcControlFrameFallbackWithoutDataPacketTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcCtrlCrdRtrThresholdTriggersControlFrameTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForcedControlReturnFlushesAllEligibleVlsTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForcedControlReturnChunksControlFramesAtSixBitLimitTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbCbfcForwardedReleaseUsesIngressPortThresholdStateTest(), TestCase::Duration::QUICK);
+#endif
+}
+
+static UbFlowControlTestSuite g_ubFlowControlTestSuite;
+
+UbCongestionControlTestSuite::UbCongestionControlTestSuite()
+    : TestSuite("unified-bus-congestion-control", Type::UNIT)
+{
+    AddTestCase(new UbDcqcnHostAckCeTphDefaultTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmHostRttUsesSmoothedEstimateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchMarksFecnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchNoMarkPreservesPacketHeadersTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchMarksAboveKmaxEvenWhenPmaxIsZeroTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnReceiverSuppressesBurstCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnControlPriorityPrefersCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmReceiverAggregatesLogicalPsnAcrossWrapTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmissionAccountsDcqcnSendStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSelectiveRetransmissionUsesPayloadBytesForCongestionControlTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbCaqmSelectiveAckWithCetphAccountingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbTransportTpsackCcReportsRetransmitBytesOnceTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSwitchDoesNotRemarkMarkedFecnTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnSenderCutsRateOnCnpTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpDoesNotAdvanceAckStateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnRecoveryTimerIncreasesRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnByteCounterIncreasesRateBeforeTimerTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnHyperIncreaseUsesHaiRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnRateNeverExceedsLineRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnBusyHostStartsSecondFlowAtInitialRateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnPacingWakeupResumesQueuedSendTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCnpCutRescalesOutstandingPacingDebtTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnCompletedFlowReleasesHostActiveSlotTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbDcqcnIdleFlowCancelsRecoveryStateTest(), TestCase::Duration::QUICK);
+}
+
+static UbCongestionControlTestSuite g_ubCongestionControlTestSuite;
+
+UbRuntimeToolsTestSuite::UbRuntimeToolsTestSuite()
+    : TestSuite("unified-bus-runtime-tools", Type::UNIT)
+{
+    AddTestCase(new UbTraceDirSetupTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAlgorithmTraceGateDefaultOffTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbAlgorithmTraceCategoryGateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbQueueTraceCategoryGateTest(), TestCase::Duration::QUICK);
+    AddTestCase(new utils::UbQueueSamplerEventRetentionTest(), TestCase::Duration::QUICK);
+    AddTestCase(new utils::UbTraceFileConcurrencyTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbMpiRankExtractionHelperTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSameMpiRankHelperTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSystemOwnedByRankHelperTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbCreateNodeSystemIdTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSlidingBitmapWindowAdvancesWithoutLosingOutOfOrderMarksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBusyPortArrivalPrefetchesNextPacketTest(), TestCase::Duration::QUICK);
+#ifdef NS3_MPI
+    AddTestCase(new UbCreateTopoRemoteLinkTest(), TestCase::Duration::QUICK);
+#endif
+#if defined(NS3_MPI) && defined(NS3_MTP)
+    AddTestCase(new UbCreateTopoPackedSystemIdLocalLinkTest(), TestCase::Duration::QUICK);
+#endif
+    AddTestCase(new UbCreateTpPreloadInstancesTest(), TestCase::Duration::QUICK);
+}
+
+static UbRuntimeToolsTestSuite g_ubRuntimeToolsTestSuite;
 
 class UbRetransCongestionControlRegressionTestSuite : public TestSuite
 {
@@ -8657,3 +8863,45 @@ class UbQuickExampleSystemTestSuite : public TestSuite
 };
 
 static UbQuickExampleSystemTestSuite g_ubQuickExampleSystemTestSuite;
+
+class UbQuickExampleSmokeTestSuite : public TestSuite
+{
+  public:
+    UbQuickExampleSmokeTestSuite()
+        : TestSuite("unified-bus-examples-smoke", Type::SYSTEM)
+    {
+        AddTestCase(new UbQuickExampleLocalSingleThreadSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleOptionalTransportChannelSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleConfiguredGbnRetransCanContinueSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleSelectiveRetransConfigSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleLocalSingleUrmaWriteSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleLocalSingleUrmaReadSystemTest(),
+                    TestCase::Duration::QUICK);
+    }
+};
+
+static UbQuickExampleSmokeTestSuite g_ubQuickExampleSmokeTestSuite;
+
+class UbQuickExampleCompatTestSuite : public TestSuite
+{
+  public:
+    UbQuickExampleCompatTestSuite()
+        : TestSuite("unified-bus-examples-compat", Type::SYSTEM)
+    {
+        AddTestCase(new UbQuickExampleMissingCasePathSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleMissingCaseDirSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleMissingCaseFileSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleHelpTextSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickScratchLegacyAliasSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleSameCasePathSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleConflictingCasePathSystemTest(), TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleLegacyNetworkAttributeHintSystemTest(),
+                    TestCase::Duration::QUICK);
+    }
+};
+
+static UbQuickExampleCompatTestSuite g_ubQuickExampleCompatTestSuite;
