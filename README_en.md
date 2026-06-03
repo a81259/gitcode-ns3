@@ -76,8 +76,8 @@ The **typical simulation functionalities** supported by this project are shown i
     </tr>
     <tr>
       <td>Reliability</td>
-      <td>PSN, timeout retransmission, Go-Back-N</td>
-      <td>Selective retransmission, fast retransmission</td>
+      <td>PSN, timeout retransmission, Go-Back-N, selective retransmission, fast selective retransmission</td>
+      <td>Additional user-defined reliable transport strategies</td>
     </tr>
     <tr>
       <td>Congestion Control</td>

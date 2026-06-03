@@ -80,8 +80,8 @@
     </tr>
     <tr>
       <td>可靠性</td>
-      <td>PSN、超时重传、Go-Back-N</td>
-      <td>选择性重传、快速重传</td>
+      <td>PSN、超时重传、Go-Back-N、选择性重传、快速选择性重传</td>
+      <td>更多用户自定义可靠传输策略</td>
     </tr>
     <tr>
       <td>拥塞控制</td>
