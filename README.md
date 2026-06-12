@@ -1,6 +1,29 @@
-# ns-3-UB: UnifiedBus Network Simulation Framework
+<h1 align="center">ns-3-UB</h1>
 
-**语言**: [English](README_en.md) | [中文](README.md)
+<h3 align="center">UnifiedBus Network Simulation Framework for ns-3</h3>
+
+<p align="center">
+  <a href="https://gitcode.com/open-usim/ns-3-ub">GitCode</a> |
+  <a href="QUICK_START.md">Quick Start</a> |
+  <a href="scratch/README.md">Case Guide</a> |
+  <a href="RELEASE_NOTES_UB.md#release-121">Release Notes</a> |
+  <a href="README_en.md">English</a>
+</p>
+
+<p align="center">
+  <a href="https://gitcode.com/open-usim/ns-3-ub"><img src="https://img.shields.io/static/v1?label=GitCode&message=open-usim%2Fns-3-ub&color=C71D23&logo=git&logoColor=white" alt="GitCode repository"></a>
+  <a href="https://www.unifiedbus.com"><img src="https://img.shields.io/static/v1?label=spec&message=UnifiedBus&color=111827" alt="UnifiedBus specification"></a>
+  <a href="RELEASE_NOTES_UB.md#release-121"><img src="https://img.shields.io/static/v1?label=release&message=1.2.1&color=6F42C1" alt="Release 1.2.1"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/static/v1?label=license&message=GPL-2.0&color=97CA00" alt="GPL-2.0 license"></a>
+</p>
+
+<p align="center">
+  <a href="src/unified-bus"><img src="https://img.shields.io/static/v1?label=language&message=C%2B%2B20&color=00599C&logo=cplusplus&logoColor=white" alt="C++20"></a>
+  <a href="scratch/ns-3-ub-tools"><img src="https://img.shields.io/static/v1?label=tools&message=Python&color=3776AB&logo=python&logoColor=white" alt="Python tools"></a>
+  <a href="https://www.nsnam.org/releases/ns-3-44/"><img src="https://img.shields.io/static/v1?label=ns-3&message=3.44&color=00A0E9" alt="ns-3.44"></a>
+  <a href="CMakeLists.txt"><img src="https://img.shields.io/static/v1?label=build&message=CMake%20%2B%20Ninja&color=064F8C&logo=cmake&logoColor=white" alt="CMake and Ninja build"></a>
+  <a href="UNISON_README.md"><img src="https://img.shields.io/static/v1?label=parallel&message=Unison&color=FF8C00" alt="Unison parallel simulation"></a>
+</p>
 
 <p align="center">
   🎉 <strong>[NEW] 2026/04 版本 1.2.1 已发布</strong> 🎉<br>
