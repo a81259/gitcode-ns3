@@ -1,6 +1,6 @@
 <h1 align="center">ns-3-UB</h1>
 
-<h3 align="center">UnifiedBus Network Simulation Framework for ns-3</h3>
+<h3 align="center">UnifiedBus Network Simulation Framework</h3>
 
 <p align="center">
   <a href="https://gitcode.com/open-usim/ns-3-ub">GitCode</a> |
