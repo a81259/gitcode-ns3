@@ -264,18 +264,10 @@ void UbSwitch::InitNodePortsFlowControl()
 }
 
 /**
- * @brief 将初始化后的vop放入调度算法中
+ * @brief VOQs are registered with the allocator when their first packet arrives.
  */
 void UbSwitch::RegisterVoqsWithAllocator()
 {
-    for (uint32_t i = 0; i < m_portsNum; i++) {
-        for (uint32_t j = 0; j < m_vlNum; j++) {
-            for (uint32_t k = 0 ; k < m_portsNum; k++) { // voq
-                auto ingressQ = m_voq[i][j][k];
-                m_allocator->RegisterUbIngressQueue(ingressQ, i, j);
-            }
-        }
-    }
 }
 
 /**
@@ -321,28 +313,33 @@ Ptr<UbSwitchAllocator> UbSwitch::GetAllocator()
  */
 void UbSwitch::VoqInit()
 {
-    uint32_t outPortIdx = 0;
-    uint32_t priorityIdx = 0;
-    uint32_t inPortIdx = 0;
     m_voq.resize(m_portsNum);
     for (auto &i : m_voq) {
-        priorityIdx = 0;
         i.resize(m_vlNum);
-        for (auto &j : i) {
-            inPortIdx = 0;
-            for (uint32_t k = 0; k < m_portsNum; k++) {
-                auto q = CreateObject<UbPacketQueue>();
-                q->SetOutPortId(outPortIdx);
-                q->SetIngressPriority(priorityIdx);
-                q->SetInPortId(inPortIdx); // tp不使用inport
-                q->SetInPortId(k);
-                j.push_back(q);
-                inPortIdx++;
-            }
-            priorityIdx++;
-        }
-        outPortIdx++;
     }
+}
+
+Ptr<UbPacketQueue>
+UbSwitch::GetOrCreateVoq(uint32_t outPort, uint32_t priority, uint32_t inPort)
+{
+    if (!IsValidVoqIndices(outPort, priority, inPort, m_portsNum, m_vlNum)) {
+        NS_ASSERT_MSG(0, "Invalid VOQ indices (outPort, priority, inPort)!");
+    }
+    NS_ASSERT_MSG(m_allocator != nullptr, "Allocator must exist before VOQs are created");
+
+    auto &inPortQueues = m_voq[outPort][priority];
+    auto iter = inPortQueues.find(inPort);
+    if (iter != inPortQueues.end()) {
+        return iter->second;
+    }
+
+    auto q = CreateObject<UbPacketQueue>();
+    q->SetOutPortId(outPort);
+    q->SetIngressPriority(priority);
+    q->SetInPortId(inPort);
+    auto inserted = inPortQueues.emplace(inPort, q);
+    m_allocator->RegisterUbIngressQueue(q, outPort, priority);
+    return inserted.first->second;
 }
 
 /**
@@ -350,10 +347,7 @@ void UbSwitch::VoqInit()
  */
 void UbSwitch::PushPacketToVoq(Ptr<Packet> p, uint32_t outPort, uint32_t priority, uint32_t inPort)
 {
-    if (!IsValidVoqIndices(outPort, priority, inPort, m_portsNum, m_vlNum)) {
-        NS_ASSERT_MSG(0, "Invalid VOQ indices (outPort, priority, inPort)!");
-    }
-    m_voq[outPort][priority][inPort]->Push(p);
+    GetOrCreateVoq(outPort, priority, inPort)->Push(p);
 }
 
 bool UbSwitch::IsValidVoqIndices(uint32_t outPort, uint32_t priority, uint32_t inPort, uint32_t portsNum, uint32_t vlNum)
@@ -699,8 +693,9 @@ void UbSwitch::SendPacket(Ptr<Packet> packet, uint32_t inPort, uint32_t outPort,
     auto node = GetObject<Node>();
     Ptr<UbPort> recvPort = DynamicCast<ns3::UbPort>(node->GetDevice(inPort));
     UbPacketType_t packetType = GetPacketType(packet);
+    auto ingressQueue = GetOrCreateVoq(outPort, priority, inPort);
 
-    m_voq[outPort][priority][inPort]->Push(packet);
+    ingressQueue->Push(packet);
 
     m_queueManager->PushToVoq(inPort, outPort, priority, packet->GetSize());
 
@@ -713,7 +708,7 @@ void UbSwitch::SendPacket(Ptr<Packet> packet, uint32_t inPort, uint32_t outPort,
     if (packetType != UB_CONTROL_FRAME && IsPFCEnable()) {
         recvPort->GetFlowControl()->OnIngressEnqueued(
             MakeIngressFlowControlEventContext(packet,
-                                               m_voq[outPort][priority][inPort],
+                                               ingressQueue,
                                                inPort,
                                                outPort,
                                                priority));
@@ -768,6 +763,17 @@ bool UbSwitch::IsPFCEnable()
 Ptr<UbQueueManager> UbSwitch::GetQueueManager()
 {
     return m_queueManager;
+}
+
+uint64_t UbSwitch::GetAllocatedVoqCountForTest() const
+{
+    uint64_t count = 0;
+    for (const auto &outPortQueues : m_voq) {
+        for (const auto &priorityQueues : outPortQueues) {
+            count += priorityQueues.size();
+        }
+    }
+    return count;
 }
 
 void UbSwitch::SetCongestionCtrl(Ptr<UbCongestionControl> congestionCtrl)

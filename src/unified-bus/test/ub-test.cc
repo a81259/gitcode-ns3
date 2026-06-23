@@ -4735,6 +4735,52 @@ class UbSwitchLocalRuntimeConfigTest : public TestCase
     }
 };
 
+class UbSwitchCreatesVoqsLazilyTest : public TestCase
+{
+  public:
+    UbSwitchCreatesVoqsLazilyTest()
+        : TestCase("UnifiedBus - UbSwitch creates VOQs lazily when packets arrive")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> node = CreateObject<Node>(0);
+        InitNode(node, UB_SWITCH, 4);
+
+        Ptr<UbSwitch> sw = node->GetObject<UbSwitch>();
+        NS_TEST_ASSERT_MSG_EQ(sw->GetAllocatedVoqCountForTest(),
+                              0u,
+                              "Switch initialization should not pre-create every possible VOQ");
+
+        constexpr uint32_t kOutPort = 2;
+        constexpr uint32_t kPriority = 1;
+        constexpr uint32_t kInPort = 3;
+        sw->PushPacketToVoq(Create<Packet>(64), kOutPort, kPriority, kInPort);
+
+        NS_TEST_ASSERT_MSG_EQ(sw->GetAllocatedVoqCountForTest(),
+                              1u,
+                              "First packet for an out/vl/in tuple should create exactly one VOQ");
+
+        Ptr<UbRoundRobinAllocator> allocator = DynamicCast<UbRoundRobinAllocator>(sw->GetAllocator());
+        NS_TEST_ASSERT_MSG_NE(allocator, nullptr, "Default switch allocator should be round robin");
+
+        Ptr<UbPort> outPort = DynamicCast<UbPort>(node->GetDevice(kOutPort));
+        Ptr<UbIngressQueue> selected = allocator->SelectNextIngressQueue(outPort);
+        NS_TEST_ASSERT_MSG_NE(selected,
+                              nullptr,
+                              "Lazily created VOQ should be registered with the allocator");
+        NS_TEST_ASSERT_MSG_EQ(selected->GetInPortId(),
+                              kInPort,
+                              "Allocator should select the lazily created non-empty VOQ");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
 class UbPortSetDataRateWithoutCongestionControlTest : public TestCase
 {
   public:
@@ -7661,6 +7707,7 @@ UbRuntimeToolsTestSuite::UbRuntimeToolsTestSuite()
     AddTestCase(new UbSystemOwnedByRankHelperTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbCreateNodeSystemIdTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchLocalRuntimeConfigTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbSwitchCreatesVoqsLazilyTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbSlidingBitmapWindowAdvancesWithoutLosingOutOfOrderMarksTest(),
                 TestCase::Duration::QUICK);
     AddTestCase(new UbSlidingBitmapWindowReusesSlotsWithoutGhostMarksTest(),
