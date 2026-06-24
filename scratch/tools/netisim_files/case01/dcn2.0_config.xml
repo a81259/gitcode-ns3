@@ -9,7 +9,7 @@
         <cli use_tcl="false" rdma_log_en="true" rdma_log_num="1"/>
     </sim>
     <dcn_network usr_topo="1">
-		<top_mod pfc_en="0" host_multy_port_en="false" credit_log_en="false" is_flow_chip_stat="1" latency_thld="8000" is_flow_stat="1" gen_drop_byte_thld="1000000000" is_byte_stat="0" fifo_depth="32000"/>
+		<top_mod pfc_en="0" host_multi_port_en="false" credit_log_en="false" is_flow_chip_stat="1" latency_thld="8000" is_flow_stat="1" gen_drop_byte_thld="1000000000" is_byte_stat="0" fifo_depth="32000"/>
         <multi_node_gen_cfg enable="false" num_per_part="1" multi_process_bypass="false"/>
     <mpi_multi_processing enable="true" syn_clk_ratio="1.0" partition_method="hybrid_uniform" >
      <process_partition>
