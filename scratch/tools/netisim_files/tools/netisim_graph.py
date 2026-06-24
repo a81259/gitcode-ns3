@@ -2,6 +2,7 @@ import networkx as nx
 from lxml import etree
 import argparse
 from copy import deepcopy
+import heapq
 import time
 import os
 import numpy as np
@@ -18,6 +19,39 @@ import time
 
 STATIC_COMP_COST = 8 * 1024 * 1024
 STATIC_SYNC_COST = 8 * 1024 * 1024
+
+
+def _format_int_ranges(values):
+    values = sorted(values)
+    if not values:
+        return ""
+
+    ranges = []
+    start = values[0]
+    prev = values[0]
+    for value in values[1:]:
+        if value == prev + 1:
+            prev = value
+            continue
+        ranges.append(str(start) if start == prev else f"{start}..{prev}")
+        start = value
+        prev = value
+    ranges.append(str(start) if start == prev else f"{start}..{prev}")
+    return " ".join(ranges)
+
+
+def _sync_overlap_partition_chips(root_config, node_ele):
+    overlap_partitions = root_config.xpath(
+        '/dcn/dcn_network/mpi_multi_processing/process_partition/overlap_partition'
+    )
+    if not overlap_partitions:
+        return
+
+    overlap_partition = overlap_partitions[0]
+    for chip_ele in overlap_partition.xpath('./chip'):
+        overlap_partition.remove(chip_ele)
+    for node_group in node_ele.xpath('./grp'):
+        etree.SubElement(overlap_partition, "chip", dev_id=node_group.get("node_id"))
 
         
 def _process_path_chunk(graph, path_finding_algo, node_pairs):
@@ -150,15 +184,16 @@ class NetiSimGraph(nx.Graph):
             # print(comp_delay)
             if self.node_is_host(node_id[0]):
                 node_ele = etree.SubElement(new_node_ele, "grp", type=NETISIM_MOD + self.nodes[node_id[0]]['type'],
-                                            node_id=" ".join(str(id) for id in node_id), port_num=str(port_num + 1),
+                                            node_id=_format_int_ranges(node_id), port_num=str(port_num + 1),
                                             config_template=str(t_template_host), comp_delay=str(comp_delay))
                 t_template_host += 1
             else:
                 node_ele = etree.SubElement(new_node_ele, "grp", type=NETISIM_MOD + self.nodes[node_id[0]]['type'],
-                                            node_id=" ".join(str(id) for id in node_id), port_num=str(port_num),
+                                            node_id=_format_int_ranges(node_id), port_num=str(port_num),
                                             config_template=str(t_template_node), comp_delay=str(comp_delay))
                 t_template_node += 1
         old_node_ele.getparent().replace(old_node_ele, new_node_ele)
+        _sync_overlap_partition_chips(root_config, new_node_ele)
 
         old_topo_ele = root_config.xpath('/dcn/dcn_network/topology')[0]
         new_topo_ele = etree.Element("topology")
@@ -298,6 +333,79 @@ class NetiSimGraph(nx.Graph):
             if not record_flag:
                 self.route_table_2port[curr_node][dst].add((next_hop_port, metric))
 
+    def _add_path_to_route_table(self, path):
+        if not path:
+            return
+        src = path[0]
+        dst = path[-1]
+        for i in range(0, len(path)):
+            node_id = path[i]
+            if self.node_is_host(node_id):
+                pass
+
+            if i >= 1:
+                metric = i
+                self.set_route_table(node_id, src, path[i - 1], metric)
+            if i < len(path) - 1:
+                metric = len(path) - i - 1
+                self.set_route_table(node_id, dst, path[i + 1], metric)
+
+    def _route_weight(self, u, v):
+        return self.edges[u, v].get("route_weight", 1)
+
+    def _reverse_forwarding_neighbors(self, node_id, dst):
+        if self.node_is_host(node_id):
+            if node_id != dst:
+                return []
+            return [neighbor for neighbor in self.neighbors(node_id) if self.node_is_switch(neighbor)]
+        return list(self.neighbors(node_id))
+
+    def _shortest_forwarding_distances_to_host(self, dst):
+        distances = {dst: 0}
+        hop_lengths = {dst: 0}
+        heap = [(0, 0, dst)]
+
+        while heap:
+            distance, hop_length, node_id = heapq.heappop(heap)
+            if distance != distances[node_id] or hop_length != hop_lengths[node_id]:
+                continue
+
+            for prev_hop in self._reverse_forwarding_neighbors(node_id, dst):
+                next_distance = distance + self._route_weight(prev_hop, node_id)
+                next_hop_length = hop_length + 1
+                if (
+                    prev_hop not in distances
+                    or next_distance < distances[prev_hop]
+                    or (
+                        next_distance == distances[prev_hop]
+                        and next_hop_length < hop_lengths[prev_hop]
+                    )
+                ):
+                    distances[prev_hop] = next_distance
+                    hop_lengths[prev_hop] = next_hop_length
+                    heapq.heappush(heap, (next_distance, next_hop_length, prev_hop))
+
+        return distances, hop_lengths
+
+    def _gen_default_shortest_route_table(self):
+        start_time = time.time()
+        for dst in tqdm(self.host_ids, desc="默认最短路生成下一跳路由"):
+            path_lengths, hop_lengths = self._shortest_forwarding_distances_to_host(dst)
+            for node_id in self.nodes:
+                if node_id == dst or node_id not in path_lengths:
+                    continue
+                for next_hop in self.neighbors(node_id):
+                    if next_hop not in path_lengths:
+                        continue
+                    if path_lengths[next_hop] + self._route_weight(node_id, next_hop) == path_lengths[node_id]:
+                        metric = hop_lengths[next_hop] + 1
+                        self.set_route_table(node_id, dst, next_hop, metric)
+        end_time = time.time()
+        print(f"默认最短路生成路由耗时 {end_time - start_time:.2f}s")
+
+    def _use_default_shortest_routing(self, path_finding_algo):
+        return getattr(path_finding_algo, "__name__", "") == "all_shortest_paths"
+
     def all_shortest_paths(self, src, dst):
         return nx.all_shortest_paths(self, src, dst, weight=None, method="dijkstra")
     
@@ -349,6 +457,12 @@ class NetiSimGraph(nx.Graph):
         if self.get_total_num() > 1 * 1024:
             print(f"正在使用寻路算法生成全网路由，当前拓扑节点数较多，速度可能较慢。如果等不了建议基于拓扑特性自行生成路由表：）")
         self.init_routing_tables()
+
+        if self._use_default_shortest_routing(path_finding_algo):
+            self._gen_default_shortest_route_table()
+            if write_file:
+                self.write_route_table_to_xml(algo=path_finding_algo, host_router=host_router)
+            return
         
         # 对每一对host间的路径进行路由表项的建立
         # paths = []
@@ -367,53 +481,46 @@ class NetiSimGraph(nx.Graph):
         # 生成所有节点对
         nodes = self.host_ids
         node_pairs = list(combinations(nodes, 2))  # 生成所有无向节点对
-        # 并行查找路径
-        if multiple_workers > 1:
+        if multiple_workers and multiple_workers > 1:
             print(f"使用多进程加速，worker数量{multiple_workers}:")
-        
-        with ProcessPoolExecutor(max_workers=multiple_workers) as executor:
+
             start_time = time.time()
-            # 提交任务
-            futures = []
-            chunk_size = len(node_pairs) // multiple_workers + 1
-            for i in range(0, len(node_pairs), chunk_size):
-                chunk = node_pairs[i:i+chunk_size]
-                future = executor.submit(
-                    _process_path_chunk,
-                    nx.Graph(self),
-                    path_finding_algo,
-                    chunk
-                )
-                futures.append(future)
-            
-            # 收集结果
-            paths = []
-            for future in as_completed(futures):
-                try:
-                    chunk_results = future.result()
-                    paths += chunk_results
-                except Exception as e:
-                    print(f"Error in path finding: {e}")
-            
+            with ProcessPoolExecutor(max_workers=multiple_workers) as executor:
+                futures = []
+                chunk_size = len(node_pairs) // multiple_workers + 1
+                for i in range(0, len(node_pairs), chunk_size):
+                    chunk = node_pairs[i:i+chunk_size]
+                    future = executor.submit(
+                        _process_path_chunk,
+                        nx.Graph(self),
+                        path_finding_algo,
+                        chunk
+                    )
+                    futures.append(future)
+
+                paths = []
+                for future in as_completed(futures):
+                    try:
+                        chunk_results = future.result()
+                        paths += chunk_results
+                    except Exception as e:
+                        print(f"Error in path finding: {e}")
+
             end_time = time.time()
             print(f"寻路耗时 {end_time - start_time:.2f}s")
-            # mp
 
-        for path in tqdm(paths, desc="填写路由表项"):
-            # print(path)
-            src = path[0]
-            dst = path[-1]
-            for i in range(0, len(path)):
-                node_id = path[i]
-                if self.node_is_host(node_id):
+            for path in tqdm(paths, desc="填写路由表项"):
+                self._add_path_to_route_table(path)
+        else:
+            start_time = time.time()
+            for src, dst in tqdm(node_pairs, desc="算法{}寻找并填写路径".format(path_finding_algo.__name__)):
+                try:
+                    for path in path_finding_algo(self, src, dst):
+                        self._add_path_to_route_table(path)
+                except nx.exception.NetworkXNoPath:
                     pass
-
-                if i >= 1:
-                    metric = i
-                    self.set_route_table(node_id, src, path[i - 1], metric)
-                if i < len(path) - 1:
-                    metric = len(path) - i - 1
-                    self.set_route_table(node_id, dst, path[i + 1], metric)
+            end_time = time.time()
+            print(f"寻路和填写路由耗时 {end_time - start_time:.2f}s")
 
         if write_file:
             self.write_route_table_to_xml(algo=path_finding_algo, host_router=host_router)
@@ -422,6 +529,21 @@ class NetiSimGraph(nx.Graph):
         # 路由表写入xml文件中
         route_ele = etree.Element("router")
         route_table = self.route_table_2port
+
+        def format_range(dst_ids):
+            if len(dst_ids) == 1:
+                return str(dst_ids[0])
+            return f"{dst_ids[0]}..{dst_ids[-1]}"
+
+        def add_target(route_grp_ele, dst_ids, ports, metrics):
+            etree.SubElement(
+                route_grp_ele,
+                "target",
+                node_id=format_range(dst_ids),
+                port_id=ports,
+                metric=metrics,
+            )
+
         for node_id in tqdm(self.nodes, desc="写入路由表"):
             # print(self.nodes[node_id]["type"])
             if self.node_is_host(node_id) and host_router is False:
@@ -429,17 +551,28 @@ class NetiSimGraph(nx.Graph):
             route_grp_ele = etree.SubElement(route_ele, "grp", node_id=str(node_id),
                                              node_type=self.nodes[node_id]["type"])
             route_grp_ele.set("node_id", str(node_id))
+            current_dst_ids = []
+            current_signature = None
             for dst_id in range(len(route_table[node_id])):
                 next_ports_metric_sets = sorted(route_table[node_id][dst_id])
                 if len(next_ports_metric_sets) == 0:
+                    if current_dst_ids:
+                        add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
+                        current_dst_ids = []
+                        current_signature = None
                     continue
-                ports = ""
-                metrics = ""
-                for p_m in next_ports_metric_sets:
-                    ports += str(p_m[0]) + " "
-                    metrics += str(p_m[1]) + " "
-                target_ele = etree.SubElement(route_grp_ele, "target", node_id=str(dst_id), port_id=ports.strip(),
-                                              metric=metrics.strip())
+                ports = " ".join(str(p_m[0]) for p_m in next_ports_metric_sets)
+                metrics = " ".join(str(p_m[1]) for p_m in next_ports_metric_sets)
+                signature = (ports, metrics)
+                if current_dst_ids and signature == current_signature and dst_id == current_dst_ids[-1] + 1:
+                    current_dst_ids.append(dst_id)
+                else:
+                    if current_dst_ids:
+                        add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
+                    current_dst_ids = [dst_id]
+                    current_signature = signature
+            if current_dst_ids:
+                add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
 
         self.route_ele_xml = route_ele
 

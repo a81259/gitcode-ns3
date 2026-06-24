@@ -235,6 +235,19 @@ class NetworkSimulationGraph(nx.Graph):
                         route_set.remove(existing_route)
                         route_set.add((out_port, metric, dst_port))
 
+    def _add_path_to_route_table(self, path):
+        if not path:
+            return
+        src, dst = path[0], path[-1]
+        for i in range(len(path)):
+            node_id = path[i]
+            if i >= 1:
+                metric = i
+                self.set_route_table(node_id, path[i - 1], path[1], src, metric)
+            if i < len(path) - 1:
+                metric = len(path) - i - 1
+                self.set_route_table(node_id, path[i + 1], path[-2], dst, metric)
+
     # 生成全网路由（按 host-host 最短路径，支持并行）
     def gen_route_table(self, write_file=True, host_router=True, path_finding_algo=nx.all_shortest_paths, multiple_workers=1):
         """
@@ -288,8 +301,8 @@ class NetworkSimulationGraph(nx.Graph):
         nodes = list(self.host_ids)
         node_pairs = [(nodes[i], nodes[j]) for i in range(len(nodes)) for j in range(i + 1, len(nodes))]
 
-        paths = []
         if multiple_workers and multiple_workers > 1 and len(node_pairs) > 0:
+            paths = []
             print(f"使用多进程加速，worker数量 {multiple_workers}:")
             chunk_size = max(1, len(node_pairs) // multiple_workers + 1)
             with ProcessPoolExecutor(max_workers=multiple_workers) as executor:
@@ -306,30 +319,16 @@ class NetworkSimulationGraph(nx.Graph):
                         paths.extend(fut.result())
                     except Exception as e:
                         print(f"Error in path finding: {e}")
+
+            for path in tqdm(paths, desc="写入路由表中"):
+                self._add_path_to_route_table(path)
         else:
-            # 串行回退
-            for src, dst in tqdm(node_pairs, desc="计算路径中"):
+            for src, dst in tqdm(node_pairs, desc="计算并写入路径中"):
                 try:
                     for p in path_finding_algo(self, src, dst):
-                        paths.append(p)
+                        self._add_path_to_route_table(p)
                 except nx.exception.NetworkXNoPath:
                     pass
-
-        # 将路径写入路由表（双向写入，覆盖所有中间节点到两端 host 的路由）
-        for path in tqdm(paths, desc="写入路由表中"):
-            if not path:
-                continue
-            src, dst = path[0], path[-1]
-            for i in range(len(path)):
-                node_id = path[i]
-                # 指向 src 的反向路由
-                if i >= 1:
-                    metric = i
-                    self.set_route_table(node_id, path[i - 1], path[1], src, metric)
-                # 指向 dst 的正向路由
-                if i < len(path) - 1:
-                    metric = len(path) - i - 1
-                    self.set_route_table(node_id, path[i + 1], path[-2], dst, metric)
 
         if write_file:
             self.write_route_table_to_csv(host_router=host_router)

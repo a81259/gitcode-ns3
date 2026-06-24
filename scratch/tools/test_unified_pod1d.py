@@ -17,7 +17,69 @@ SMALL_PARAMS = casegen.TopologyParams(
     l2_plane_num=4,
     l2_switch_per_plane=2,
     l1_to_each_l2_ports=2,
+    host_to_each_l1_ports=1,
 )
+
+
+ECMP_PARAMS = casegen.TopologyParams(
+    pod_num=1,
+    node_per_pod=1,
+    npu_per_node=4,
+    sw1650_per_node=2,
+    sw1825_per_node=2,
+    l1_switch_per_pod=2,
+    l2_plane_num=2,
+    l2_switch_per_plane=1,
+    l1_to_each_l2_ports=1,
+    host_to_each_l1_ports=1,
+)
+
+
+def _assert_first_path_is_written_before_second_path(graph, src, dst):
+    yield [src, 2, dst]
+    if not graph.route_table_2port[src][dst]:
+        raise AssertionError("route table was not updated before the next path was requested")
+    yield [src, 3, dst]
+
+
+def _build_two_path_ns3_graph():
+    graph = casegen.netsim.NetworkSimulationGraph()
+    graph.add_netisim_host(0, forward_delay=casegen.FORWARD_DELAY)
+    graph.add_netisim_host(1, forward_delay=casegen.FORWARD_DELAY)
+    graph.add_netisim_node(2, forward_delay=casegen.FORWARD_DELAY)
+    graph.add_netisim_node(3, forward_delay=casegen.FORWARD_DELAY)
+    graph.add_netisim_edge(0, 2, bandwidth=casegen.NS3_NODE_LINK_BW, delay=casegen.LINK_DELAY)
+    graph.add_netisim_edge(2, 1, bandwidth=casegen.NS3_NODE_LINK_BW, delay=casegen.LINK_DELAY)
+    graph.add_netisim_edge(0, 3, bandwidth=casegen.NS3_NODE_LINK_BW, delay=casegen.LINK_DELAY)
+    graph.add_netisim_edge(3, 1, bandwidth=casegen.NS3_NODE_LINK_BW, delay=casegen.LINK_DELAY)
+    graph.build_graph_config()
+    return graph
+
+
+def _build_two_path_netisim_graph():
+    graph = casegen.netisim_graph.NetiSimGraph()
+    graph.add_netisim_host(0)
+    graph.add_netisim_host(1)
+    graph.add_netisim_node(2)
+    graph.add_netisim_node(3)
+    graph.add_netisim_edge(0, 2, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+    graph.add_netisim_edge(2, 1, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+    graph.add_netisim_edge(0, 3, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+    graph.add_netisim_edge(3, 1, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+    graph.build_graph_config(str(casegen.DEFAULT_NETISIM_TEMPLATE), write_flag=False)
+    return graph
+
+
+def _find_target_covering_node(route_group, node_id):
+    for target in route_group.findall("target"):
+        target_id = target.attrib["node_id"]
+        if ".." in target_id:
+            start, end = (int(value) for value in target_id.split(".."))
+            if start <= node_id <= end:
+                return target
+        elif int(target_id) == node_id:
+            return target
+    return None
 
 
 class UnifiedPod1dTest(unittest.TestCase):
@@ -28,8 +90,14 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertIn("import net_sim_builder as netsim", source)
         self.assertIn("netisim_graph.NetiSimGraph()", source)
         self.assertIn("netsim.NetworkSimulationGraph()", source)
+        self.assertIn("graph.write_config()", source)
+        self.assertIn("host_router=host_egress_count(params) > 1", source)
+        self.assertNotIn("single_shortest_path", source)
+        self.assertNotIn("path_finding_algo=", source)
+        self.assertNotIn("from lxml import etree", source)
         self.assertNotIn("xml.etree.ElementTree", source)
-        self.assertNotIn("def assign_ports", source)
+        self.assertNotIn("postprocess_netisim_config", source)
+        self.assertNotIn("sync_process_partition", source)
         self.assertNotIn("def write_netisim_router_xml", source)
         self.assertNotIn("def write_ns3_node_csv", source)
 
@@ -46,6 +114,7 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertEqual(params.l2_plane_num, 24)
         self.assertEqual(params.l2_switch_per_plane, 4)
         self.assertEqual(params.l1_to_each_l2_ports, 9)
+        self.assertEqual(params.host_to_each_l1_ports, 1)
         self.assertEqual(layout.host_num, 1368)
         self.assertEqual(layout.sw1825_base_id, 1368)
         self.assertEqual(layout.sw1650_base_id, 2052)
@@ -65,15 +134,17 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertEqual(ns3_ids.switch_groups["l2"], list(range(48, 56)))
         self.assertEqual(ns3_ids, netisim_ids)
         self.assertEqual(sorted(ns3_graph.edges()), sorted(netisim_graph.edges()))
-        self.assertEqual(sum(data["edge_count"] for _, _, data in ns3_graph.edges(data=True)), 128)
+        self.assertEqual(sum(data["edge_count"] for _, _, data in ns3_graph.edges(data=True)), 132)
 
         link_counts = {(u, v): data["edge_count"] for u, v, data in ns3_graph.edges(data=True)}
         self.assertEqual(link_counts[(0, 32)], 1)
         self.assertEqual(link_counts[(0, 16)], 1)
+        self.assertEqual(link_counts[(32, 33)], 1)
         self.assertEqual(link_counts[(0, 40)], 1)
         self.assertEqual(link_counts[(0, 43)], 1)
         self.assertEqual(link_counts[(40, 48)], 2)
         self.assertEqual(link_counts[(44, 48)], 2)
+        self.assertEqual(casegen.host_egress_count(SMALL_PARAMS), 6)
 
     def test_generates_ns3_and_netisim_cases_through_existing_builders(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -91,7 +162,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             self.assertTrue((ns3_dir / "topology.csv").exists())
             self.assertTrue((ns3_dir / "routing_table.csv").exists())
             self.assertTrue((ns3_dir / "traffic.csv").exists())
-            self.assertFalse((ns3_dir / "transport_channel.csv").exists())
+            self.assertTrue((ns3_dir / "transport_channel.csv").exists())
             self.assertFalse((ns3_dir / "network_attribute.txt").exists())
 
             with (ns3_dir / "node.csv").open(newline="", encoding="utf-8") as f:
@@ -102,7 +173,7 @@ class UnifiedPod1dTest(unittest.TestCase):
 
             with (ns3_dir / "topology.csv").open(newline="", encoding="utf-8") as f:
                 topology_rows = list(csv.DictReader(f))
-            self.assertEqual(len(topology_rows), 128)
+            self.assertEqual(len(topology_rows), 132)
             self.assertIn(
                 {
                     "nodeId1": "40",
@@ -117,36 +188,151 @@ class UnifiedPod1dTest(unittest.TestCase):
 
             xml_path = netisim_dir / "dcn2.0_config.xml"
             self.assertTrue(xml_path.exists())
-            self.assertFalse((netisim_dir / "rdma_operate.txt").exists())
+            self.assertTrue((netisim_dir / "rdma_operate.txt").exists())
             root = ET.parse(xml_path).getroot()
             node_groups = root.findall("./dcn_network/node/grp")
+            self.assertEqual(
+                [group.attrib["type"] for group in node_groups],
+                ["ft2_host", "ft2_node", "ft2_node", "ft2_node", "ft2_node"],
+            )
             self.assertEqual(
                 [group.attrib["node_id"] for group in node_groups],
                 ["0..15", "16..31", "32..39", "40..47", "48..55"],
             )
-
-            links = root.findall("./dcn_network/topology/grp")
-            self.assertEqual(len(links), 129)
-            self.assertEqual(links[0].attrib["dst_node"], "-1")
-            self.assertEqual(links[1].attrib["src_node"], "0")
-            self.assertEqual(links[1].attrib["src_port"], "1")
-
             partition_chips = root.findall(
-                "./dcn_network/mpi_multi_processing/process_partition/overlap_partition/chip"
+                "./dcn_network/mpi_multi_processing/process_partition/"
+                "overlap_partition/chip"
             )
             self.assertEqual(
                 [chip.attrib["dev_id"] for chip in partition_chips],
-                ["0..15", "16..31", "32..39", "40..47", "48..55"],
+                [group.attrib["node_id"] for group in node_groups],
             )
-            template_ids = [
-                template.attrib["id"]
-                for template in root.findall("./dcn_network/xml_template/template")
-            ]
-            self.assertEqual(template_ids, ["0", "1", "2", "3"])
+
+            links = root.findall("./dcn_network/topology/grp")
+            self.assertEqual(len(links), 133)
+            self.assertEqual(links[0].attrib["dst_node"], "-1")
+            self.assertEqual(links[1].attrib["src_node"], "0")
+            self.assertEqual(links[1].attrib["src_port"], "1")
+            self.assertEqual(links[3].attrib["src_node"], "0")
+            self.assertEqual(links[3].attrib["dst_node"], "40")
+            self.assertEqual(links[4].attrib["src_node"], "0")
+            self.assertEqual(links[4].attrib["dst_node"], "41")
 
             router = ET.parse(netisim_dir / "router.xml").getroot()
             self.assertEqual(router.tag, "router")
             self.assertGreater(len(router.findall("grp")), 0)
+            self.assertIsNotNone(router.find("./grp[@node_id='0']"))
+
+    def test_default_shortest_paths_generate_ecmp_routes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = casegen.generate_cases(
+                target="netisim",
+                output_root=Path(tmp),
+                route_workers=1,
+                params=ECMP_PARAMS,
+            )
+
+            router = ET.parse(result["netisim"] / "router.xml").getroot()
+            target = router.find("./grp[@node_id='0']/target[@node_id='1']")
+
+            self.assertIsNotNone(target)
+            self.assertEqual(target.attrib["port_id"].split(), ["1", "2"])
+            self.assertEqual(target.attrib["metric"].split(), ["2", "2"])
+
+    def test_pod1d_routes_stay_inside_node_when_hosts_are_on_different_1650s(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = casegen.generate_cases(
+                target="netisim",
+                output_root=Path(tmp),
+                route_workers=1,
+                params=SMALL_PARAMS,
+            )
+
+            router = ET.parse(result["netisim"] / "router.xml").getroot()
+            group = router.find("./grp[@node_id='0']")
+            self.assertIsNotNone(group)
+            target = _find_target_covering_node(group, 2)
+
+            self.assertIsNotNone(target)
+            self.assertEqual(target.attrib["port_id"].split(), ["1"])
+            self.assertEqual(target.attrib["metric"].split(), ["3"])
+
+    def test_pod1d_routes_use_l1_only_when_local_switches_cannot_reach_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = casegen.generate_cases(
+                target="netisim",
+                output_root=Path(tmp),
+                route_workers=1,
+                params=SMALL_PARAMS,
+            )
+
+            router = ET.parse(result["netisim"] / "router.xml").getroot()
+            group = router.find("./grp[@node_id='0']")
+            self.assertIsNotNone(group)
+            target = _find_target_covering_node(group, 4)
+
+            self.assertIsNotNone(target)
+            self.assertEqual(target.attrib["port_id"].split(), ["3", "4", "5", "6"])
+            self.assertEqual(target.attrib["metric"].split(), ["2"] * 4)
+
+    def test_netisim_router_xml_compresses_consecutive_targets_with_same_ports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph = casegen.netisim_graph.NetiSimGraph()
+            for host_id in range(4):
+                graph.add_netisim_host(host_id)
+            graph.add_netisim_node(4)
+            graph.output_dir = str(Path(tmp)) + "/"
+            total_node_num = graph.get_total_num()
+            graph.route_table_2port = [[set() for _ in range(total_node_num)] for _ in range(total_node_num)]
+            graph.route_table_2node = [[set() for _ in range(total_node_num)] for _ in range(total_node_num)]
+            graph.route_table_2port[4][0].add((0, 1))
+            for dst_id in range(1, 4):
+                graph.route_table_2port[4][dst_id].update((port_id, 2) for port_id in range(1, 9))
+
+            graph.write_route_table_to_xml(host_router=True)
+
+            router = ET.parse(Path(tmp) / "router.xml").getroot()
+            node = router.find("./grp[@node_id='4']")
+            self.assertIsNotNone(node)
+            targets = [(target.attrib["node_id"], target.attrib["port_id"]) for target in node.findall("target")]
+            self.assertIn(("0", "0"), targets)
+            self.assertIn(("1..3", "1 2 3 4 5 6 7 8"), targets)
+            self.assertIsNone(node.find("./target[@node_id='1']"))
+
+    def test_netisim_default_shortest_routing_does_not_enumerate_all_paths(self):
+        graph = _build_two_path_netisim_graph()
+
+        def exploding_all_paths(graph, src, dst):
+            raise AssertionError("default shortest routing should use next-hop distances")
+
+        exploding_all_paths.__name__ = "all_shortest_paths"
+        graph.gen_route_table(
+            write_file=False,
+            host_router=True,
+            path_finding_algo=exploding_all_paths,
+            multiple_workers=1,
+        )
+
+        self.assertGreaterEqual(len(graph.route_table_2port[0][1]), 2)
+
+    def test_single_worker_route_generation_streams_paths_into_route_tables(self):
+        ns3_graph = _build_two_path_ns3_graph()
+        ns3_graph.gen_route_table(
+            write_file=False,
+            host_router=True,
+            path_finding_algo=_assert_first_path_is_written_before_second_path,
+            multiple_workers=1,
+        )
+        self.assertGreaterEqual(len(ns3_graph.route_table_2port[0][1]), 2)
+
+        netisim_graph = _build_two_path_netisim_graph()
+        netisim_graph.gen_route_table(
+            write_file=False,
+            host_router=True,
+            path_finding_algo=_assert_first_path_is_written_before_second_path,
+            multiple_workers=1,
+        )
+        self.assertGreaterEqual(len(netisim_graph.route_table_2port[0][1]), 2)
 
     def test_regeneration_removes_stale_files_from_previous_writer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -167,8 +353,8 @@ class UnifiedPod1dTest(unittest.TestCase):
             )
 
             self.assertFalse((ns3_dir / "network_attribute.txt").exists())
-            self.assertFalse((ns3_dir / "transport_channel.csv").exists())
-            self.assertFalse((netisim_dir / "rdma_operate.txt").exists())
+            self.assertNotEqual((ns3_dir / "transport_channel.csv").read_text(encoding="utf-8"), "old\n")
+            self.assertNotEqual((netisim_dir / "rdma_operate.txt").read_text(encoding="utf-8"), "old\n")
 
 
 if __name__ == "__main__":

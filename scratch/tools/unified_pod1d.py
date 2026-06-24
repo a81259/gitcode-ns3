@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate matching ns-3 and NetiSim cases by reusing both original builders."""
+"""Generate pod1d cases for ns-3 and NetiSim with the original platform builders."""
 
 from __future__ import annotations
 
@@ -7,13 +7,8 @@ import argparse
 import csv
 import os
 import sys
-from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-
-import networkx as nx
-from lxml import etree
-
 
 TOOLS_DIR = Path(__file__).resolve().parent
 NETISIM_TOOLS_DIR = TOOLS_DIR / "netisim_files" / "tools"
@@ -29,9 +24,18 @@ import net_sim_builder as netsim
 
 FORWARD_DELAY = "1ns"
 LINK_DELAY = "20ns"
+NS3_NODE_LINK_BW = "400Gbps"
+NS3_L1_LINK_BW = "112Gbps"
+NS3_L2_LINK_BW = "224Gbps"
+NETISIM_NODE_LINK_BW = "400"
+NETISIM_L1_LINK_BW = "112"
+NETISIM_L2_LINK_BW = "224"
+NETISIM_LINK_DELAY = "20"
+NETISIM_NODE_GEN_BW = "400"
 TRAFFIC_BYTES_PER_TASK = 8 * 1024 * 1024
 TRAFFIC_PRIORITY = 7
 TRAFFIC_DELAY = "10ns"
+ROUTE_PRIORITIES = [7, 8]
 DEFAULT_OUTPUT_ROOT = TOOLS_DIR / "generated_cases" / "pod1d"
 DEFAULT_NETISIM_TEMPLATE = TOOLS_DIR / "netisim_files" / "case01" / "dcn2.0_config.xml"
 
@@ -47,19 +51,7 @@ class TopologyParams:
     l2_plane_num: int = 24
     l2_switch_per_plane: int = 4
     l1_to_each_l2_ports: int = 9
-
-
-@dataclass(frozen=True)
-class TopologyIds:
-    host_ids: list[int]
-    switch_groups: dict[str, list[int]]
-
-    @property
-    def switch_ids(self) -> list[int]:
-        ids: list[int] = []
-        for group_ids in self.switch_groups.values():
-            ids.extend(group_ids)
-        return ids
+    host_to_each_l1_ports: int = 1
 
 
 @dataclass(frozen=True)
@@ -77,85 +69,10 @@ class IdLayout:
     sw1825_port_num: int
 
 
-def build_ns3_graph(params: TopologyParams = TopologyParams()):
-    graph = netsim.NetworkSimulationGraph()
-    ids = populate_topology(graph, "ns3", params)
-    return graph, ids
-
-
-def build_netisim_graph(params: TopologyParams = TopologyParams()):
-    graph = netisim_graph.NetiSimGraph()
-    ids = populate_topology(graph, "netisim", params)
-    return graph, ids
-
-
-def populate_topology(graph, target: str, params: TopologyParams) -> TopologyIds:
-    layout = build_id_layout(params)
-
-    host_ids = list(range(layout.host_num))
-    switch_groups = {
-        "sw1825": list(range(layout.sw1825_base_id, layout.sw1825_base_id + layout.sw1825_num)),
-        "sw1650": list(range(layout.sw1650_base_id, layout.sw1650_base_id + layout.sw1650_num)),
-        "l1": list(range(layout.l1_base_id, layout.l1_base_id + layout.l1_switch_num)),
-        "l2": list(range(layout.l2_base_id, layout.l2_base_id + layout.l2_switch_num)),
-    }
-
-    for host_id in host_ids:
-        add_host(graph, target, host_id)
-
-    for switch_id in switch_groups["sw1825"] + switch_groups["sw1650"] + switch_groups["l1"] + switch_groups["l2"]:
-        add_switch(graph, target, switch_id)
-
-    for pod_id in range(params.pod_num):
-        for node_id in range(params.node_per_pod):
-            for npu_id_in_node in range(params.npu_per_node):
-                host_id = npu_id(params, pod_id, node_id, npu_id_in_node)
-                add_edge(
-                    graph,
-                    target,
-                    host_id,
-                    sw1650_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1650_port_num),
-                    ns3_bandwidth="400Gbps",
-                    netisim_bandwidth="400",
-                )
-                add_edge(
-                    graph,
-                    target,
-                    host_id,
-                    sw1825_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1825_port_num),
-                    ns3_bandwidth="400Gbps",
-                    netisim_bandwidth="400",
-                )
-
-    for pod_id in range(params.pod_num):
-        for node_id in range(params.node_per_pod):
-            for npu_id_in_node in range(params.npu_per_node):
-                host_id = npu_id(params, pod_id, node_id, npu_id_in_node)
-                for plane_id in range(params.l1_switch_per_pod):
-                    add_edge(
-                        graph,
-                        target,
-                        host_id,
-                        l1_switch_id(params, layout, pod_id, plane_id),
-                        ns3_bandwidth="112Gbps",
-                        netisim_bandwidth="112",
-                    )
-
-    for pod_id in range(params.pod_num):
-        for plane_id in range(params.l2_plane_num):
-            l1_id = l1_switch_id(params, layout, pod_id, plane_id)
-            for switch_id_in_plane in range(params.l2_switch_per_plane):
-                add_edge(
-                    graph,
-                    target,
-                    l1_id,
-                    l2_switch_id(params, layout, plane_id, switch_id_in_plane),
-                    ns3_bandwidth="224Gbps",
-                    netisim_bandwidth="224",
-                    edge_count=params.l1_to_each_l2_ports,
-                )
-
-    return TopologyIds(host_ids, switch_groups)
+@dataclass(frozen=True)
+class TopologyIds:
+    host_ids: list[int]
+    switch_groups: dict[str, list[int]]
 
 
 def build_id_layout(params: TopologyParams) -> IdLayout:
@@ -191,6 +108,10 @@ def build_id_layout(params: TopologyParams) -> IdLayout:
     )
 
 
+def host_egress_count(params: TopologyParams) -> int:
+    return 2 + params.l1_switch_per_pod * params.host_to_each_l1_ports
+
+
 def npu_id(params: TopologyParams, pod_id: int, node_id: int, npu_id_in_node: int) -> int:
     return (pod_id * params.node_per_pod + node_id) * params.npu_per_node + npu_id_in_node
 
@@ -223,55 +144,203 @@ def l1_switch_id(params: TopologyParams, layout: IdLayout, pod_id: int, plane_id
     return layout.l1_base_id + pod_id * params.l1_switch_per_pod + plane_id
 
 
-def l2_switch_id(
-    params: TopologyParams,
-    layout: IdLayout,
-    plane_id: int,
-    switch_id_in_plane: int,
-) -> int:
+def l2_switch_id(params: TopologyParams, layout: IdLayout, plane_id: int, switch_id_in_plane: int) -> int:
     return layout.l2_base_id + plane_id * params.l2_switch_per_plane + switch_id_in_plane
 
 
-def add_host(graph, target: str, host_id: int) -> None:
-    if target == "ns3":
+def build_ns3_graph(params: TopologyParams = TopologyParams()):
+    graph = netsim.NetworkSimulationGraph()
+    ids = populate_topology(graph, "ns3", params)
+    return graph, ids
+
+
+def build_netisim_graph(params: TopologyParams = TopologyParams()):
+    graph = netisim_graph.NetiSimGraph()
+    ids = populate_topology(graph, "netisim", params)
+    return graph, ids
+
+
+def populate_topology(graph, platform: str, params: TopologyParams) -> TopologyIds:
+    layout = build_id_layout(params)
+    host_ids = list(range(layout.host_num))
+    switch_groups = {
+        "sw1825": list(range(layout.sw1825_base_id, layout.sw1825_base_id + layout.sw1825_num)),
+        "sw1650": list(range(layout.sw1650_base_id, layout.sw1650_base_id + layout.sw1650_num)),
+        "l1": list(range(layout.l1_base_id, layout.l1_base_id + layout.l1_switch_num)),
+        "l2": list(range(layout.l2_base_id, layout.l2_base_id + layout.l2_switch_num)),
+    }
+
+    for host_id in host_ids:
+        add_host(graph, platform, host_id)
+
+    for group_name in ("sw1825", "sw1650", "l1", "l2"):
+        for switch_id in switch_groups[group_name]:
+            add_switch(graph, platform, switch_id)
+
+    for pod_id in range(params.pod_num):
+        for node_id in range(params.node_per_pod):
+            for npu_id_in_node in range(params.npu_per_node):
+                host_id = npu_id(params, pod_id, node_id, npu_id_in_node)
+                add_edge(
+                    graph,
+                    platform,
+                    host_id,
+                    sw1650_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1650_port_num),
+                    ns3_bandwidth=NS3_NODE_LINK_BW,
+                    netisim_bandwidth=NETISIM_NODE_LINK_BW,
+                    route_weight=1,
+                )
+                add_edge(
+                    graph,
+                    platform,
+                    host_id,
+                    sw1825_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1825_port_num),
+                    ns3_bandwidth=NS3_NODE_LINK_BW,
+                    netisim_bandwidth=NETISIM_NODE_LINK_BW,
+                    route_weight=1,
+                )
+
+    for pod_id in range(params.pod_num):
+        for node_id in range(params.node_per_pod):
+            for left_sw1650_id_in_node in range(params.sw1650_per_node):
+                for right_sw1650_id_in_node in range(left_sw1650_id_in_node + 1, params.sw1650_per_node):
+                    add_edge(
+                        graph,
+                        platform,
+                        sw1650_id(params, layout, pod_id, node_id, left_sw1650_id_in_node),
+                        sw1650_id(params, layout, pod_id, node_id, right_sw1650_id_in_node),
+                        ns3_bandwidth=NS3_NODE_LINK_BW,
+                        netisim_bandwidth=NETISIM_NODE_LINK_BW,
+                        route_weight=1,
+                    )
+
+    for pod_id in range(params.pod_num):
+        for node_id in range(params.node_per_pod):
+            for npu_id_in_node in range(params.npu_per_node):
+                host_id = npu_id(params, pod_id, node_id, npu_id_in_node)
+                for plane_id in range(params.l1_switch_per_pod):
+                    add_edge(
+                        graph,
+                        platform,
+                        host_id,
+                        l1_switch_id(params, layout, pod_id, plane_id),
+                        ns3_bandwidth=NS3_L1_LINK_BW,
+                        netisim_bandwidth=NETISIM_L1_LINK_BW,
+                        edge_count=params.host_to_each_l1_ports,
+                        route_weight=10,
+                    )
+
+    for pod_id in range(params.pod_num):
+        for plane_id in range(params.l2_plane_num):
+            l1_id = l1_switch_id(params, layout, pod_id, plane_id)
+            for switch_id_in_plane in range(params.l2_switch_per_plane):
+                add_edge(
+                    graph,
+                    platform,
+                    l1_id,
+                    l2_switch_id(params, layout, plane_id, switch_id_in_plane),
+                    ns3_bandwidth=NS3_L2_LINK_BW,
+                    netisim_bandwidth=NETISIM_L2_LINK_BW,
+                    edge_count=params.l1_to_each_l2_ports,
+                    route_weight=1,
+                )
+
+    return TopologyIds(host_ids=host_ids, switch_groups=switch_groups)
+
+
+def add_host(graph, platform: str, host_id: int) -> None:
+    if platform == "ns3":
         graph.add_netisim_host(host_id, forward_delay=FORWARD_DELAY)
-    elif target == "netisim":
+    elif platform == "netisim":
         graph.add_netisim_host(host_id)
     else:
-        raise ValueError(f"unsupported target: {target}")
+        raise ValueError(f"unsupported platform: {platform}")
 
 
-def add_switch(graph, target: str, switch_id: int) -> None:
-    if target == "ns3":
+def add_switch(graph, platform: str, switch_id: int) -> None:
+    if platform == "ns3":
         graph.add_netisim_node(switch_id, forward_delay=FORWARD_DELAY)
-    elif target == "netisim":
+    elif platform == "netisim":
         graph.add_netisim_node(switch_id, comp_delay=1300)
     else:
-        raise ValueError(f"unsupported target: {target}")
+        raise ValueError(f"unsupported platform: {platform}")
 
 
 def add_edge(
     graph,
-    target: str,
+    platform: str,
     src: int,
     dst: int,
     ns3_bandwidth: str,
     netisim_bandwidth: str,
     edge_count: int = 1,
+    route_weight: int = 1,
 ) -> None:
-    if target == "ns3":
-        graph.add_netisim_edge(src, dst, bandwidth=ns3_bandwidth, delay=LINK_DELAY, edge_count=edge_count)
-    elif target == "netisim":
-        graph.add_netisim_edge(src, dst, bandwidth=netisim_bandwidth, delay="20", edge_count=edge_count)
+    if platform == "ns3":
+        graph.add_netisim_edge(
+            src,
+            dst,
+            bandwidth=ns3_bandwidth,
+            delay=LINK_DELAY,
+            edge_count=edge_count,
+            route_weight=route_weight,
+        )
+    elif platform == "netisim":
+        graph.add_netisim_edge(
+            src,
+            dst,
+            bandwidth=netisim_bandwidth,
+            delay=NETISIM_LINK_DELAY,
+            edge_count=edge_count,
+            route_weight=route_weight,
+        )
     else:
-        raise ValueError(f"unsupported target: {target}")
+        raise ValueError(f"unsupported platform: {platform}")
 
 
-def single_shortest_path(graph, source: int, target: int):
-    try:
-        return [nx.shortest_path(graph, source, target)]
-    except nx.NetworkXNoPath:
-        return []
+def write_ns3_case(output_dir: Path, params: TopologyParams, route_workers: int) -> None:
+    clean_outputs(output_dir, [
+        "node.csv",
+        "topology.csv",
+        "routing_table.csv",
+        "transport_channel.csv",
+        "traffic.csv",
+        "network_attribute.txt",
+    ])
+
+    graph, ids = build_ns3_graph(params)
+    graph.output_dir = os.fspath(output_dir)
+    graph.build_graph_config()
+    graph.gen_route_table(
+        host_router=host_egress_count(params) > 1,
+        multiple_workers=route_workers,
+    )
+    graph.config_transport_channel(priority_list=ROUTE_PRIORITIES)
+    graph.write_config()
+    write_traffic_csv(output_dir, ids)
+    clean_outputs(output_dir, ["network_attribute.txt"])
+
+
+def write_netisim_case(
+    output_dir: Path,
+    params: TopologyParams,
+    template_path: Path,
+    route_workers: int,
+) -> None:
+    clean_outputs(output_dir, ["dcn2.0_config.xml", "router.xml", "rdma_operate.txt"])
+
+    graph, ids = build_netisim_graph(params)
+    graph.output_dir = output_dir_with_sep(output_dir)
+    graph.build_graph_config(
+        os.fspath(template_path),
+        node_gen_bandwidth=NETISIM_NODE_GEN_BW,
+        output_name="dcn2.0_config.xml",
+    )
+    graph.gen_route_table(
+        host_router=host_egress_count(params) > 1,
+        multiple_workers=route_workers,
+    )
+    write_rdma_operate_txt(output_dir, ids)
 
 
 def write_traffic_csv(output_dir: Path, ids: TopologyIds, bytes_per_task: int = TRAFFIC_BYTES_PER_TASK) -> None:
@@ -305,55 +374,23 @@ def write_traffic_csv(output_dir: Path, ids: TopologyIds, bytes_per_task: int = 
             ])
 
 
-def case_dirs(output_root: Path) -> dict[str, Path]:
-    return {
-        "ns3": output_root / "ns3",
-        "netisim": output_root / "netisim",
-    }
+def write_rdma_operate_txt(output_dir: Path, ids: TopologyIds, bytes_per_task: int = TRAFFIC_BYTES_PER_TASK) -> None:
+    rdma_path = output_dir / "rdma_operate.txt"
+    half_host_num = len(ids.host_ids) // 2
+
+    with rdma_path.open("w", encoding="utf-8") as f:
+        f.write("stat rdma operate:\n")
+        f.write("phase\n")
+        for source in range(half_host_num):
+            f.write(
+                "Type:rdma_send, "
+                f"src_node:{source}, src_port:0, "
+                f"dst_node:{source + half_host_num}, dst_port:0, "
+                f"priority:{TRAFFIC_PRIORITY}, msg_len:{bytes_per_task}\n"
+            )
 
 
-def write_ns3_case(output_dir: Path, params: TopologyParams, route_workers: int) -> None:
-    clean_known_outputs(
-        output_dir,
-        [
-            "node.csv",
-            "topology.csv",
-            "routing_table.csv",
-            "traffic.csv",
-            "transport_channel.csv",
-            "network_attribute.txt",
-        ],
-    )
-    graph, ids = build_ns3_graph(params)
-    graph.output_dir = os.fspath(output_dir)
-    graph.build_graph_config()
-    graph.gen_route_table(path_finding_algo=single_shortest_path, multiple_workers=route_workers)
-    graph._write_node_csv(os.path.join(graph.output_dir, "node.csv"))
-    graph._write_topology_csv(os.path.join(graph.output_dir, "topology.csv"))
-    write_traffic_csv(output_dir, ids)
-    clean_known_outputs(output_dir, ["transport_channel.csv", "network_attribute.txt"])
-
-
-def write_netisim_case(
-    output_dir: Path,
-    params: TopologyParams,
-    template_path: Path,
-    route_workers: int,
-) -> None:
-    clean_known_outputs(output_dir, ["dcn2.0_config.xml", "router.xml", "rdma_operate.txt"])
-    graph, ids = build_netisim_graph(params)
-    graph.output_dir = output_dir_with_sep(output_dir)
-    graph.build_graph_config(os.fspath(template_path), node_gen_bandwidth="400", output_name="dcn2.0_config.xml")
-    postprocess_netisim_config(output_dir / "dcn2.0_config.xml", ids)
-    graph.gen_route_table(path_finding_algo=single_shortest_path, host_router=False, multiple_workers=route_workers)
-
-
-def output_dir_with_sep(output_dir: Path) -> str:
-    path = os.fspath(output_dir)
-    return path if path.endswith(os.sep) else path + os.sep
-
-
-def clean_known_outputs(output_dir: Path, file_names: list[str]) -> None:
+def clean_outputs(output_dir: Path, file_names: list[str]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for file_name in file_names:
         path = output_dir / file_name
@@ -361,110 +398,16 @@ def clean_known_outputs(output_dir: Path, file_names: list[str]) -> None:
             path.unlink()
 
 
-def postprocess_netisim_config(path: Path, ids: TopologyIds) -> None:
-    root = etree.parse(os.fspath(path)).getroot()
-    compact_node_groups(root)
-    sync_process_partition(root, ids)
-    sync_xml_template(root)
-    sync_ft_node_config(root, ids)
-    etree.indent(root, space="    ")
-    path.write_text(etree.tostring(root, pretty_print=True).decode(), encoding="utf-8")
+def output_dir_with_sep(output_dir: Path) -> str:
+    path = os.fspath(output_dir)
+    return path if path.endswith(os.sep) else path + os.sep
 
 
-def compact_node_groups(root) -> None:
-    for group in root.xpath("/dcn/dcn_network/node/grp[@node_id]"):
-        group.set("node_id", compact_ranges(parse_id_expression(group.get("node_id"))))
-
-
-def sync_process_partition(root, ids: TopologyIds) -> None:
-    mpi_nodes = root.xpath("/dcn/dcn_network/mpi_multi_processing")
-    if not mpi_nodes:
-        return
-
-    process_partition = etree.Element("process_partition")
-    overlap_partition = etree.SubElement(process_partition, "overlap_partition", partition_num="1")
-    for group_ids in node_layer_groups(ids):
-        etree.SubElement(overlap_partition, "chip", dev_id=compact_ranges(group_ids))
-
-    old_partition = mpi_nodes[0].xpath("./process_partition")
-    if old_partition:
-        old_partition[0].getparent().replace(old_partition[0], process_partition)
-    else:
-        mpi_nodes[0].append(process_partition)
-
-
-def sync_xml_template(root) -> None:
-    network_nodes = root.xpath("/dcn/dcn_network")
-    if not network_nodes:
-        return
-    network = network_nodes[0]
-    old_xml_template = network.xpath("./xml_template")
-    base_template = old_xml_template[0].xpath("./template")[0] if old_xml_template and old_xml_template[0].xpath("./template") else None
-    template_count = len(root.xpath("/dcn/dcn_network/node/grp[contains(@type, 'node')]"))
-
-    xml_template = etree.Element("xml_template")
-    for template_id in range(template_count):
-        template = deepcopy(base_template) if base_template is not None else etree.Element("template")
-        template.set("id", str(template_id))
-        if len(template) == 0:
-            etree.SubElement(template, "index", config_file="")
-            etree.SubElement(template, "index", config_file="")
-        for index in template.xpath("./index"):
-            if "config_file" not in index.attrib:
-                index.set("config_file", "")
-        xml_template.append(template)
-
-    if old_xml_template:
-        old_xml_template[0].getparent().replace(old_xml_template[0], xml_template)
-    else:
-        network.append(xml_template)
-
-
-def sync_ft_node_config(root, ids: TopologyIds) -> None:
-    node_configs = root.xpath("/dcn/dcn_common_node_config/ft_node/node_config")
-    if not node_configs:
-        return
-    node_config = node_configs[0]
-    node_config.set("tier", "4")
-    node_config.set("host_num", str(len(ids.host_ids)))
-    node_config.set("leaf_num", str(len(ids.switch_groups["sw1650"]) + len(ids.switch_groups["sw1825"])))
-    node_config.set("spine_num", str(len(ids.switch_groups["l1"])))
-    node_config.set("core_num", str(len(ids.switch_groups["l2"])))
-    node_config.set("top_num", "0")
-
-
-def node_layer_groups(ids: TopologyIds) -> list[list[int]]:
-    return [
-        ids.host_ids,
-        ids.switch_groups["sw1825"],
-        ids.switch_groups["sw1650"],
-        ids.switch_groups["l1"],
-        ids.switch_groups["l2"],
-    ]
-
-
-def parse_id_expression(expression: str) -> list[int]:
-    ids: list[int] = []
-    for token in expression.split():
-        if ".." in token:
-            start, end = token.split("..", 1)
-            ids.extend(range(int(start), int(end) + 1))
-        else:
-            ids.append(int(token))
-    return ids
-
-
-def compact_ranges(ids: list[int]) -> str:
-    ranges: list[str] = []
-    start = previous = ids[0]
-    for value in ids[1:] + [None]:
-        if value is None or value != previous + 1:
-            ranges.append(str(start) if start == previous else f"{start}..{previous}")
-            if value is not None:
-                start = value
-        if value is not None:
-            previous = value
-    return " ".join(ranges)
+def case_dirs(output_root: Path) -> dict[str, Path]:
+    return {
+        "ns3": output_root / "ns3",
+        "netisim": output_root / "netisim",
+    }
 
 
 def generate_cases(
@@ -477,9 +420,7 @@ def generate_cases(
     if target not in {"ns3", "netisim", "both"}:
         raise ValueError("target must be one of: ns3, netisim, both")
 
-    root = Path(output_root)
-    template = Path(template_path)
-    dirs = case_dirs(root)
+    dirs = case_dirs(Path(output_root))
     generated: dict[str, Path] = {}
 
     if target in {"ns3", "both"}:
@@ -487,7 +428,7 @@ def generate_cases(
         generated["ns3"] = dirs["ns3"]
 
     if target in {"netisim", "both"}:
-        write_netisim_case(dirs["netisim"], params, template, route_workers)
+        write_netisim_case(dirs["netisim"], params, Path(template_path), route_workers)
         generated["netisim"] = dirs["netisim"]
 
     return generated
