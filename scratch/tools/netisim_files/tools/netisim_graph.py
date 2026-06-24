@@ -2,6 +2,7 @@ import networkx as nx
 from lxml import etree
 import argparse
 from copy import deepcopy
+from collections import deque
 import heapq
 import time
 import os
@@ -52,6 +53,73 @@ def _sync_overlap_partition_chips(root_config, node_ele):
         overlap_partition.remove(chip_ele)
     for node_group in node_ele.xpath('./grp'):
         etree.SubElement(overlap_partition, "chip", dev_id=node_group.get("node_id"))
+
+
+def _sync_xml_templates(root_config, node_ele):
+    xml_templates = root_config.xpath('/dcn/dcn_network/xml_template')
+    if not xml_templates:
+        return
+
+    template_ids = sorted(
+        {
+            int(node_group.get("config_template"))
+            for node_group in node_ele.xpath('./grp')
+            if node_group.get("type") == NETISIM_MOD + "node"
+        }
+    )
+    if not template_ids:
+        return
+
+    xml_template = xml_templates[0]
+    old_templates = xml_template.xpath('./template')
+    template_seed = deepcopy(old_templates[0]) if old_templates else etree.Element("template")
+    if not template_seed.xpath('./index'):
+        etree.SubElement(template_seed, "index", config_file="")
+        etree.SubElement(template_seed, "index", config_file="")
+
+    for template_ele in old_templates:
+        xml_template.remove(template_ele)
+    for template_id in template_ids:
+        template_ele = deepcopy(template_seed)
+        template_ele.set("id", str(template_id))
+        xml_template.append(template_ele)
+
+
+def _sync_ft_node_counts(root_config, graph):
+    node_configs = root_config.xpath('/dcn/dcn_common_node_config/ft_node/node_config')
+    if not node_configs:
+        return
+
+    distances = {host_id: 0 for host_id in graph.host_ids}
+    queue = deque(graph.host_ids)
+    while queue:
+        node_id = queue.popleft()
+        for neighbor in graph.neighbors(node_id):
+            if neighbor in distances:
+                continue
+            distances[neighbor] = distances[node_id] + 1
+            queue.append(neighbor)
+    layer_counts = {
+        "host_num": len(graph.host_ids),
+        "leaf_num": 0,
+        "spine_num": 0,
+        "core_num": 0,
+        "top_num": 0,
+    }
+    for node_id in graph.node_ids:
+        distance = distances.get(node_id)
+        if distance == 1:
+            layer_counts["leaf_num"] += 1
+        elif distance == 2:
+            layer_counts["spine_num"] += 1
+        elif distance == 3:
+            layer_counts["core_num"] += 1
+        elif distance is not None and distance >= 4:
+            layer_counts["top_num"] += 1
+
+    node_config = node_configs[0]
+    for key, value in layer_counts.items():
+        node_config.set(key, str(value))
 
         
 def _process_path_chunk(graph, path_finding_algo, node_pairs):
@@ -194,6 +262,7 @@ class NetiSimGraph(nx.Graph):
                 t_template_node += 1
         old_node_ele.getparent().replace(old_node_ele, new_node_ele)
         _sync_overlap_partition_chips(root_config, new_node_ele)
+        _sync_xml_templates(root_config, new_node_ele)
 
         old_topo_ele = root_config.xpath('/dcn/dcn_network/topology')[0]
         new_topo_ele = etree.Element("topology")
@@ -261,6 +330,7 @@ class NetiSimGraph(nx.Graph):
         # ft_ele = root_config.xpath('/dcn/dcn_common_node_config/ft_node/node_config')[0]
         # ft_ele.set("host_num", str(list(self.host_ids)))
         # ft_ele.set("leaf_num", str(list(self.node_ids)))
+        _sync_ft_node_counts(root_config, self)
 
         etree.indent(root_config, space="    ")
         # print(etree.tostring(root_config, pretty_print=True).decode(), end="")
@@ -535,13 +605,12 @@ class NetiSimGraph(nx.Graph):
                 return str(dst_ids[0])
             return f"{dst_ids[0]}..{dst_ids[-1]}"
 
-        def add_target(route_grp_ele, dst_ids, ports, metrics):
+        def add_target(route_grp_ele, dst_ids, ports):
             etree.SubElement(
                 route_grp_ele,
                 "target",
                 node_id=format_range(dst_ids),
                 port_id=ports,
-                metric=metrics,
             )
 
         for node_id in tqdm(self.nodes, desc="写入路由表"):
@@ -557,22 +626,21 @@ class NetiSimGraph(nx.Graph):
                 next_ports_metric_sets = sorted(route_table[node_id][dst_id])
                 if len(next_ports_metric_sets) == 0:
                     if current_dst_ids:
-                        add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
+                        add_target(route_grp_ele, current_dst_ids, current_signature)
                         current_dst_ids = []
                         current_signature = None
                     continue
-                ports = " ".join(str(p_m[0]) for p_m in next_ports_metric_sets)
-                metrics = " ".join(str(p_m[1]) for p_m in next_ports_metric_sets)
-                signature = (ports, metrics)
+                ports = " ".join(str(port_id) for port_id in sorted({p_m[0] for p_m in next_ports_metric_sets}))
+                signature = ports
                 if current_dst_ids and signature == current_signature and dst_id == current_dst_ids[-1] + 1:
                     current_dst_ids.append(dst_id)
                 else:
                     if current_dst_ids:
-                        add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
+                        add_target(route_grp_ele, current_dst_ids, current_signature)
                     current_dst_ids = [dst_id]
                     current_signature = signature
             if current_dst_ids:
-                add_target(route_grp_ele, current_dst_ids, current_signature[0], current_signature[1])
+                add_target(route_grp_ele, current_dst_ids, current_signature)
 
         self.route_ele_xml = route_ele
 

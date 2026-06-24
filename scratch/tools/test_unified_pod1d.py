@@ -207,6 +207,23 @@ class UnifiedPod1dTest(unittest.TestCase):
                 [chip.attrib["dev_id"] for chip in partition_chips],
                 [group.attrib["node_id"] for group in node_groups],
             )
+            node_template_ids = [
+                group.attrib["config_template"]
+                for group in node_groups
+                if group.attrib["type"] == "ft2_node"
+            ]
+            xml_template_ids = [
+                template.attrib["id"]
+                for template in root.findall("./dcn_network/xml_template/template")
+            ]
+            self.assertEqual(xml_template_ids, node_template_ids)
+            ft_node_config = root.find("./dcn_common_node_config/ft_node/node_config")
+            self.assertIsNotNone(ft_node_config)
+            self.assertEqual(ft_node_config.attrib["host_num"], "16")
+            self.assertEqual(ft_node_config.attrib["leaf_num"], "32")
+            self.assertEqual(ft_node_config.attrib["spine_num"], "8")
+            self.assertEqual(ft_node_config.attrib["core_num"], "0")
+            self.assertEqual(ft_node_config.attrib["top_num"], "0")
 
             links = root.findall("./dcn_network/topology/grp")
             self.assertEqual(len(links), 133)
@@ -237,7 +254,7 @@ class UnifiedPod1dTest(unittest.TestCase):
 
             self.assertIsNotNone(target)
             self.assertEqual(target.attrib["port_id"].split(), ["1", "2"])
-            self.assertEqual(target.attrib["metric"].split(), ["2", "2"])
+            self.assertNotIn("metric", target.attrib)
 
     def test_pod1d_routes_stay_inside_node_when_hosts_are_on_different_1650s(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -255,7 +272,7 @@ class UnifiedPod1dTest(unittest.TestCase):
 
             self.assertIsNotNone(target)
             self.assertEqual(target.attrib["port_id"].split(), ["1"])
-            self.assertEqual(target.attrib["metric"].split(), ["3"])
+            self.assertNotIn("metric", target.attrib)
 
     def test_pod1d_routes_use_l1_only_when_local_switches_cannot_reach_destination(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -273,7 +290,7 @@ class UnifiedPod1dTest(unittest.TestCase):
 
             self.assertIsNotNone(target)
             self.assertEqual(target.attrib["port_id"].split(), ["3", "4", "5", "6"])
-            self.assertEqual(target.attrib["metric"].split(), ["2"] * 4)
+            self.assertNotIn("metric", target.attrib)
 
     def test_netisim_router_xml_compresses_consecutive_targets_with_same_ports(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -297,6 +314,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             targets = [(target.attrib["node_id"], target.attrib["port_id"]) for target in node.findall("target")]
             self.assertIn(("0", "0"), targets)
             self.assertIn(("1..3", "1 2 3 4 5 6 7 8"), targets)
+            self.assertFalse(any("metric" in target.attrib for target in node.findall("target")))
             self.assertIsNone(node.find("./target[@node_id='1']"))
 
     def test_netisim_default_shortest_routing_does_not_enumerate_all_paths(self):

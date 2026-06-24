@@ -9,7 +9,7 @@
         <cli use_tcl="false" rdma_log_en="true" rdma_log_num="1"/>
     </sim>
     <dcn_network usr_topo="1">
-		<top_mod pfc_en="0" credit_log_en="false" is_flow_chip_stat="1" latency_thld="8000" is_flow_stat="1" gen_drop_byte_thld="1000000000" is_byte_stat="0" fifo_depth="32000"/>
+		<top_mod pfc_en="0" host_multy_port_en="false" credit_log_en="false" is_flow_chip_stat="1" latency_thld="8000" is_flow_stat="1" gen_drop_byte_thld="1000000000" is_byte_stat="0" fifo_depth="32000"/>
         <multi_node_gen_cfg enable="false" num_per_part="1" multi_process_bypass="false"/>
     <mpi_multi_processing enable="true" syn_clk_ratio="1.0" partition_method="hybrid_uniform" >
      <process_partition>
@@ -82,7 +82,7 @@
             <grp link_type="bi_direct" src_node="46..46" src_port="8..13" bandwidth="100" delay="10" dst_node="48..53" dst_port="14..14"/>
             <grp link_type="bi_direct" src_node="47..47" src_port="8..13" bandwidth="100" delay="10" dst_node="48..53" dst_port="15..15"/>
         </topology>
-		<router file="router.xml" />
+		<ft2_router file="router.xml" />
     </dcn_network>
     <dcn_common_node_config>
         <common_node>
@@ -172,11 +172,11 @@
             </template>
         </common_host>
         <ft_node>
-			<node_config tier="4" host_num="16" leaf_num="16" spine_num="16" core_num="6" top_num="0" mode="1" hash_sel="92" spine_hash="92" core_hash="92" top_hash="1" hash_tuple="4"/>
+			<node_config tier="4" router_mode="4" direct_topo="true" host_num="0" leaf_num="0" spine_num="0" core_num="0" top_num="0" mode="1" hash_sel="92" spine_hash="92" core_hash="92" top_hash="1" hash_tuple="4"/>
             <ncc enable="false"/>
         </ft_node>
         <ft_host>
-			<credit_fc enable="true" is_share_model="true" node_port_cell_txfree="4160" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32"/>
+			<credit_fc enable="true" router_mode="4" direct_topo="true" is_share_model="true" node_port_cell_txfree="4160" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32"/>
         </ft_host>
     </dcn_common_node_config>
     <packet_generator_config>
