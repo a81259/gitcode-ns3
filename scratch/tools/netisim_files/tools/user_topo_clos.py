@@ -1,13 +1,6 @@
-import os
-import utils.netisim_graph as netisim_graph
-import networkx as nx
 
-def all_simple_paths(G, source, target):
-    try:
-        paths = nx.all_simple_paths(G, source, target, cutoff=6)
-    except nx.exception.NetworkXNoPath:
-        paths = []
-    return paths
+import netisim_graph
+
 
 if __name__ == '__main__':
     graph = netisim_graph.NetiSimGraph()
@@ -65,4 +58,4 @@ if __name__ == '__main__':
 
 
 
-    graph.gen_route_table(path_finding_algo=all_simple_paths, host_router=False, multiple_workers=8)
+    graph.gen_route_table(host_router=False, multiple_workers=8)

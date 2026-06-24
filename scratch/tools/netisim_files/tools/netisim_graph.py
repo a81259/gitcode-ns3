@@ -6,7 +6,10 @@ import time
 import os
 import numpy as np
 from tqdm import tqdm, trange
-import utils.netisim_utils as netisim_utils
+try:
+    import utils.netisim_utils as netisim_utils
+except ModuleNotFoundError:
+    netisim_utils = None
 import math
 
 from itertools import combinations

@@ -1,17 +1,5 @@
 import net_sim_builder as netsim
-import networkx as nx
 
-
-# step4: 生成路由表
-
-def all_simple_paths(G, source, target):
-    try:
-        # 这里你可以在networkx库中寻找适合的寻路函数。
-        # 调用networkx库的all_simple_paths函数，可以获得跳数<=cutoff值的所有不成环路径。
-        paths = nx.all_simple_paths(G, source, target, cutoff=2)
-    except nx.NetworkXNoPath:
-        paths = []
-    return paths
 
 def all_shortest_paths(G, source, target):
     try:
