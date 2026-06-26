@@ -4,10 +4,12 @@ Type:rdma_send, src_node:9, src_port:0, dst_node:11, dst_port:0, priority:7, msg
 Type:rdma_send, src_node:11, src_port:0, dst_node:13, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:13, src_port:0, dst_node:15, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:15, src_port:0, dst_node:9, dst_port:0, priority:7, msg_len:67108864
+phase
 Type:rdma_send, src_node:9, src_port:0, dst_node:13, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:11, src_port:0, dst_node:15, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:13, src_port:0, dst_node:9, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:15, src_port:0, dst_node:11, dst_port:0, priority:7, msg_len:67108864
+phase
 Type:rdma_send, src_node:9, src_port:0, dst_node:15, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:11, src_port:0, dst_node:9, dst_port:0, priority:7, msg_len:67108864
 Type:rdma_send, src_node:13, src_port:0, dst_node:11, dst_port:0, priority:7, msg_len:67108864

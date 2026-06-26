@@ -45,8 +45,6 @@ class TopologyParams:
     pod_num: int = 19
     node_per_pod: int = 9
     npu_per_node: int = 8
-    sw1650_per_node: int = 2
-    sw1825_per_node: int = 4
     l1_switch_per_pod: int = 24
     l2_plane_num: int = 24
     l2_switch_per_plane: int = 4
@@ -57,16 +55,10 @@ class TopologyParams:
 @dataclass(frozen=True)
 class IdLayout:
     host_num: int
-    sw1825_base_id: int
-    sw1650_base_id: int
     l1_base_id: int
     l2_base_id: int
-    sw1825_num: int
-    sw1650_num: int
     l1_switch_num: int
     l2_switch_num: int
-    sw1650_port_num: int
-    sw1825_port_num: int
 
 
 @dataclass(frozen=True)
@@ -76,40 +68,26 @@ class TopologyIds:
 
 
 def build_id_layout(params: TopologyParams) -> IdLayout:
-    if params.npu_per_node % params.sw1650_per_node != 0:
-        raise ValueError("npu_per_node must be divisible by sw1650_per_node")
-    if params.npu_per_node % params.sw1825_per_node != 0:
-        raise ValueError("npu_per_node must be divisible by sw1825_per_node")
     if params.l1_switch_per_pod != params.l2_plane_num:
         raise ValueError("l1_switch_per_pod must match l2_plane_num")
 
     host_num = params.pod_num * params.node_per_pod * params.npu_per_node
-    sw1825_num = params.pod_num * params.node_per_pod * params.sw1825_per_node
-    sw1650_num = params.pod_num * params.node_per_pod * params.sw1650_per_node
     l1_switch_num = params.pod_num * params.l1_switch_per_pod
     l2_switch_num = params.l2_plane_num * params.l2_switch_per_plane
-    sw1825_base_id = host_num
-    sw1650_base_id = sw1825_base_id + sw1825_num
-    l1_base_id = sw1650_base_id + sw1650_num
+    l1_base_id = host_num
     l2_base_id = l1_base_id + l1_switch_num
 
     return IdLayout(
         host_num=host_num,
-        sw1825_base_id=sw1825_base_id,
-        sw1650_base_id=sw1650_base_id,
         l1_base_id=l1_base_id,
         l2_base_id=l2_base_id,
-        sw1825_num=sw1825_num,
-        sw1650_num=sw1650_num,
         l1_switch_num=l1_switch_num,
         l2_switch_num=l2_switch_num,
-        sw1650_port_num=params.npu_per_node // params.sw1650_per_node,
-        sw1825_port_num=params.npu_per_node // params.sw1825_per_node,
     )
 
 
 def host_egress_count(params: TopologyParams) -> int:
-    return 2 + params.l1_switch_per_pod * params.host_to_each_l1_ports
+    return params.l1_switch_per_pod * params.host_to_each_l1_ports
 
 
 def npu_id(params: TopologyParams, pod_id: int, node_id: int, npu_id_in_node: int) -> int:
@@ -118,26 +96,6 @@ def npu_id(params: TopologyParams, pod_id: int, node_id: int, npu_id_in_node: in
 
 def node_offset(params: TopologyParams, pod_id: int, node_id: int) -> int:
     return pod_id * params.node_per_pod + node_id
-
-
-def sw1650_id(
-    params: TopologyParams,
-    layout: IdLayout,
-    pod_id: int,
-    node_id: int,
-    sw1650_id_in_node: int,
-) -> int:
-    return layout.sw1650_base_id + node_offset(params, pod_id, node_id) * params.sw1650_per_node + sw1650_id_in_node
-
-
-def sw1825_id(
-    params: TopologyParams,
-    layout: IdLayout,
-    pod_id: int,
-    node_id: int,
-    sw1825_id_in_node: int,
-) -> int:
-    return layout.sw1825_base_id + node_offset(params, pod_id, node_id) * params.sw1825_per_node + sw1825_id_in_node
 
 
 def l1_switch_id(params: TopologyParams, layout: IdLayout, pod_id: int, plane_id: int) -> int:
@@ -164,8 +122,6 @@ def populate_topology(graph, platform: str, params: TopologyParams) -> TopologyI
     layout = build_id_layout(params)
     host_ids = list(range(layout.host_num))
     switch_groups = {
-        "sw1825": list(range(layout.sw1825_base_id, layout.sw1825_base_id + layout.sw1825_num)),
-        "sw1650": list(range(layout.sw1650_base_id, layout.sw1650_base_id + layout.sw1650_num)),
         "l1": list(range(layout.l1_base_id, layout.l1_base_id + layout.l1_switch_num)),
         "l2": list(range(layout.l2_base_id, layout.l2_base_id + layout.l2_switch_num)),
     }
@@ -173,46 +129,9 @@ def populate_topology(graph, platform: str, params: TopologyParams) -> TopologyI
     for host_id in host_ids:
         add_host(graph, platform, host_id)
 
-    for group_name in ("sw1825", "sw1650", "l1", "l2"):
+    for group_name in ("l1", "l2"):
         for switch_id in switch_groups[group_name]:
             add_switch(graph, platform, switch_id)
-
-    for pod_id in range(params.pod_num):
-        for node_id in range(params.node_per_pod):
-            for npu_id_in_node in range(params.npu_per_node):
-                host_id = npu_id(params, pod_id, node_id, npu_id_in_node)
-                add_edge(
-                    graph,
-                    platform,
-                    host_id,
-                    sw1650_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1650_port_num),
-                    ns3_bandwidth=NS3_NODE_LINK_BW,
-                    netisim_bandwidth=NETISIM_NODE_LINK_BW,
-                    route_weight=1,
-                )
-                add_edge(
-                    graph,
-                    platform,
-                    host_id,
-                    sw1825_id(params, layout, pod_id, node_id, npu_id_in_node // layout.sw1825_port_num),
-                    ns3_bandwidth=NS3_NODE_LINK_BW,
-                    netisim_bandwidth=NETISIM_NODE_LINK_BW,
-                    route_weight=1,
-                )
-
-    for pod_id in range(params.pod_num):
-        for node_id in range(params.node_per_pod):
-            for left_sw1650_id_in_node in range(params.sw1650_per_node):
-                for right_sw1650_id_in_node in range(left_sw1650_id_in_node + 1, params.sw1650_per_node):
-                    add_edge(
-                        graph,
-                        platform,
-                        sw1650_id(params, layout, pod_id, node_id, left_sw1650_id_in_node),
-                        sw1650_id(params, layout, pod_id, node_id, right_sw1650_id_in_node),
-                        ns3_bandwidth=NS3_NODE_LINK_BW,
-                        netisim_bandwidth=NETISIM_NODE_LINK_BW,
-                        route_weight=1,
-                    )
 
     for pod_id in range(params.pod_num):
         for node_id in range(params.node_per_pod):

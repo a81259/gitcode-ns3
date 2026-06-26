@@ -237,14 +237,15 @@ class NetiSimGraph(nx.Graph):
             t_port_num = 0
             for edge in self.edges(node_id):
                 t_port_num += int(self.get_edge_data(edge[0], edge[1])["edge_count"])
-            if t_port_num not in port_num_id_dict:
-                port_num_id_dict[t_port_num] = [node_id]
+            t_group_key = (t_node["type"], t_port_num)
+            if t_group_key not in port_num_id_dict:
+                port_num_id_dict[t_group_key] = [node_id]
             else:
-                port_num_id_dict[t_port_num].append(node_id)
+                port_num_id_dict[t_group_key].append(node_id)
 
         t_template_host = 0
         t_template_node = 0
-        for port_num, node_id in port_num_id_dict.items():
+        for (_, port_num), node_id in port_num_id_dict.items():
             if 'comp_delay' in self.nodes[node_id[0]]:
                 comp_delay = self.nodes[node_id[0]]['comp_delay']
             else:
@@ -295,7 +296,7 @@ class NetiSimGraph(nx.Graph):
         template_ele = root_config.xpath('/dcn/dcn_common_node_config/common_node/template')[0]
 
         t_template_id = 0
-        for port_num, node_id in port_num_id_dict.items():
+        for (_, port_num), node_id in port_num_id_dict.items():
             if not self.node_is_switch(node_id[0]):
                 continue
             template_ele.set("index", str(t_template_id))
@@ -312,7 +313,7 @@ class NetiSimGraph(nx.Graph):
         template_ele = root_config.xpath('/dcn/dcn_common_node_config/common_host/template')[0]
 
         t_template_id = 0
-        for port_num, node_id in port_num_id_dict.items():
+        for (_, port_num), node_id in port_num_id_dict.items():
             if not self.node_is_host(node_id[0]):
                 continue
             template_ele.set("index", str(t_template_id))

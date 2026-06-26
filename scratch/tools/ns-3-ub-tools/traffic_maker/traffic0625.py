@@ -177,8 +177,8 @@ def write_netisim_rdma_operates(
         rdma_paths.append(rdma_path)
         with rdma_path.open("w", encoding="utf-8") as f:
             f.write("stat rdma operate:\n")
-            f.write("phase\n")
             for phase_pairs in logic_comm_pairs:
+                f.write("phase\n")
                 for src_rank, dst_rank, byte_count in phase_pairs:
                     f.write(
                         "Type:rdma_send, "
