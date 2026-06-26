@@ -1,0 +1,4 @@
+stat rdma operate:
+phase
+Type:rdma_send, src_node:2, src_port:0, dst_node:10, dst_port:0, priority:7, msg_len:33554432
+Type:rdma_send, src_node:10, src_port:0, dst_node:2, dst_port:0, priority:7, msg_len:33554432

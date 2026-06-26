@@ -30,13 +30,15 @@ NS3_L2_LINK_BW = "224Gbps"
 NETISIM_NODE_LINK_BW = "400"
 NETISIM_L1_LINK_BW = "112"
 NETISIM_L2_LINK_BW = "224"
-NETISIM_LINK_DELAY = "20"
+NETISIM_LINK_DELAY = "10"
 NETISIM_NODE_GEN_BW = "400"
+NETISIM_HOST_COMP_DELAY = 225
+NETISIM_SWITCH_COMP_DELAY = 225
 TRAFFIC_BYTES_PER_TASK = 8 * 1024 * 1024
 TRAFFIC_PRIORITY = 7
 TRAFFIC_DELAY = "10ns"
 ROUTE_PRIORITIES = [7, 8]
-DEFAULT_OUTPUT_ROOT = TOOLS_DIR / "generated_cases" / "pod1d"
+DEFAULT_OUTPUT_ROOT = TOOLS_DIR / "generated_cases" / "case01"
 DEFAULT_NETISIM_TEMPLATE = TOOLS_DIR / "netisim_files" / "case01" / "dcn2.0_config.xml"
 
 
@@ -171,7 +173,7 @@ def add_host(graph, platform: str, host_id: int) -> None:
     if platform == "ns3":
         graph.add_netisim_host(host_id, forward_delay=FORWARD_DELAY)
     elif platform == "netisim":
-        graph.add_netisim_host(host_id)
+        graph.add_netisim_host(host_id, comp_delay=NETISIM_HOST_COMP_DELAY)
     else:
         raise ValueError(f"unsupported platform: {platform}")
 
@@ -180,7 +182,7 @@ def add_switch(graph, platform: str, switch_id: int) -> None:
     if platform == "ns3":
         graph.add_netisim_node(switch_id, forward_delay=FORWARD_DELAY)
     elif platform == "netisim":
-        graph.add_netisim_node(switch_id, comp_delay=1300)
+        graph.add_netisim_node(switch_id, comp_delay=NETISIM_SWITCH_COMP_DELAY)
     else:
         raise ValueError(f"unsupported platform: {platform}")
 
@@ -253,6 +255,7 @@ def write_netisim_case(
     graph.build_graph_config(
         os.fspath(template_path),
         node_gen_bandwidth=NETISIM_NODE_GEN_BW,
+        node_gen_delay=NETISIM_LINK_DELAY,
         output_name="dcn2.0_config.xml",
     )
     graph.gen_route_table(

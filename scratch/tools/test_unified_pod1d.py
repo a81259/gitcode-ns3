@@ -62,7 +62,11 @@ def _build_two_path_netisim_graph():
     graph.add_netisim_edge(2, 1, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
     graph.add_netisim_edge(0, 3, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
     graph.add_netisim_edge(3, 1, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
-    graph.build_graph_config(str(casegen.DEFAULT_NETISIM_TEMPLATE), write_flag=False)
+    graph.build_graph_config(
+        str(casegen.DEFAULT_NETISIM_TEMPLATE),
+        node_gen_delay=casegen.NETISIM_LINK_DELAY,
+        write_flag=False,
+    )
     return graph
 
 
@@ -188,6 +192,9 @@ class UnifiedPod1dTest(unittest.TestCase):
                 [group.attrib["node_id"] for group in node_groups],
                 ["0..15", "16..23", "24..31"],
             )
+            self.assertEqual(node_groups[0].attrib["comp_delay"], "225")
+            self.assertEqual(node_groups[1].attrib["comp_delay"], "225")
+            self.assertEqual(node_groups[2].attrib["comp_delay"], "225")
             partition_chips = root.findall(
                 "./dcn_network/mpi_multi_processing/process_partition/"
                 "overlap_partition/chip"
@@ -217,11 +224,14 @@ class UnifiedPod1dTest(unittest.TestCase):
             links = root.findall("./dcn_network/topology/grp")
             self.assertEqual(len(links), 97)
             self.assertEqual(links[0].attrib["dst_node"], "-1")
+            self.assertEqual(links[0].attrib["delay"], "10")
             self.assertEqual(links[1].attrib["src_node"], "0")
             self.assertEqual(links[1].attrib["src_port"], "1")
             self.assertEqual(links[1].attrib["dst_node"], "16")
+            self.assertEqual(links[1].attrib["delay"], "10")
             self.assertEqual(links[4].attrib["src_node"], "0")
             self.assertEqual(links[4].attrib["dst_node"], "19")
+            self.assertEqual(links[4].attrib["delay"], "10")
 
             router = ET.parse(netisim_dir / "router.xml").getroot()
             self.assertEqual(router.tag, "router")

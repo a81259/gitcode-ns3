@@ -209,7 +209,7 @@ class NetiSimGraph(nx.Graph):
         return self.nodes[node_id]['type'] == 'host'
 
     def build_graph_config(self, template_xml, write_flag=True, output_name=None,
-                           node_gen_bandwidth='400'):
+                           node_gen_bandwidth='400', node_gen_delay='20'):
         # graph到xml文件的转换
         assert self.check_graph_index_valid()
         try:
@@ -269,7 +269,7 @@ class NetiSimGraph(nx.Graph):
         new_topo_ele = etree.Element("topology")
         node_ele = etree.SubElement(new_topo_ele, "grp", link_type="bi_direct", src_node="0..{}".format(host_num - 1),
                                     src_port="0", dst_node="-1", dst_port="0..{}".format(host_num - 1),
-                                    bandwidth=node_gen_bandwidth, delay="20")
+                                    bandwidth=node_gen_bandwidth, delay=node_gen_delay)
         port_conn_count = [0] * total_node_num
         for node_id in self.nodes:
             t_node = self.nodes[node_id]
