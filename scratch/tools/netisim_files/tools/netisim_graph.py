@@ -121,6 +121,12 @@ def _sync_ft_node_counts(root_config, graph):
     for key, value in layer_counts.items():
         node_config.set(key, str(value))
 
+
+def _sync_direct_topo(root_config, direct_topo):
+    direct_topo_value = "true" if direct_topo else "false"
+    for ele in root_config.xpath('//*[@direct_topo]'):
+        ele.set("direct_topo", direct_topo_value)
+
         
 def _process_path_chunk(graph, path_finding_algo, node_pairs):
     paths = []
@@ -209,7 +215,8 @@ class NetiSimGraph(nx.Graph):
         return self.nodes[node_id]['type'] == 'host'
 
     def build_graph_config(self, template_xml, write_flag=True, output_name=None,
-                           node_gen_bandwidth='400', node_gen_delay='20'):
+                           node_gen_bandwidth='400', node_gen_delay='20',
+                           direct_topo=True, generator_link=True):
         # graph到xml文件的转换
         assert self.check_graph_index_valid()
         try:
@@ -252,8 +259,9 @@ class NetiSimGraph(nx.Graph):
                 comp_delay = 1300
             # print(comp_delay)
             if self.node_is_host(node_id[0]):
+                host_port_num = port_num + 1 if generator_link else port_num
                 node_ele = etree.SubElement(new_node_ele, "grp", type=NETISIM_MOD + self.nodes[node_id[0]]['type'],
-                                            node_id=_format_int_ranges(node_id), port_num=str(port_num + 1),
+                                            node_id=_format_int_ranges(node_id), port_num=str(host_port_num),
                                             config_template=str(t_template_host), comp_delay=str(comp_delay))
                 t_template_host += 1
             else:
@@ -267,13 +275,13 @@ class NetiSimGraph(nx.Graph):
 
         old_topo_ele = root_config.xpath('/dcn/dcn_network/topology')[0]
         new_topo_ele = etree.Element("topology")
-        node_ele = etree.SubElement(new_topo_ele, "grp", link_type="bi_direct", src_node="0..{}".format(host_num - 1),
-                                    src_port="0", dst_node="-1", dst_port="0..{}".format(host_num - 1),
-                                    bandwidth=node_gen_bandwidth, delay=node_gen_delay)
+        if generator_link:
+            etree.SubElement(new_topo_ele, "grp", link_type="bi_direct", src_node="0..{}".format(host_num - 1),
+                             src_port="0", dst_node="-1", dst_port="0..{}".format(host_num - 1),
+                             bandwidth=node_gen_bandwidth, delay=node_gen_delay)
         port_conn_count = [0] * total_node_num
         for node_id in self.nodes:
-            t_node = self.nodes[node_id]
-            if self.node_is_host(node_id):
+            if generator_link and self.node_is_host(node_id):
                 port_conn_count[node_id] += 1
 
         for u, v in tqdm(self.edges, desc="生成拓扑连线"):
@@ -322,7 +330,11 @@ class NetiSimGraph(nx.Graph):
                 # print(ele.get("port"))
                 if ele.get("port") == "0..0":
                     continue
-                ele.set("port", "1.." + str(port_num - 1 + 1))
+                non_zero_port_max = port_num if generator_link else port_num - 1
+                if non_zero_port_max < 1:
+                    ele.getparent().remove(ele)
+                else:
+                    ele.set("port", "1.." + str(non_zero_port_max))
             config_ele.append(deepcopy(template_ele))
             t_template_id += 1
         old_config_ele.getparent().replace(old_config_ele, config_ele)
@@ -332,6 +344,7 @@ class NetiSimGraph(nx.Graph):
         # ft_ele.set("host_num", str(list(self.host_ids)))
         # ft_ele.set("leaf_num", str(list(self.node_ids)))
         _sync_ft_node_counts(root_config, self)
+        _sync_direct_topo(root_config, direct_topo)
 
         etree.indent(root_config, space="    ")
         # print(etree.tostring(root_config, pretty_print=True).decode(), end="")
@@ -466,6 +479,8 @@ class NetiSimGraph(nx.Graph):
                 if node_id == dst or node_id not in path_lengths:
                     continue
                 for next_hop in self.neighbors(node_id):
+                    if self.node_is_host(next_hop) and next_hop != dst:
+                        continue
                     if next_hop not in path_lengths:
                         continue
                     if path_lengths[next_hop] + self._route_weight(node_id, next_hop) == path_lengths[node_id]:

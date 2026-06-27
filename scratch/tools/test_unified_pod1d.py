@@ -91,7 +91,7 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertIn("netisim_graph.NetiSimGraph()", source)
         self.assertIn("netsim.NetworkSimulationGraph()", source)
         self.assertIn("graph.write_config()", source)
-        self.assertIn("host_router=host_egress_count(params) > 1", source)
+        self.assertIn("host_router=False", source)
         self.assertNotIn("single_shortest_path", source)
         self.assertNotIn("path_finding_algo=", source)
         self.assertNotIn("from lxml import etree", source)
@@ -114,8 +114,9 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertEqual(params.l1_to_each_l2_ports, 9)
         self.assertEqual(params.host_to_each_l1_ports, 1)
         self.assertEqual(layout.host_num, 1368)
-        self.assertEqual(layout.l1_base_id, 1368)
-        self.assertEqual(layout.l2_base_id, 1824)
+        self.assertEqual(layout.access_base_id, 1368)
+        self.assertEqual(layout.l1_base_id, 2736)
+        self.assertEqual(layout.l2_base_id, 3192)
 
     def test_builds_same_pod1d_topology_on_both_existing_graph_types(self):
         ns3_graph, ns3_ids = casegen.build_ns3_graph(SMALL_PARAMS)
@@ -126,19 +127,43 @@ class UnifiedPod1dTest(unittest.TestCase):
         self.assertEqual(ns3_ids.host_ids, list(range(16)))
         self.assertNotIn("sw1825", ns3_ids.switch_groups)
         self.assertNotIn("sw1650", ns3_ids.switch_groups)
-        self.assertEqual(ns3_ids.switch_groups["l1"], list(range(16, 24)))
-        self.assertEqual(ns3_ids.switch_groups["l2"], list(range(24, 32)))
+        self.assertEqual(ns3_ids.switch_groups["access"], list(range(16, 32)))
+        self.assertEqual(ns3_ids.switch_groups["l1"], list(range(32, 40)))
+        self.assertEqual(ns3_ids.switch_groups["l2"], list(range(40, 48)))
         self.assertEqual(ns3_ids, netisim_ids)
         self.assertEqual(sorted(ns3_graph.edges()), sorted(netisim_graph.edges()))
-        self.assertEqual(sum(data["edge_count"] for _, _, data in ns3_graph.edges(data=True)), 96)
+        self.assertEqual(sum(data["edge_count"] for _, _, data in ns3_graph.edges(data=True)), 112)
 
         link_counts = {(u, v): data["edge_count"] for u, v, data in ns3_graph.edges(data=True)}
         self.assertEqual(link_counts[(0, 16)], 1)
-        self.assertEqual(link_counts[(0, 19)], 1)
-        self.assertEqual(link_counts[(16, 24)], 1)
-        self.assertEqual(link_counts[(16, 27)], 1)
-        self.assertEqual(link_counts[(20, 24)], 1)
-        self.assertEqual(casegen.host_egress_count(SMALL_PARAMS), 4)
+        self.assertEqual(link_counts[(16, 32)], 1)
+        self.assertEqual(link_counts[(16, 35)], 1)
+        self.assertEqual(link_counts[(32, 40)], 1)
+        self.assertEqual(link_counts[(32, 43)], 1)
+        self.assertEqual(casegen.host_egress_count(SMALL_PARAMS), 1)
+
+    def test_netisim_fault_half_bandwidth_updates_first_access_to_l1_link(self):
+        graph, _ = casegen.build_netisim_graph(SMALL_PARAMS, fault="npu0_l1_bw56")
+        layout = casegen.build_id_layout(SMALL_PARAMS)
+
+        first_access = casegen.access_switch_id(layout, 0)
+        first_l1 = casegen.l1_switch_id(SMALL_PARAMS, layout, 0, 0)
+        second_l1 = casegen.l1_switch_id(SMALL_PARAMS, layout, 0, 1)
+
+        self.assertEqual(graph.edges[first_access, first_l1]["bandwidth"], "56")
+        self.assertEqual(graph.edges[first_access, first_l1]["delay"], casegen.NETISIM_LINK_DELAY)
+        self.assertEqual(graph.edges[first_access, second_l1]["bandwidth"], casegen.NETISIM_L1_LINK_BW)
+
+    def test_netisim_fault_removed_omits_first_access_to_l1_link(self):
+        graph, _ = casegen.build_netisim_graph(SMALL_PARAMS, fault="npu0_l1_removed")
+        layout = casegen.build_id_layout(SMALL_PARAMS)
+
+        first_access = casegen.access_switch_id(layout, 0)
+        first_l1 = casegen.l1_switch_id(SMALL_PARAMS, layout, 0, 0)
+        second_l1 = casegen.l1_switch_id(SMALL_PARAMS, layout, 0, 1)
+
+        self.assertFalse(graph.has_edge(first_access, first_l1))
+        self.assertTrue(graph.has_edge(first_access, second_l1))
 
     def test_generates_ns3_and_netisim_cases_through_existing_builders(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -163,19 +188,30 @@ class UnifiedPod1dTest(unittest.TestCase):
                 node_rows = list(csv.DictReader(f))
             self.assertEqual(node_rows[0]["nodeId"], "0..15")
             self.assertEqual(node_rows[0]["nodeType"], "DEVICE")
-            self.assertEqual(node_rows[0]["portNum"], "4")
+            self.assertEqual(node_rows[0]["portNum"], "1")
 
             with (ns3_dir / "topology.csv").open(newline="", encoding="utf-8") as f:
                 topology_rows = list(csv.DictReader(f))
-            self.assertEqual(len(topology_rows), 96)
+            self.assertEqual(len(topology_rows), 112)
             self.assertIn(
                 {
-                    "nodeId1": "16",
+                    "nodeId1": "32",
                     "portId1": "8",
-                    "nodeId2": "24",
+                    "nodeId2": "40",
                     "portId2": "0",
                     "bandwidth": "224Gbps",
                     "delay": "20ns",
+                },
+                topology_rows,
+            )
+            self.assertIn(
+                {
+                    "nodeId1": "0",
+                    "portId1": "0",
+                    "nodeId2": "16",
+                    "portId2": "0",
+                    "bandwidth": "400Gbps",
+                    "delay": "0ns",
                 },
                 topology_rows,
             )
@@ -187,15 +223,16 @@ class UnifiedPod1dTest(unittest.TestCase):
             node_groups = root.findall("./dcn_network/node/grp")
             self.assertEqual(
                 [group.attrib["type"] for group in node_groups],
-                ["ft2_host", "ft2_node", "ft2_node"],
+                ["ft2_host", "ft2_node", "ft2_node", "ft2_node"],
             )
             self.assertEqual(
                 [group.attrib["node_id"] for group in node_groups],
-                ["0..15", "16..23", "24..31"],
+                ["0..15", "16..31", "32..39", "40..47"],
             )
-            self.assertEqual(node_groups[0].attrib["comp_delay"], "225")
+            self.assertEqual(node_groups[0].attrib["comp_delay"], "0")
             self.assertEqual(node_groups[1].attrib["comp_delay"], "225")
             self.assertEqual(node_groups[2].attrib["comp_delay"], "225")
+            self.assertEqual(node_groups[3].attrib["comp_delay"], "225")
             partition_chips = root.findall(
                 "./dcn_network/mpi_multi_processing/process_partition/"
                 "overlap_partition/chip"
@@ -217,27 +254,36 @@ class UnifiedPod1dTest(unittest.TestCase):
             ft_node_config = root.find("./dcn_common_node_config/ft_node/node_config")
             self.assertIsNotNone(ft_node_config)
             self.assertEqual(ft_node_config.attrib["host_num"], "16")
-            self.assertEqual(ft_node_config.attrib["leaf_num"], "8")
+            self.assertEqual(ft_node_config.attrib["leaf_num"], "16")
             self.assertEqual(ft_node_config.attrib["spine_num"], "8")
-            self.assertEqual(ft_node_config.attrib["core_num"], "0")
+            self.assertEqual(ft_node_config.attrib["core_num"], "8")
             self.assertEqual(ft_node_config.attrib["top_num"], "0")
+            self.assertEqual(ft_node_config.attrib["direct_topo"], "false")
+            credit_fc = root.find("./dcn_common_node_config/ft_host/credit_fc")
+            self.assertIsNotNone(credit_fc)
+            self.assertEqual(credit_fc.attrib["direct_topo"], "false")
 
             links = root.findall("./dcn_network/topology/grp")
-            self.assertEqual(len(links), 97)
+            self.assertEqual(node_groups[0].attrib["port_num"], "2")
+            self.assertEqual(len(links), 113)
+            self.assertEqual(sum(1 for link in links if link.attrib["dst_node"] == "-1"), 1)
+            self.assertEqual(links[0].attrib["src_node"], "0..15")
+            self.assertEqual(links[0].attrib["src_port"], "0")
             self.assertEqual(links[0].attrib["dst_node"], "-1")
+            self.assertEqual(links[0].attrib["dst_port"], "0..15")
+            self.assertEqual(links[0].attrib["bandwidth"], "400")
             self.assertEqual(links[0].attrib["delay"], "10")
             self.assertEqual(links[1].attrib["src_node"], "0")
             self.assertEqual(links[1].attrib["src_port"], "1")
             self.assertEqual(links[1].attrib["dst_node"], "16")
-            self.assertEqual(links[1].attrib["delay"], "10")
-            self.assertEqual(links[4].attrib["src_node"], "0")
-            self.assertEqual(links[4].attrib["dst_node"], "19")
-            self.assertEqual(links[4].attrib["delay"], "10")
+            self.assertEqual(links[1].attrib["dst_port"], "0")
+            self.assertEqual(links[1].attrib["delay"], "0")
 
             router = ET.parse(netisim_dir / "router.xml").getroot()
             self.assertEqual(router.tag, "router")
             self.assertGreater(len(router.findall("grp")), 0)
-            self.assertIsNotNone(router.find("./grp[@node_id='0']"))
+            self.assertIsNone(router.find("./grp[@node_id='0']"))
+            self.assertIsNotNone(router.find("./grp[@node_id='16']"))
 
     def test_default_shortest_paths_generate_ecmp_routes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -249,7 +295,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             )
 
             router = ET.parse(result["netisim"] / "router.xml").getroot()
-            group = router.find("./grp[@node_id='0']")
+            group = router.find("./grp[@node_id='4']")
             self.assertIsNotNone(group)
             target = _find_target_covering_node(group, 1)
 
@@ -267,7 +313,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             )
 
             router = ET.parse(result["netisim"] / "router.xml").getroot()
-            group = router.find("./grp[@node_id='0']")
+            group = router.find("./grp[@node_id='16']")
             self.assertIsNotNone(group)
             target = _find_target_covering_node(group, 2)
 
@@ -285,7 +331,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             )
 
             router = ET.parse(result["netisim"] / "router.xml").getroot()
-            group = router.find("./grp[@node_id='0']")
+            group = router.find("./grp[@node_id='16']")
             self.assertIsNotNone(group)
             target = _find_target_covering_node(group, 4)
 
@@ -359,10 +405,15 @@ class UnifiedPod1dTest(unittest.TestCase):
 
     def test_l1_reaches_faulted_host_through_l2_without_host_transit(self):
         graph, _ = casegen.build_netisim_graph(SMALL_PARAMS)
-        graph.remove_edge(0, 16)
+        layout = casegen.build_id_layout(SMALL_PARAMS)
+        graph.remove_edge(
+            casegen.access_switch_id(layout, 0),
+            casegen.l1_switch_id(SMALL_PARAMS, layout, 0, 0),
+        )
         graph.build_graph_config(
             str(casegen.DEFAULT_NETISIM_TEMPLATE),
             node_gen_delay=casegen.NETISIM_LINK_DELAY,
+            direct_topo=False,
             write_flag=False,
         )
 
@@ -373,7 +424,7 @@ class UnifiedPod1dTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            sorted(port_id for port_id, _ in graph.route_table_2port[16][0]),
+            sorted(port_id for port_id, _ in graph.route_table_2port[32][0]),
             [7, 8, 9, 10],
         )
 
