@@ -151,20 +151,20 @@ def populate_topology(graph, platform: str, params: TopologyParams) -> TopologyI
                         route_weight=10,
                     )
 
-    for pod_id in range(params.pod_num):
-        for plane_id in range(params.l2_plane_num):
-            l1_id = l1_switch_id(params, layout, pod_id, plane_id)
-            for switch_id_in_plane in range(params.l2_switch_per_plane):
-                add_edge(
-                    graph,
-                    platform,
-                    l1_id,
-                    l2_switch_id(params, layout, plane_id, switch_id_in_plane),
-                    ns3_bandwidth=NS3_L2_LINK_BW,
-                    netisim_bandwidth=NETISIM_L2_LINK_BW,
-                    edge_count=params.l1_to_each_l2_ports,
-                    route_weight=1,
-                )
+    l1_uplink_ports = params.l2_switch_per_plane * params.l1_to_each_l2_ports
+    for l1_idx, l1_id in enumerate(switch_groups["l1"]):
+        for uplink_idx in range(l1_uplink_ports):
+            l2_idx = (l1_idx * l1_uplink_ports + uplink_idx) % layout.l2_switch_num
+            add_edge(
+                graph,
+                platform,
+                l1_id,
+                layout.l2_base_id + l2_idx,
+                ns3_bandwidth=NS3_L2_LINK_BW,
+                netisim_bandwidth=NETISIM_L2_LINK_BW,
+                edge_count=1,
+                route_weight=1,
+            )
 
     return TopologyIds(host_ids=host_ids, switch_groups=switch_groups)
 

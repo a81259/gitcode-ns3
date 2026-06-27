@@ -210,7 +210,7 @@
             </template>
         </common_host>
         <ft_node>
-            <node_config tier="4" router_mode="4" direct_topo="true" host_num="1368" leaf_num="1482" spine_num="96" core_num="0" top_num="0" mode="1" hash_sel="92" spine_hash="92" core_hash="92" top_hash="1" hash_tuple="4"/>
+            <node_config tier="4" router_mode="4" direct_topo="true" host_num="1368" leaf_num="1482" spine_num="96" core_num="0" top_num="0" mode="0" hash_sel="92" spine_hash="92" core_hash="92" top_hash="1" hash_tuple="4"/>
             <ncc enable="false"/>
         </ft_node>
         <ft_host>

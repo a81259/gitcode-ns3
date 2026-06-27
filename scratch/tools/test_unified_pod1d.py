@@ -135,8 +135,9 @@ class UnifiedPod1dTest(unittest.TestCase):
         link_counts = {(u, v): data["edge_count"] for u, v, data in ns3_graph.edges(data=True)}
         self.assertEqual(link_counts[(0, 16)], 1)
         self.assertEqual(link_counts[(0, 19)], 1)
-        self.assertEqual(link_counts[(16, 24)], 2)
-        self.assertEqual(link_counts[(20, 24)], 2)
+        self.assertEqual(link_counts[(16, 24)], 1)
+        self.assertEqual(link_counts[(16, 27)], 1)
+        self.assertEqual(link_counts[(20, 24)], 1)
         self.assertEqual(casegen.host_egress_count(SMALL_PARAMS), 4)
 
     def test_generates_ns3_and_netisim_cases_through_existing_builders(self):
@@ -332,6 +333,49 @@ class UnifiedPod1dTest(unittest.TestCase):
         )
 
         self.assertGreaterEqual(len(graph.route_table_2port[0][1]), 2)
+
+    def test_default_shortest_routing_does_not_use_host_transit(self):
+        graph = casegen.netisim_graph.NetiSimGraph()
+        graph.add_netisim_host(0)
+        graph.add_netisim_host(1)
+        graph.add_netisim_node(2)
+        graph.add_netisim_node(3)
+        graph.add_netisim_edge(0, 3, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+        graph.add_netisim_edge(1, 2, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+        graph.add_netisim_edge(1, 3, bandwidth=casegen.NETISIM_NODE_LINK_BW, delay=casegen.NETISIM_LINK_DELAY)
+        graph.build_graph_config(
+            str(casegen.DEFAULT_NETISIM_TEMPLATE),
+            node_gen_delay=casegen.NETISIM_LINK_DELAY,
+            write_flag=False,
+        )
+
+        graph.gen_route_table(
+            write_file=False,
+            host_router=True,
+            multiple_workers=1,
+        )
+
+        self.assertEqual(graph.route_table_2port[2][0], set())
+
+    def test_l1_reaches_faulted_host_through_l2_without_host_transit(self):
+        graph, _ = casegen.build_netisim_graph(SMALL_PARAMS)
+        graph.remove_edge(0, 16)
+        graph.build_graph_config(
+            str(casegen.DEFAULT_NETISIM_TEMPLATE),
+            node_gen_delay=casegen.NETISIM_LINK_DELAY,
+            write_flag=False,
+        )
+
+        graph.gen_route_table(
+            write_file=False,
+            host_router=True,
+            multiple_workers=1,
+        )
+
+        self.assertEqual(
+            sorted(port_id for port_id, _ in graph.route_table_2port[16][0]),
+            [7, 8, 9, 10],
+        )
 
     def test_single_worker_route_generation_streams_paths_into_route_tables(self):
         ns3_graph = _build_two_path_ns3_graph()
