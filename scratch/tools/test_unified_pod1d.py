@@ -277,6 +277,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             self.assertEqual(links[1].attrib["src_port"], "1")
             self.assertEqual(links[1].attrib["dst_node"], "16")
             self.assertEqual(links[1].attrib["dst_port"], "0")
+            self.assertEqual(links[1].attrib["bandwidth"], "4000")
             self.assertEqual(links[1].attrib["delay"], "0")
 
             router = ET.parse(netisim_dir / "router.xml").getroot()
