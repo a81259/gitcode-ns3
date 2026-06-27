@@ -271,7 +271,7 @@ class UnifiedPod1dTest(unittest.TestCase):
             self.assertEqual(links[0].attrib["src_port"], "0")
             self.assertEqual(links[0].attrib["dst_node"], "-1")
             self.assertEqual(links[0].attrib["dst_port"], "0..15")
-            self.assertEqual(links[0].attrib["bandwidth"], "400")
+            self.assertEqual(links[0].attrib["bandwidth"], "4000")
             self.assertEqual(links[0].attrib["delay"], "10")
             self.assertEqual(links[1].attrib["src_node"], "0")
             self.assertEqual(links[1].attrib["src_port"], "1")

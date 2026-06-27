@@ -65,7 +65,7 @@
             <grp type="ft2_node" node_id="2850..2945" port_num="171" config_template="3" comp_delay="1300"/>
         </node>
         <topology>
-            <grp link_type="bi_direct" src_node="0..15" src_port="0..0" bandwidth="800" delay="0" dst_node="-1" dst_port="0..15"/>
+            <grp link_type="bi_direct" src_node="0..15" src_port="0..0" bandwidth="4000" delay="0" dst_node="-1" dst_port="0..15"/>
             <grp link_type="bi_direct" src_node="0..15" src_port="1..1" bandwidth="800" delay="0" dst_node="16..31" dst_port="0..0"/>
             <grp link_type="bi_direct" src_node="16..16" src_port="1..8" bandwidth="100" delay="10" dst_node="32..39" dst_port="0..0"/>
             <grp link_type="bi_direct" src_node="17..17" src_port="1..8" bandwidth="100" delay="10" dst_node="32..39" dst_port="1..1"/>
