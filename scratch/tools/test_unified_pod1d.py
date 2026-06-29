@@ -82,6 +82,17 @@ def _find_target_covering_node(route_group, node_id):
     return None
 
 
+def _range_size(value):
+    total = 0
+    for part in value.split():
+        if ".." in part:
+            start, end = (int(item) for item in part.split(".."))
+            total += end - start + 1
+        else:
+            total += 1
+    return total
+
+
 class UnifiedPod1dTest(unittest.TestCase):
     def test_unified_generator_reuses_original_platform_builders(self):
         source = Path(casegen.__file__).read_text(encoding="utf-8")
@@ -442,6 +453,27 @@ class UnifiedPod1dTest(unittest.TestCase):
             sorted(port_id for port_id, _ in graph.route_table_2port[32][0]),
             [7, 8, 9, 10],
         )
+
+    def test_compressed_netisim_topology_keeps_bi_direct_endpoint_counts_balanced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph, _ = casegen.build_netisim_graph(SMALL_PARAMS, fault="npu0_l1_removed")
+            graph.output_dir = str(Path(tmp)) + "/"
+            graph.build_graph_config(
+                str(casegen.DEFAULT_NETISIM_TEMPLATE),
+                node_gen_delay=casegen.NETISIM_LINK_DELAY,
+                direct_topo=False,
+                write_flag=True,
+                output_name="dcn2.0_config.xml",
+            )
+
+            root = ET.parse(Path(tmp) / "dcn2.0_config.xml").getroot()
+            for link in root.findall("./dcn_network/topology/grp"):
+                attrs = link.attrib
+                if attrs["link_type"] != "bi_direct":
+                    continue
+                src_count = _range_size(attrs["src_node"]) * _range_size(attrs["src_port"])
+                dst_count = _range_size(attrs["dst_node"]) * _range_size(attrs["dst_port"])
+                self.assertEqual(src_count, dst_count, attrs)
 
     def test_single_worker_route_generation_streams_paths_into_route_tables(self):
         ns3_graph = _build_two_path_ns3_graph()

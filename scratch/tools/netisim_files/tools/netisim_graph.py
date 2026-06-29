@@ -90,6 +90,8 @@ def _topology_link_merge_steps(prev_attrs, next_attrs):
         steps.append(step)
     if not any(steps):
         return None
+    if sum(steps[:2]) != 1 or sum(steps[2:]) != 1:
+        return None
     return tuple(steps)
 
 
