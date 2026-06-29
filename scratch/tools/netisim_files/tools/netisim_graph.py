@@ -41,6 +41,77 @@ def _format_int_ranges(values):
     return " ".join(ranges)
 
 
+def _compress_topology_ele(topo_ele):
+    compressed_topo_ele = etree.Element("topology")
+    links = list(topo_ele)
+    idx = 0
+    while idx < len(links):
+        link = links[idx]
+        attrs = dict(link.attrib)
+        if attrs.get("dst_node") == "-1":
+            etree.SubElement(compressed_topo_ele, "grp", **attrs)
+            idx += 1
+            continue
+
+        group = [attrs]
+        group_steps = None
+        idx += 1
+        while idx < len(links):
+            next_attrs = dict(links[idx].attrib)
+            next_steps = _topology_link_merge_steps(group[-1], next_attrs)
+            if next_steps is None or (group_steps is not None and next_steps != group_steps):
+                break
+            group_steps = next_steps
+            group.append(next_attrs)
+            idx += 1
+
+        merged_attrs = _merge_topology_link_group(group)
+        etree.SubElement(compressed_topo_ele, "grp", **merged_attrs)
+    return compressed_topo_ele
+
+
+def _topology_link_merge_steps(prev_attrs, next_attrs):
+    merge_keys = ("link_type", "bandwidth", "delay")
+    if any(prev_attrs.get(key) != next_attrs.get(key) for key in merge_keys):
+        return None
+    if prev_attrs.get("dst_node") == "-1" or next_attrs.get("dst_node") == "-1":
+        return None
+
+    steps = []
+    for key in ("src_node", "src_port", "dst_node", "dst_port"):
+        try:
+            prev_value = int(prev_attrs[key])
+            next_value = int(next_attrs[key])
+        except ValueError:
+            return None
+        step = next_value - prev_value
+        if step not in (0, 1):
+            return None
+        steps.append(step)
+    if not any(steps):
+        return None
+    return tuple(steps)
+
+
+def _format_topology_sequence(start, end):
+    try:
+        start_value = int(start)
+        end_value = int(end)
+    except ValueError:
+        return start
+    return start if start_value == end_value else "{}..{}".format(start, end)
+
+
+def _merge_topology_link_group(group):
+    if len(group) == 1:
+        return dict(group[0])
+
+    merged_attrs = dict(group[0])
+    for key in ("src_node", "src_port", "dst_node", "dst_port"):
+        merged_attrs[key] = _format_topology_sequence(group[0][key], group[-1][key])
+    return merged_attrs
+
+
 def _sync_overlap_partition_chips(root_config, node_ele):
     overlap_partitions = root_config.xpath(
         '/dcn/dcn_network/mpi_multi_processing/process_partition/overlap_partition'
@@ -127,7 +198,12 @@ def _sync_direct_topo(root_config, direct_topo):
     for ele in root_config.xpath('//*[@direct_topo]'):
         ele.set("direct_topo", direct_topo_value)
 
-        
+
+def _disable_credit_fc(root_config):
+    for ele in root_config.xpath('//credit_fc'):
+        ele.set("enable", "false")
+
+
 def _process_path_chunk(graph, path_finding_algo, node_pairs):
     paths = []
     for src, dst in tqdm(node_pairs, desc="算法{}寻找所有可用路径".format(path_finding_algo.__name__)):
@@ -274,9 +350,9 @@ class NetiSimGraph(nx.Graph):
         _sync_xml_templates(root_config, new_node_ele)
 
         old_topo_ele = root_config.xpath('/dcn/dcn_network/topology')[0]
-        new_topo_ele = etree.Element("topology")
+        raw_topo_ele = etree.Element("topology")
         if generator_link:
-            etree.SubElement(new_topo_ele, "grp", link_type="bi_direct", src_node="0..{}".format(host_num - 1),
+            etree.SubElement(raw_topo_ele, "grp", link_type="bi_direct", src_node="0..{}".format(host_num - 1),
                              src_port="0", dst_node="-1", dst_port="0..{}".format(host_num - 1),
                              bandwidth=node_gen_bandwidth, delay=node_gen_delay)
         port_conn_count = [0] * total_node_num
@@ -291,11 +367,12 @@ class NetiSimGraph(nx.Graph):
                 v_port_cnt = str(port_conn_count[v])
                 bw = self.edges[u, v]["bandwidth"]
                 dl = self.edges[u, v]["delay"]
-                topo_ele = etree.SubElement(new_topo_ele, "grp", link_type="bi_direct", src_node=str(u),
+                topo_ele = etree.SubElement(raw_topo_ele, "grp", link_type="bi_direct", src_node=str(u),
                                             src_port=u_port_cnt, dst_node=str(v), dst_port=v_port_cnt,
                                             bandwidth=str(bw), delay=str(dl))
                 port_conn_count[u] += 1
                 port_conn_count[v] += 1
+        new_topo_ele = _compress_topology_ele(raw_topo_ele)
         old_topo_ele.getparent().replace(old_topo_ele, new_topo_ele)
 
         # <dcn_common_node_config>修改
@@ -328,6 +405,13 @@ class NetiSimGraph(nx.Graph):
             t_port_att_eles = template_ele.xpath('.//*[@port]')
             for ele in t_port_att_eles:
                 # print(ele.get("port"))
+                if ele.getparent() is not None and ele.getparent().tag == "cbfc_cfg":
+                    host_port_max = port_num if generator_link else port_num - 1
+                    if host_port_max < 0:
+                        ele.getparent().remove(ele)
+                    else:
+                        ele.set("port", "0.." + str(host_port_max))
+                    continue
                 if ele.get("port") == "0..0":
                     continue
                 non_zero_port_max = port_num if generator_link else port_num - 1
@@ -345,6 +429,7 @@ class NetiSimGraph(nx.Graph):
         # ft_ele.set("leaf_num", str(list(self.node_ids)))
         _sync_ft_node_counts(root_config, self)
         _sync_direct_topo(root_config, direct_topo)
+        _disable_credit_fc(root_config)
 
         etree.indent(root_config, space="    ")
         # print(etree.tostring(root_config, pretty_print=True).decode(), end="")
@@ -360,7 +445,7 @@ class NetiSimGraph(nx.Graph):
                 output_xml.write(etree.tostring(root_config, pretty_print=True).decode())
             print("配置文件已写入：", self.output_dir + output_name)
 
-        self.topo_ele_xml = new_topo_ele
+        self.topo_ele_xml = raw_topo_ele
         self.node_ele_xml = new_node_ele
 
         # 构建下一跳端口表next_hop_ports[this_node][next_hpo] = (port1, port2, ...)

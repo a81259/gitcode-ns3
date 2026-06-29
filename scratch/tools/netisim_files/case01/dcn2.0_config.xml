@@ -117,10 +117,12 @@
                     </tp_buf>
                 </buf>
                 <ecn ecn_enable="0" fast_ecn_enable="0" ecn_cfg_th="88" ecn_th0_pct="1 1 1 1 1 1 1 1" ecn_th1_pct="4 4 4 4 4 4 4 4" ecn_maxp_pct="2 2 2 2 2 2 2 2" fast_ecn_cfg_th="180" fast_ecn_th0_pct="0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2" fast_ecn_th1_pct="0.8 0.7 0.6 0.5 0.45 0.4 0.35 0.3" fast_ecn_maxp_pct="0.8 0.8 0.8 0.8 0.8 0.8 0.8 0.8"/>
-                <credit_fc enable="true" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
-                    <crd_grp port="0..1" node_port_cell_txfree="4160"/>
+                <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..1" node_port_cell_txfree="4160"/>
                 </credit_fc>
+                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
+                    <crd_grp port="0..1" node_port_cell_txfree="51"/>
+                </cbfc_cfg>
             </template>
             <template index="1">
                 <pfc enable="true" dynamic="0">
@@ -135,10 +137,12 @@
                     </tp_buf>
                 </buf>
                 <ecn ecn_enable="0" fast_ecn_enable="0" ecn_cfg_th="88" ecn_th0_pct="1 1 1 1 1 1 1 1" ecn_th1_pct="4 4 4 4 4 4 4 4" ecn_maxp_pct="2 2 2 2 2 2 2 2" fast_ecn_cfg_th="180" fast_ecn_th0_pct="0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2" fast_ecn_th1_pct="0.8 0.7 0.6 0.5 0.45 0.4 0.35 0.3" fast_ecn_maxp_pct="0.8 0.8 0.8 0.8 0.8 0.8 0.8 0.8"/>
-                <credit_fc enable="true" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
-                    <crd_grp port="0..4" node_port_cell_txfree="4160"/>
+                <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..4" node_port_cell_txfree="4160"/>
                 </credit_fc>
+                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
+                    <crd_grp port="0..4" node_port_cell_txfree="51"/>
+                </cbfc_cfg>
             </template>
             <template index="2">
                 <pfc enable="true" dynamic="0">
@@ -153,10 +157,12 @@
                     </tp_buf>
                 </buf>
                 <ecn ecn_enable="0" fast_ecn_enable="0" ecn_cfg_th="88" ecn_th0_pct="1 1 1 1 1 1 1 1" ecn_th1_pct="4 4 4 4 4 4 4 4" ecn_maxp_pct="2 2 2 2 2 2 2 2" fast_ecn_cfg_th="180" fast_ecn_th0_pct="0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2" fast_ecn_th1_pct="0.8 0.7 0.6 0.5 0.45 0.4 0.35 0.3" fast_ecn_maxp_pct="0.8 0.8 0.8 0.8 0.8 0.8 0.8 0.8"/>
-                <credit_fc enable="true" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
-                    <crd_grp port="0..107" node_port_cell_txfree="4160"/>
+                <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..107" node_port_cell_txfree="4160"/>
                 </credit_fc>
+                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
+                    <crd_grp port="0..107" node_port_cell_txfree="51"/>
+                </cbfc_cfg>
             </template>
             <template index="3">
                 <pfc enable="true" dynamic="0">
@@ -171,7 +177,7 @@
                     </tp_buf>
                 </buf>
                 <ecn ecn_enable="0" fast_ecn_enable="0" ecn_cfg_th="88" ecn_th0_pct="1 1 1 1 1 1 1 1" ecn_th1_pct="4 4 4 4 4 4 4 4" ecn_maxp_pct="2 2 2 2 2 2 2 2" fast_ecn_cfg_th="180" fast_ecn_th0_pct="0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2" fast_ecn_th1_pct="0.8 0.7 0.6 0.5 0.45 0.4 0.35 0.3" fast_ecn_maxp_pct="0.8 0.8 0.8 0.8 0.8 0.8 0.8 0.8"/>
-                <credit_fc enable="true" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
+                <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..170" node_port_cell_txfree="4160"/>
                     <crd_grp port="0..170" node_port_cell_txfree="4160"/>
                 </credit_fc>
@@ -206,6 +212,9 @@
                     <decr_cfg decr_interval="4" rate_clamp="true" min_send_bw="100"/>
                     <incr_cfg incr_stage_thld="1" incr_time_interval="300" incr_byte_interval="2097088" rate_ai="5" rate_hai="50"/>
                 </dcqcn_rp>
+                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
+                    <crd_grp port="0..26" node_port_cell_txfree="51"/>
+                </cbfc_cfg>
                 <caqm enable="false" mtu_byte="4116" init_cw_mtu="64" pacing_enable="0" alpha="4" constant_cw="64" caqm_log_en="true"/>
             </template>
         </common_host>
@@ -214,7 +223,7 @@
             <ncc enable="false"/>
         </ft_node>
         <ft_host>
-            <credit_fc enable="true" router_mode="4" direct_topo="true" is_share_model="true" node_port_cell_txfree="4160" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32"/>
+            <credit_fc enable="false" router_mode="4" direct_topo="true" is_share_model="true" node_port_cell_txfree="4160" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32"/>
         </ft_host>
     </dcn_common_node_config>
     <packet_generator_config>
