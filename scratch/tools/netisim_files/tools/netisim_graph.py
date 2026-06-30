@@ -206,6 +206,11 @@ def _disable_credit_fc(root_config):
         ele.set("enable", "false")
 
 
+def _remove_cbfc_cfg(root_config):
+    for ele in root_config.xpath('//cbfc_cfg'):
+        ele.getparent().remove(ele)
+
+
 def _process_path_chunk(graph, path_finding_algo, node_pairs):
     paths = []
     for src, dst in tqdm(node_pairs, desc="算法{}寻找所有可用路径".format(path_finding_algo.__name__)):
@@ -304,6 +309,7 @@ class NetiSimGraph(nx.Graph):
             exit()
         else:
             pass
+        _remove_cbfc_cfg(root_config)
 
         old_node_ele = root_config.xpath('/dcn/dcn_network/node')[0]
         new_node_ele = etree.Element("node")

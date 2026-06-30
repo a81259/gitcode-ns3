@@ -59,8 +59,8 @@
             <grp type="ft2_node" node_id="3192..3287" port_num="171" config_template="2" comp_delay="225"/>
         </node>
         <topology>
-            <grp link_type="bi_direct" src_node="0..1367" src_port="0" dst_node="-1" dst_port="0..1367" bandwidth="4000" delay="10"/>
-            <grp link_type="bi_direct" src_node="0..1367" src_port="1" dst_node="1368..2735" dst_port="0" bandwidth="4000" delay="0"/>
+            <grp link_type="bi_direct" src_node="0..1367" src_port="0" dst_node="-1" dst_port="0..1367" bandwidth="2688" delay="10"/>
+            <grp link_type="bi_direct" src_node="0..1367" src_port="1" dst_node="1368..2735" dst_port="0" bandwidth="2688" delay="0"/>
             <grp link_type="bi_direct" src_node="1368" src_port="1" dst_node="2736" dst_port="0" bandwidth="56" delay="10"/>
             <grp link_type="bi_direct" src_node="1368" src_port="2..24" dst_node="2737..2759" dst_port="0" bandwidth="112" delay="10"/>
             <grp link_type="bi_direct" src_node="1369" src_port="1..24" dst_node="2736..2759" dst_port="1" bandwidth="112" delay="10"/>
@@ -2021,9 +2021,6 @@
                 <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..24" node_port_cell_txfree="4160"/>
                 </credit_fc>
-                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
-                    <crd_grp port="0..24" node_port_cell_txfree="51"/>
-                </cbfc_cfg>
             </template>
             <template index="1">
                 <pfc enable="true" dynamic="0">
@@ -2041,9 +2038,6 @@
                 <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..107" node_port_cell_txfree="4160"/>
                 </credit_fc>
-                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
-                    <crd_grp port="0..107" node_port_cell_txfree="51"/>
-                </cbfc_cfg>
             </template>
             <template index="2">
                 <pfc enable="true" dynamic="0">
@@ -2061,9 +2055,6 @@
                 <credit_fc enable="false" is_share_model="true" tot_vl_num="8" flit_len="20" n_flit_per_cell="4" ret_cell_max="65535" ret_cell_grty="2" pkt_attach_crdfc_en="true" crdfc_pkt_ret_cell_grty="32">
                     <crd_grp port="0..170" node_port_cell_txfree="4160"/>
                 </credit_fc>
-                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
-                    <crd_grp port="0..170" node_port_cell_txfree="51"/>
-                </cbfc_cfg>
             </template>
         </common_node>
         <common_host>
@@ -2095,9 +2086,6 @@
                     <decr_cfg decr_interval="4" rate_clamp="true" min_send_bw="100"/>
                     <incr_cfg incr_stage_thld="1" incr_time_interval="300" incr_byte_interval="2097088" rate_ai="5" rate_hai="50"/>
                 </dcqcn_rp>
-                <cbfc_cfg cbfc_en="true" vl_num_per_port="8" vl_rsv_crdt="51" vl_share_crdt="260">
-                    <crd_grp port="0..1" node_port_cell_txfree="51"/>
-                </cbfc_cfg>
                 <caqm enable="false" mtu_byte="4116" init_cw_mtu="64" pacing_enable="0" alpha="4" constant_cw="64" caqm_log_en="true"/>
             </template>
         </common_host>
