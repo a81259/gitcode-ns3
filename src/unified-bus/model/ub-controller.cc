@@ -79,8 +79,8 @@ bool UbController::CreateTp(uint32_t src, uint32_t dest, uint8_t sport,
         currentNode = CreateObject<Node> ();
     }
 
-    Ipv4Address sip = NodeIdToIp(src);
-    Ipv4Address dip = NodeIdToIp(dest);
+    Ipv4Address sip = NodeIdToIp(src, sport);
+    Ipv4Address dip = NodeIdToIp(dest, dport);
 
     Ptr<UbTransportChannel> tp = CreateObject<UbTransportChannel>();
     tp->SetUbTransport(currentNode->GetId(), src, dest, srcTpn, dstTpn, 0, static_cast<uint8_t>(priority),

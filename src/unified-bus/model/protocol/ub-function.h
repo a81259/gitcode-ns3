@@ -89,6 +89,7 @@ namespace ns3 {
         static TypeId GetTypeId(void);
         UbJetty();
         Ptr<UbWqeSegment> GetNextWqeSegment();
+        bool PeekNextWqeId(uint32_t& wqeId);
         bool ProcessWqeSegmentComplete(uint32_t taSsnFin);
         void RightShiftBitset(uint32_t shiftCount);
 

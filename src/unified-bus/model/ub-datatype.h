@@ -30,7 +30,7 @@ const uint8_t UB_PRIORITY_MAX = UB_PRIORITY_LOW;    // 最大优先级值
 const uint32_t UB_JETTY_TASSN_OOO_THRESHOLD = 2048; // Jetty分段乱序阈值（用于乱序缓存等）
 
 // WQE相关常量
-const uint32_t UB_WQE_TA_SEGMENT_BYTE = 64 * 1024;  // TA层分段大小 (64KB)
+const uint32_t UB_WQE_TA_SEGMENT_BYTE = 16 * 1024;  // TA层分段大小 (16KB)
 const uint32_t UB_MTU_BYTE = 4 * 1024;              // 最大传输单元（TP层）
 
 // Credit相关常量

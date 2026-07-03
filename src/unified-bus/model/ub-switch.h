@@ -29,7 +29,7 @@ enum class FcType {
     NONE  // No flow control
 };
 
-using VirtualOutputQueue_t = std::vector<std::vector<std::unordered_map<uint32_t, Ptr<UbPacketQueue>>>>;
+using VirtualOutputQueue_t = std::vector<std::vector<std::vector<Ptr<UbPacketQueue>>>>;
 
 typedef enum {
     UB_SWITCH,
@@ -94,6 +94,8 @@ public:
     void RegisterTpWithAllocator(Ptr<UbIngressQueue> tp, uint32_t outPort, uint32_t priority);
     void PushPacketToVoq(Ptr<Packet> p, uint32_t outPort, uint32_t priority, uint32_t inPort);
     static bool IsValidVoqIndices(uint32_t outPort, uint32_t priority, uint32_t inPort, uint32_t portsNum, uint32_t vlNum);
+    uint64_t GetAllocatedVoqCountForTest() const;
+    bool HasVoqForTest(uint32_t outPort, uint32_t priority, uint32_t inPort) const;
     void RemoveTpFromAllocator(Ptr<UbIngressQueue> tp);
     Ptr<UbSwitchAllocator> GetAllocator();
     Ipv4Address GetNodeIpv4Addr(){return m_Ipv4Addr;}
@@ -120,7 +122,6 @@ public:
     Ptr<UbQueueManager> GetQueueManager();    // Queue Manage Unit
     void SendPacket(Ptr<Packet> p, uint32_t inPort, uint32_t outPort, uint32_t priority);
     void SendControlFrame(Ptr<Packet> packet, uint32_t portId);
-    uint64_t GetAllocatedVoqCountForTest() const;
 
 private:
     struct BufferOverrideConfig {
@@ -149,6 +150,7 @@ private:
 
     void VoqInit();
     void RegisterVoqsWithAllocator();
+    Ptr<UbPacketQueue> GetOrCreateVoq(uint32_t outPort, uint32_t priority, uint32_t inPort);
     void ReceivePacket(Ptr<UbPort> port, Ptr<Packet> p);
 
     UbPacketType_t GetPacketType(Ptr<Packet> packet);
@@ -168,7 +170,6 @@ private:
     void InitRoutingProcess(Ptr<Node> node);
     void ApplyLocalQueueManagerConfig();
     void ApplyLocalPortFlowControlConfig(Ptr<UbPort> port);
-    Ptr<UbPacketQueue> GetOrCreateVoq(uint32_t outPort, uint32_t priority, uint32_t inPort);
 
     Ptr<UbQueueManager> m_queueManager;   // Memory Management Unit
     Ptr<UbCongestionControl> m_congestionCtrl;

@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <algorithm>
 #include <limits>
+#include <numeric>
 #include "ns3/ub-controller.h"
 #include "ns3/ub-header.h"
+#include "ns3/ub-link.h"
 #include "ns3/ub-network-address.h"
 #include "ns3/ub-port.h"
 #include "ns3/ub-queue-manager.h"
 #include "ns3/ub-routing-process.h"
+#include "ns3/ub-switch.h"
 #include "ns3/udp-header.h"
 #include "ns3/ipv4-header.h"
 using namespace utils;
@@ -14,6 +17,96 @@ using namespace utils;
 namespace ns3 {
 NS_OBJECT_ENSURE_REGISTERED(UbRoutingProcess);
 NS_LOG_COMPONENT_DEFINE("UbRoutingProcess");
+
+namespace
+{
+constexpr uint32_t kPrimaryRangeRoutePort = std::numeric_limits<uint32_t>::max();
+constexpr uint64_t kDefaultPacketSprayPortWeight = 1;
+
+struct PortLinkInfo
+{
+    Ptr<UbPort> localPort;
+    Ptr<UbPort> peerPort;
+    uint32_t peerNodeId{std::numeric_limits<uint32_t>::max()};
+    uint16_t peerPortId{UINT16_MAX};
+    uint64_t bandwidth{kDefaultPacketSprayPortWeight};
+    bool valid{false};
+};
+
+uint64_t
+SafePortBitRate(Ptr<UbPort> port)
+{
+    if (port == nullptr)
+    {
+        return kDefaultPacketSprayPortWeight;
+    }
+    uint64_t bitRate = port->GetDataRate().GetBitRate();
+    return bitRate == 0 ? kDefaultPacketSprayPortWeight : bitRate;
+}
+
+PortLinkInfo
+GetPortLinkInfo(uint32_t nodeId, uint16_t outPort)
+{
+    PortLinkInfo info;
+    if (nodeId >= NodeList::GetNNodes())
+    {
+        return info;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    if (node == nullptr || outPort >= node->GetNDevices())
+    {
+        return info;
+    }
+
+    info.localPort = DynamicCast<UbPort>(node->GetDevice(outPort));
+    if (info.localPort == nullptr)
+    {
+        return info;
+    }
+
+    Ptr<UbLink> link = DynamicCast<UbLink>(info.localPort->GetChannel());
+    if (link == nullptr)
+    {
+        info.bandwidth = SafePortBitRate(info.localPort);
+        return info;
+    }
+
+    info.peerPort = link->GetDestination(info.localPort);
+    if (info.peerPort == nullptr || info.peerPort->GetNode() == nullptr)
+    {
+        info.bandwidth = SafePortBitRate(info.localPort);
+        return info;
+    }
+
+    info.peerNodeId = info.peerPort->GetNode()->GetId();
+    info.peerPortId = static_cast<uint16_t>(info.peerPort->GetIfIndex());
+    info.bandwidth = std::min(SafePortBitRate(info.localPort), SafePortBitRate(info.peerPort));
+    info.valid = true;
+    return info;
+}
+
+Ptr<UbRoutingProcess>
+GetRoutingProcessForNode(uint32_t nodeId)
+{
+    if (nodeId >= NodeList::GetNNodes())
+    {
+        return nullptr;
+    }
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    if (node == nullptr)
+    {
+        return nullptr;
+    }
+    Ptr<UbSwitch> ubSwitch = node->GetObject<UbSwitch>();
+    if (ubSwitch == nullptr)
+    {
+        return nullptr;
+    }
+    return ubSwitch->GetRoutingProcess();
+}
+
+}
 
 /*-----------------------------------------UbRoutingProcess----------------------------------------------*/
 TypeId UbRoutingProcess::GetTypeId(void)
@@ -28,12 +121,47 @@ TypeId UbRoutingProcess::GetTypeId(void)
                     MakeEnumAccessor<UbRoutingProcess::UbRoutingAlgorithm>(
                                     &UbRoutingProcess::m_routingAlgorithm),
                     MakeEnumChecker(UbRoutingAlgorithm::HASH, "HASH",
-                                    UbRoutingAlgorithm::ADAPTIVE, "ADAPTIVE"));
+                                    UbRoutingAlgorithm::ADAPTIVE, "ADAPTIVE"))
+        .AddAttribute("BwWeightedPacketSpray",
+                      "Use bandwidth-weighted packet spray. False keeps original packet spray; "
+                      "true uses a static end-to-end topology oracle.",
+                      BooleanValue(false),
+                      MakeBooleanAccessor(&UbRoutingProcess::m_bwWeightedPacketSpray),
+                      MakeBooleanChecker());
     return tid;
 }
 
 UbRoutingProcess::UbRoutingProcess()
 {
+}
+
+bool
+UbRoutingProcess::GetDefaultBwWeightedPacketSpray()
+{
+    TypeId tid = GetTypeId();
+    TypeId::AttributeInformation info;
+    if (!tid.LookupAttributeByName("BwWeightedPacketSpray", &info))
+    {
+        return false;
+    }
+
+    const std::string value = info.initialValue->SerializeToString(info.checker);
+    return value == "true" || value == "1";
+}
+
+std::shared_ptr<std::vector<uint16_t> >
+UbRoutingProcess::GetOrCreatePortSet(const std::vector<uint16_t>& ports)
+{
+    std::vector<uint16_t> normalized = normalizePorts(ports);
+    auto it = m_portSetPool.find(normalized);
+    if (it != m_portSetPool.end())
+    {
+        return it->second;
+    }
+
+    auto sharedPorts = std::make_shared<std::vector<uint16_t>>(normalized);
+    m_portSetPool[normalized] = sharedPorts;
+    return sharedPorts;
 }
 
 void UbRoutingProcess::AddShortestRoute(const uint32_t destIP, const std::vector<uint16_t>& outPorts)
@@ -45,19 +173,7 @@ void UbRoutingProcess::AddShortestRoute(const uint32_t destIP, const std::vector
         target.insert(target.end(), (*(itRt->second)).begin(), (*(itRt->second)).end());
     }
     target.insert(target.end(), outPorts.begin(), outPorts.end());
-    std::vector<uint16_t> normalized = normalizePorts(target);
-    
-    // 查找或创建共享端口集合
-    auto it = m_portSetPool.find(normalized);
-    if (it != m_portSetPool.end()) {
-        //  已存在相同端口集合，共享指针
-        m_rtShortest[destIP] = it->second;
-    } else {
-        // 创建新端口集合并加入池中
-        auto sharedPorts = std::make_shared<std::vector<uint16_t>>(normalized);
-        m_portSetPool[normalized] = sharedPorts;
-        m_rtShortest[destIP] = sharedPorts;
-    }
+    m_rtShortest[destIP] = GetOrCreatePortSet(target);
 }
 
 void UbRoutingProcess::AddOtherRoute(const uint32_t destIP, const std::vector<uint16_t>& outPorts)
@@ -69,40 +185,183 @@ void UbRoutingProcess::AddOtherRoute(const uint32_t destIP, const std::vector<ui
         target.insert(target.end(), (*(itRt->second)).begin(), (*(itRt->second)).end());
     }
     target.insert(target.end(), outPorts.begin(), outPorts.end());
-    std::vector<uint16_t> normalized = normalizePorts(target);
-    
-    // 查找或创建共享端口集合
-    auto it = m_portSetPool.find(normalized);
-    if (it != m_portSetPool.end()) {
-        // 已存在相同端口集合，共享指针
-        m_rtOther[destIP] = it->second;
-    } else {
-        // 创建新端口集合并加入池中
-        auto sharedPorts = std::make_shared<std::vector<uint16_t>>(normalized);
-        m_portSetPool[normalized] = sharedPorts;
-        m_rtOther[destIP] = sharedPorts;
+    m_rtOther[destIP] = GetOrCreatePortSet(target);
+}
+
+void
+UbRoutingProcess::AddRouteRange(RouteRangeByPortMap& routeRangesByPort,
+                                uint32_t startNodeId,
+                                uint32_t endNodeId,
+                                uint32_t dstPortId,
+                                const std::vector<uint16_t>& outPorts)
+{
+    AddRouteRangeToMap(routeRangesByPort[dstPortId], startNodeId, endNodeId, outPorts);
+}
+
+void
+UbRoutingProcess::AddRouteRangeToMap(RouteRangeMap& routeRanges,
+                                     uint32_t startNodeId,
+                                     uint32_t endNodeId,
+                                     const std::vector<uint16_t>& outPorts)
+{
+    NS_ASSERT_MSG(startNodeId <= endNodeId, "route range start must not exceed end");
+
+    auto valueAt = [&routeRanges](uint32_t nodeId) -> std::shared_ptr<std::vector<uint16_t> > {
+        auto it = routeRanges.upper_bound(nodeId);
+        if (it == routeRanges.begin())
+        {
+            return nullptr;
+        }
+        --it;
+        return it->second;
+    };
+
+    if (routeRanges.find(startNodeId) == routeRanges.end())
+    {
+        routeRanges[startNodeId] = valueAt(startNodeId);
+    }
+    if (endNodeId != std::numeric_limits<uint32_t>::max())
+    {
+        const uint32_t afterEnd = endNodeId + 1;
+        if (routeRanges.find(afterEnd) == routeRanges.end())
+        {
+            routeRanges[afterEnd] = valueAt(afterEnd);
+        }
+    }
+
+    for (auto it = routeRanges.lower_bound(startNodeId);
+         it != routeRanges.end() && it->first <= endNodeId;
+         ++it)
+    {
+        std::vector<uint16_t> target;
+        if (it->second != nullptr)
+        {
+            target.insert(target.end(), it->second->begin(), it->second->end());
+        }
+        target.insert(target.end(), outPorts.begin(), outPorts.end());
+        it->second = GetOrCreatePortSet(target);
     }
 }
 
-void UbRoutingProcess::GetShortestOutPorts(const uint32_t destIP, std::vector<uint16_t>& outPorts)
+void
+UbRoutingProcess::AddShortestRouteRange(uint32_t startNodeId,
+                                        uint32_t endNodeId,
+                                        const std::vector<uint16_t>& outPorts)
+{
+    AddShortestRouteRange(startNodeId, endNodeId, 0, outPorts);
+}
+
+void
+UbRoutingProcess::AddOtherRouteRange(uint32_t startNodeId,
+                                     uint32_t endNodeId,
+                                     const std::vector<uint16_t>& outPorts)
+{
+    AddOtherRouteRange(startNodeId, endNodeId, 0, outPorts);
+}
+
+void
+UbRoutingProcess::AddShortestRouteRange(uint32_t startNodeId,
+                                        uint32_t endNodeId,
+                                        uint32_t dstPortId,
+                                        const std::vector<uint16_t>& outPorts)
+{
+    AddRouteRange(m_rtShortestRanges,
+                  startNodeId,
+                  endNodeId,
+                  kPrimaryRangeRoutePort,
+                  outPorts);
+    AddRouteRange(m_rtShortestRanges, startNodeId, endNodeId, dstPortId, outPorts);
+}
+
+void
+UbRoutingProcess::AddOtherRouteRange(uint32_t startNodeId,
+                                     uint32_t endNodeId,
+                                     uint32_t dstPortId,
+                                     const std::vector<uint16_t>& outPorts)
+{
+    AddRouteRange(m_rtOtherRanges,
+                  startNodeId,
+                  endNodeId,
+                  kPrimaryRangeRoutePort,
+                  outPorts);
+    AddRouteRange(m_rtOtherRanges, startNodeId, endNodeId, dstPortId, outPorts);
+}
+
+bool
+UbRoutingProcess::GetRangeOutPortsFromMap(const RouteRangeMap& routeRanges,
+                                          uint32_t nodeId,
+                                          std::vector<uint16_t>& outPorts) const
+{
+    if (routeRanges.empty())
+    {
+        return false;
+    }
+
+    auto it = routeRanges.upper_bound(nodeId);
+    if (it == routeRanges.begin())
+    {
+        return false;
+    }
+    --it;
+    if (it->second == nullptr)
+    {
+        return false;
+    }
+    outPorts.insert(outPorts.end(), it->second->begin(), it->second->end());
+    return true;
+}
+
+void
+UbRoutingProcess::GetRangeOutPorts(const RouteRangeByPortMap& routeRangesByPort,
+                                   const uint32_t destIP,
+                                   std::vector<uint16_t>& outPorts) const
+{
+    if (routeRangesByPort.empty())
+    {
+        return;
+    }
+
+    const Ipv4Address ip(destIP);
+    const uint32_t nodeId = utils::IpToNodeId(ip);
+    auto primaryIt = routeRangesByPort.find(kPrimaryRangeRoutePort);
+    if (primaryIt != routeRangesByPort.end() &&
+        GetRangeOutPortsFromMap(primaryIt->second, nodeId, outPorts))
+    {
+        return;
+    }
+
+    const uint32_t lastByte = destIP & 0x000000ff;
+    const uint32_t portId = lastByte == 0 ? kPrimaryRangeRoutePort : lastByte - 1;
+    auto portIt = routeRangesByPort.find(portId);
+    if (portIt != routeRangesByPort.end())
+    {
+        GetRangeOutPortsFromMap(portIt->second, nodeId, outPorts);
+    }
+}
+
+void UbRoutingProcess::GetShortestOutPorts(const uint32_t destIP, std::vector<uint16_t>& outPorts) const
 {
     outPorts.clear();
     auto it = m_rtShortest.find(destIP);
     if (it != m_rtShortest.end()) {
         outPorts.insert(outPorts.end(), (*(it->second)).begin(), (*(it->second)).end());
+        return;
     }
+    GetRangeOutPorts(m_rtShortestRanges, destIP, outPorts);
 }
 
-void UbRoutingProcess::GetOtherOutPorts(const uint32_t destIP, std::vector<uint16_t>& outPorts)
+void UbRoutingProcess::GetOtherOutPorts(const uint32_t destIP, std::vector<uint16_t>& outPorts) const
 {
     outPorts.clear();
     auto it = m_rtOther.find(destIP);
     if (it != m_rtOther.end()) {
         outPorts.insert(outPorts.end(), (*(it->second)).begin(), (*(it->second)).end());
+        return;
     }
+    GetRangeOutPorts(m_rtOtherRanges, destIP, outPorts);
 }
 
-void UbRoutingProcess::GetShortestCandidates(uint32_t &dip, uint16_t inPortId, std::vector<uint16_t>& outPorts)
+void UbRoutingProcess::GetShortestCandidates(uint32_t &dip, uint16_t inPortId, std::vector<uint16_t>& outPorts) const
 {
     // 1. 首先基于目的节点的port地址进行选择
     GetShortestOutPorts(dip, outPorts);
@@ -124,7 +383,7 @@ void UbRoutingProcess::GetShortestCandidates(uint32_t &dip, uint16_t inPortId, s
     }
 }
 
-void UbRoutingProcess::GetNonShortestCandidates(uint32_t &dip, uint16_t inPortId, std::vector<uint16_t>& outPorts)
+void UbRoutingProcess::GetNonShortestCandidates(uint32_t &dip, uint16_t inPortId, std::vector<uint16_t>& outPorts) const
 {
     // 1. 首先基于目的节点的port地址进行选择
     GetOtherOutPorts(dip, outPorts);
@@ -152,10 +411,14 @@ const std::vector<uint16_t> UbRoutingProcess::GetAllOutPorts(const uint32_t dest
     auto it = m_rtOther.find(destIP);
     if (it != m_rtOther.end()) {
         res.insert(res.end(), (*(it->second)).begin(), (*(it->second)).end());
+    } else {
+        GetRangeOutPorts(m_rtOtherRanges, destIP, res);
     }
     it = m_rtShortest.find(destIP);
     if (it != m_rtShortest.end()) {
         res.insert(res.end(), (*(it->second)).begin(), (*(it->second)).end());
+    } else {
+        GetRangeOutPorts(m_rtShortestRanges, destIP, res);
     }
     return res;
 }
@@ -231,7 +494,12 @@ int UbRoutingProcess::SelectAdaptiveOutPort(RoutingKey &rtKey, const std::vector
     return selectedPort;
 }
 
-uint64_t UbRoutingProcess::CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint8_t priority, uint32_t salt)
+uint64_t UbRoutingProcess::CalcHash(uint32_t sip,
+                                    uint32_t dip,
+                                    uint16_t sport,
+                                    uint16_t dport,
+                                    uint8_t priority,
+                                    uint32_t salt)
 {
     uint8_t buf[17];
     buf[0] = (sip >> 24) & 0xff;
@@ -256,15 +524,333 @@ uint64_t UbRoutingProcess::CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, 
     return hash;
 }
 
-int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey, const std::vector<uint16_t>& shortestPorts, 
-                                     const std::vector<uint16_t>& nonShortestPorts, bool &selectedShortestPath)
+uint64_t
+UbRoutingProcess::GetLocalPortWeight(uint16_t outPort) const
+{
+    if (!m_hasNodeId || m_nodeId >= NodeList::GetNNodes()) {
+        return kDefaultPacketSprayPortWeight;
+    }
+
+    Ptr<Node> node = NodeList::GetNode(m_nodeId);
+    if (node == nullptr || outPort >= node->GetNDevices()) {
+        return kDefaultPacketSprayPortWeight;
+    }
+
+    Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(outPort));
+    if (port == nullptr) {
+        return kDefaultPacketSprayPortWeight;
+    }
+
+    const uint64_t bitRate = port->GetDataRate().GetBitRate();
+    return bitRate == 0 ? kDefaultPacketSprayPortWeight : bitRate;
+}
+
+uint64_t
+UbRoutingProcess::GetPacketSprayPortWeight(uint16_t outPort,
+                                           uint32_t destIP,
+                                           uint16_t inPortId,
+                                           bool useShortestPath) const
+{
+    if (m_bwWeightedPacketSpray)
+    {
+        const uint64_t weight =
+            GetGlobalOracleOutPortWeight(outPort, destIP, inPortId, useShortestPath);
+        return weight == 0 ? kDefaultPacketSprayPortWeight : weight;
+    }
+    return kDefaultPacketSprayPortWeight;
+}
+
+uint64_t
+UbRoutingProcess::GetGlobalOracleOutPortWeight(uint16_t outPort,
+                                               uint32_t destIP,
+                                               uint16_t inPortId,
+                                               bool useShortestPath) const
+{
+    std::set<std::tuple<uint32_t, uint32_t, uint16_t, bool>> visiting;
+    return GetGlobalOracleOutPortWeight(outPort, destIP, inPortId, useShortestPath, visiting);
+}
+
+uint64_t
+UbRoutingProcess::GetGlobalOracleOutPortWeight(
+    uint16_t outPort,
+    uint32_t destIP,
+    uint16_t inPortId,
+    bool useShortestPath,
+    std::set<std::tuple<uint32_t, uint32_t, uint16_t, bool>>& visiting) const
+{
+    (void)inPortId;
+    if (!m_hasNodeId)
+    {
+        return kDefaultPacketSprayPortWeight;
+    }
+
+    const PortLinkInfo linkInfo = GetPortLinkInfo(m_nodeId, outPort);
+    if (!linkInfo.valid)
+    {
+        return GetLocalPortWeight(outPort);
+    }
+
+    const uint32_t dstNodeId = utils::IpToNodeId(Ipv4Address(destIP));
+    if (linkInfo.peerNodeId == dstNodeId)
+    {
+        return linkInfo.bandwidth;
+    }
+
+    Ptr<UbRoutingProcess> downstreamRt = GetRoutingProcessForNode(linkInfo.peerNodeId);
+    if (downstreamRt == nullptr)
+    {
+        return 0;
+    }
+
+    const uint64_t downstreamCapacity =
+        downstreamRt->GetGlobalOracleTotalCapacity(destIP,
+                                                   linkInfo.peerPortId,
+                                                   useShortestPath,
+                                                   visiting);
+    if (downstreamCapacity == 0)
+    {
+        return 0;
+    }
+    return std::min(linkInfo.bandwidth, downstreamCapacity);
+}
+
+uint64_t
+UbRoutingProcess::GetGlobalOracleTotalCapacity(
+    uint32_t destIP,
+    uint16_t inPortId,
+    bool useShortestPath,
+    std::set<std::tuple<uint32_t, uint32_t, uint16_t, bool>>& visiting) const
+{
+    if (!m_hasNodeId)
+    {
+        return 0;
+    }
+
+    const uint32_t dstNodeId = utils::IpToNodeId(Ipv4Address(destIP));
+    if (m_nodeId == dstNodeId)
+    {
+        return std::numeric_limits<uint64_t>::max();
+    }
+
+    const auto key = std::make_tuple(m_nodeId, destIP, inPortId, useShortestPath);
+    auto cacheIt = m_globalOracleCache.find(key);
+    if (cacheIt != m_globalOracleCache.end())
+    {
+        uint64_t cachedTotal = 0;
+        for (const auto& [_, weight] : cacheIt->second)
+        {
+            cachedTotal += weight;
+        }
+        return cachedTotal;
+    }
+
+    if (visiting.find(key) != visiting.end())
+    {
+        return 0;
+    }
+    visiting.insert(key);
+
+    uint32_t shortestDip = destIP;
+    std::vector<uint16_t> shortestPorts;
+    GetShortestCandidates(shortestDip, inPortId, shortestPorts);
+
+    std::vector<uint16_t> nonShortestPorts;
+    if (!useShortestPath)
+    {
+        uint32_t nonShortestDip = destIP;
+        GetNonShortestCandidates(nonShortestDip, inPortId, nonShortestPorts);
+    }
+
+    std::map<uint16_t, uint64_t> portWeights;
+    auto addCandidate = [this, destIP, inPortId, useShortestPath, &visiting, &portWeights](
+                            uint16_t outPort) {
+        if (portWeights.find(outPort) != portWeights.end())
+        {
+            return;
+        }
+        portWeights[outPort] =
+            GetGlobalOracleOutPortWeight(outPort, destIP, inPortId, useShortestPath, visiting);
+    };
+
+    for (uint16_t outPort : shortestPorts)
+    {
+        addCandidate(outPort);
+    }
+    for (uint16_t outPort : nonShortestPorts)
+    {
+        addCandidate(outPort);
+    }
+
+    visiting.erase(key);
+    m_globalOracleCache[key] = portWeights;
+
+    uint64_t totalCapacity = 0;
+    for (const auto& [_, weight] : portWeights)
+    {
+        totalCapacity += weight;
+    }
+    return totalCapacity;
+}
+
+uint64_t
+UbRoutingProcess::GetPacketSprayWeightGcd(const std::vector<uint16_t>& shortestPorts,
+                                          const std::vector<uint16_t>& nonShortestPorts,
+                                          uint32_t destIP,
+                                          uint16_t inPortId,
+                                          bool useShortestPath) const
+{
+    uint64_t weightGcd = 0;
+    auto updateGcd = [this, destIP, inPortId, useShortestPath, &weightGcd](uint16_t outPort) {
+        const uint64_t weight = GetPacketSprayPortWeight(outPort,
+                                                         destIP,
+                                                         inPortId,
+                                                         useShortestPath);
+        if (weight == 0) {
+            return;
+        }
+        weightGcd = weightGcd == 0 ? weight : std::gcd(weightGcd, weight);
+    };
+
+    for (uint16_t outPort : shortestPorts) {
+        updateGcd(outPort);
+    }
+    for (uint16_t outPort : nonShortestPorts) {
+        updateGcd(outPort);
+    }
+
+    return weightGcd == 0 ? kDefaultPacketSprayPortWeight : weightGcd;
+}
+
+uint64_t
+UbRoutingProcess::GetPacketSprayTotalNormalizedWeight(
+    const std::vector<uint16_t>& shortestPorts,
+    const std::vector<uint16_t>& nonShortestPorts,
+    uint32_t destIP,
+    uint16_t inPortId,
+    bool useShortestPath) const
+{
+    const uint64_t weightGcd = GetPacketSprayWeightGcd(shortestPorts,
+                                                       nonShortestPorts,
+                                                       destIP,
+                                                       inPortId,
+                                                       useShortestPath);
+    uint64_t totalWeight = 0;
+    auto addWeight = [this, weightGcd, destIP, inPortId, useShortestPath, &totalWeight](
+                         uint16_t outPort) {
+        const uint64_t weight = GetPacketSprayPortWeight(outPort,
+                                                         destIP,
+                                                         inPortId,
+                                                         useShortestPath);
+        if (weight == 0) {
+            return;
+        }
+        totalWeight += weight / weightGcd;
+    };
+
+    for (uint16_t outPort : shortestPorts) {
+        addWeight(outPort);
+    }
+    for (uint16_t outPort : nonShortestPorts) {
+        addWeight(outPort);
+    }
+    return totalWeight == 0 ? kDefaultPacketSprayPortWeight : totalWeight;
+}
+
+uint64_t
+UbRoutingProcess::GetPacketSprayStride(uint64_t flowBase, uint64_t cycleLength) const
+{
+    if (cycleLength <= 1) {
+        return 1;
+    }
+
+    uint64_t stride = flowBase % cycleLength;
+    if (stride == 0) {
+        stride = 1;
+    }
+    while (std::gcd(stride, cycleLength) != 1) {
+        stride++;
+        if (stride >= cycleLength) {
+            stride = 1;
+        }
+    }
+    return stride;
+}
+
+int
+UbRoutingProcess::SelectWeightedPacketSprayOutPort(uint64_t hash64,
+                                                   const std::vector<uint16_t>& shortestPorts,
+                                                   const std::vector<uint16_t>& nonShortestPorts,
+                                                   uint32_t destIP,
+                                                   uint16_t inPortId,
+                                                   bool useShortestPath,
+                                                   bool& selectedShortestPath) const
+{
+    const uint64_t weightGcd = GetPacketSprayWeightGcd(shortestPorts,
+                                                       nonShortestPorts,
+                                                       destIP,
+                                                       inPortId,
+                                                       useShortestPath);
+    auto normalizedWeight = [this, weightGcd, destIP, inPortId, useShortestPath](uint16_t outPort) {
+        const uint64_t weight = GetPacketSprayPortWeight(outPort,
+                                                         destIP,
+                                                         inPortId,
+                                                         useShortestPath);
+        return weight == 0 ? 0 : weight / weightGcd;
+    };
+
+    uint64_t totalWeight = 0;
+    for (uint16_t outPort : shortestPorts) {
+        totalWeight += normalizedWeight(outPort);
+    }
+    for (uint16_t outPort : nonShortestPorts) {
+        totalWeight += normalizedWeight(outPort);
+    }
+    if (totalWeight == 0) {
+        return -1;
+    }
+
+    uint64_t weightedIdx = hash64 % totalWeight;
+    auto selectFromPorts =
+        [&weightedIdx, &normalizedWeight, &selectedShortestPath](
+            const std::vector<uint16_t>& ports,
+            bool isShortestPath,
+            int& selectedPort) {
+            for (uint16_t outPort : ports) {
+                const uint64_t weight = normalizedWeight(outPort);
+                if (weightedIdx < weight) {
+                    selectedShortestPath = isShortestPath;
+                    selectedPort = outPort;
+                    return true;
+                }
+                weightedIdx -= weight;
+            }
+            return false;
+        };
+
+    int selectedPort = -1;
+    if (selectFromPorts(shortestPorts, true, selectedPort)) {
+        return selectedPort;
+    }
+    if (selectFromPorts(nonShortestPorts, false, selectedPort)) {
+        return selectedPort;
+    }
+    return -1;
+}
+
+int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey,
+                                     const std::vector<uint16_t>& shortestPorts, 
+                                     const std::vector<uint16_t>& nonShortestPorts,
+                                     bool &selectedShortestPath,
+                                     uint16_t inPort)
 {
     uint32_t sip = rtKey.sip;
     uint32_t dip = rtKey.dip;
     uint16_t sport = rtKey.sport;
     uint16_t dport = rtKey.dport;
     uint8_t priority = rtKey.priority;
+    bool useShortestPath = rtKey.useShortestPath;
     bool usePacketSpray = rtKey.usePacketSpray;
+    const bool useWeightedPacketSpray = usePacketSpray && m_bwWeightedPacketSpray;
     // hash key用本地ip做盐值，使同一条流/包在不同交换机上会有不同的hash
     uint32_t salt = utils::NodeIdToIp(m_nodeId).Get();
 
@@ -276,10 +862,29 @@ int UbRoutingProcess::SelectOutPort(RoutingKey &rtKey, const std::vector<uint16_
 
     uint64_t hash64 = 0;
     if (usePacketSpray) {
-        // Packet spray should stay exactly even over time for each flow while still
-        // randomizing the starting port across different flows.
+        // Packet spray changes selection per packet while keeping an exact
+        // flow-local weighted cycle. The stride is flow-specific and coprime
+        // with the cycle length, so concurrent flows do not all walk ports in
+        // the same lockstep order.
         const uint64_t flowBase = CalcHash(sip, dip, 0, dport, priority, salt);
-        hash64 = flowBase + sport;
+        const uint64_t cycleLength = useWeightedPacketSpray
+                                         ? GetPacketSprayTotalNormalizedWeight(shortestPorts,
+                                                                               nonShortestPorts,
+                                                                               dip,
+                                                                               inPort,
+                                                                               useShortestPath)
+                                         : totalSize;
+        const uint64_t stride = GetPacketSprayStride(flowBase, cycleLength);
+        hash64 = flowBase + stride * sport;
+        if (useWeightedPacketSpray) {
+            return SelectWeightedPacketSprayOutPort(hash64,
+                                                    shortestPorts,
+                                                    nonShortestPorts,
+                                                    dip,
+                                                    inPort,
+                                                    useShortestPath,
+                                                    selectedShortestPath);
+        }
     } else {
         // usePacketSpray == LB_MODE_PER_FLOW
         hash64 = CalcHash(sip, dip, 0, 0, priority, salt);
@@ -339,7 +944,9 @@ int UbRoutingProcess::GetOutPort(RoutingKey &rtKey, bool &selectedShortestPath, 
     // 基于路由算法选择出端口，同时获得 selectedShortestPath 标记
     int outPortId = -1;
     if(m_routingAlgorithm == UbRoutingProcess::UbRoutingAlgorithm::HASH){
-        outPortId = SelectOutPort(rtKey, shortestPorts, nonShortestPorts, selectedShortestPath);
+        rtKey.dip = tempDip;
+        outPortId = SelectOutPort(rtKey, shortestPorts, nonShortestPorts, selectedShortestPath, inPort);
+        rtKey.dip = dip;
     } else if(m_routingAlgorithm == UbRoutingProcess::UbRoutingAlgorithm::ADAPTIVE){
         outPortId = SelectAdaptiveOutPort(rtKey, shortestPorts, nonShortestPorts, selectedShortestPath);
     }

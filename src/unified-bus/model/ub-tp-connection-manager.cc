@@ -2,6 +2,7 @@
 #include "ns3/ub-tp-connection-manager.h"
 #include "ns3/ub-controller.h"
 #include "ns3/node-list.h"
+#include "ns3/ub-routing-process.h"
 #include "ns3/ub-utils.h"
 
 namespace {
@@ -13,7 +14,8 @@ void CreateDeviceTpOnNode(uint32_t nodeId,
                           uint8_t dport,
                           uint32_t priority,
                           uint32_t srcTpn,
-                          uint32_t dstTpn)
+                          uint32_t dstTpn,
+                          uint64_t schedulingWeight)
 {
     auto controller = ns3::NodeList::GetNode(nodeId)->GetObject<ns3::UbController>();
     NS_ASSERT_MSG(controller != nullptr, "UbController not found on target node");
@@ -26,12 +28,58 @@ void CreateDeviceTpOnNode(uint32_t nodeId,
                          srcTpn,
                          dstTpn,
                          congestionCtrl);
+    auto tp = controller->GetTp(srcTpn);
+    if (tp != nullptr) {
+        tp->SetSchedulingWeight(schedulingWeight);
+    }
 }
 
 }
 
 using namespace ns3;
 namespace utils {
+
+namespace {
+constexpr uint64_t kDefaultPathWeight = 1;
+
+uint64_t GetGlobalPathBitRate(uint32_t src,
+                              uint32_t outPort,
+                              uint32_t dst,
+                              uint32_t dstPort,
+                              bool useShortestPath)
+{
+    if (src >= NodeList::GetNNodes()) {
+        return kDefaultPathWeight;
+    }
+    Ptr<Node> srcNode = NodeList::GetNode(src);
+    if (srcNode == nullptr) {
+        return kDefaultPathWeight;
+    }
+    Ptr<UbSwitch> srcSwitch = srcNode->GetObject<UbSwitch>();
+    if (srcSwitch == nullptr || srcSwitch->GetRoutingProcess() == nullptr) {
+        return kDefaultPathWeight;
+    }
+    const uint64_t pathBitRate =
+        srcSwitch->GetRoutingProcess()->GetGlobalOracleOutPortWeight(
+            static_cast<uint16_t>(outPort),
+            NodeIdToIp(dst, dstPort).Get(),
+            UINT16_MAX,
+            useShortestPath);
+    return pathBitRate == 0 ? kDefaultPathWeight : pathBitRate;
+}
+
+uint64_t GetPathBitRate(uint32_t src,
+                        uint32_t outPort,
+                        uint32_t dst,
+                        uint32_t dstPort,
+                        bool useShortestPath)
+{
+    if (UbRoutingProcess::GetDefaultBwWeightedPacketSpray()) {
+        return GetGlobalPathBitRate(src, outPort, dst, dstPort, useShortestPath);
+    }
+    return kDefaultPathWeight;
+}
+} // namespace
 
 NS_LOG_COMPONENT_DEFINE("TpConnectionManager");
 NS_OBJECT_ENSURE_REGISTERED(TpConnectionManager);
@@ -401,6 +449,8 @@ void TpConnectionManager::BuildIndexesForNode(uint32_t localNodeId, Connection c
     uint32_t peerPort;
     uint32_t localTpn;
     uint32_t peerTpn;
+    uint64_t localSchedulingWeight;
+    uint64_t peerSchedulingWeight;
 
     // 确定对端节点和端口
     if (conn.node1 == localNodeId) {
@@ -409,12 +459,16 @@ void TpConnectionManager::BuildIndexesForNode(uint32_t localNodeId, Connection c
         peerPort = conn.port2;
         localTpn = conn.tpn1;
         peerTpn = conn.tpn2;
+        localSchedulingWeight = conn.schedulingWeight;
+        peerSchedulingWeight = conn.peerSchedulingWeight;
     } else {
         peerNodeId = conn.node1;
         localPort = conn.port2;
         peerPort = conn.port1;
         localTpn = conn.tpn2;
         peerTpn = conn.tpn1;
+        localSchedulingWeight = conn.peerSchedulingWeight;
+        peerSchedulingWeight = conn.schedulingWeight;
     }
     conn.node1 = localNodeId;
     conn.node2 = peerNodeId;
@@ -422,6 +476,8 @@ void TpConnectionManager::BuildIndexesForNode(uint32_t localNodeId, Connection c
     conn.port2 = peerPort;
     conn.tpn1 = localTpn;
     conn.tpn2 = peerTpn;
+    conn.schedulingWeight = localSchedulingWeight;
+    conn.peerSchedulingWeight = peerSchedulingWeight;
     // 建立各种索引
 
     // 索引1: 添加到节点连接列表
@@ -527,7 +583,6 @@ std::vector<uint32_t> TpConnectionManager::CreateNewTps(uint32_t src, uint32_t d
         uint32_t dstPort = IpToPortId(dstIp);
         for (auto outPortIt = it->second.begin(); outPortIt != it->second.end(); outPortIt++) {
             // 无论是否创建TP，都建立connection记录，以供后续所有源目的节点相同的流使用
-            Ptr<ns3::UbController> sendCtrl = NodeList::GetNode(src)->GetObject<ns3::UbController>();
             Ptr<ns3::UbController> recvCtrl = NodeList::GetNode(dst)->GetObject<ns3::UbController>();
             Connection conn;
             conn.node1 = src;
@@ -538,10 +593,14 @@ std::vector<uint32_t> TpConnectionManager::CreateNewTps(uint32_t src, uint32_t d
             conn.tpn2 = recvCtrl->GetTpConnManager()->GetNextTpn();
             conn.priority = priority;
             conn.metrics = outPortIt->second;
+            conn.schedulingWeight =
+                GetPathBitRate(src, outPortIt->first, dst, dstPort, useShortestPath);
+            conn.peerSchedulingWeight =
+                GetPathBitRate(dst, dstPort, src, outPortIt->first, useShortestPath);
             // connection添加tpnConn
             AddUnilateralConnection(conn, src);
             recvCtrl->GetTpConnManager()->AddUnilateralConnection(conn, dst);
-            if (useMultiPath) { // 多路径模式下，创建全部TP
+            if (useMultiPath) {
                 tpns.push_back(CreateNewTp(conn));
             } else if (id == idx) { // 单路径模式下，仅创建一个TP
                 tpns.push_back(CreateNewTp(conn));
@@ -561,6 +620,10 @@ uint32_t TpConnectionManager::CreateNewTp(Connection conn)
     auto sendHostCaqm = UbCongestionControl::Create(UB_DEVICE);
     sendCtrl->CreateTp(conn.node1, conn.node2, conn.port1, conn.port2,
                        conn.priority, conn.tpn1, conn.tpn2, sendHostCaqm);
+    auto sendTp = sendCtrl->GetTp(conn.tpn1);
+    if (sendTp != nullptr) {
+        sendTp->SetSchedulingWeight(conn.schedulingWeight);
+    }
     Simulator::ScheduleWithContext(conn.node2,
                                    Time(0),
                                    &CreateDeviceTpOnNode,
@@ -571,7 +634,8 @@ uint32_t TpConnectionManager::CreateNewTp(Connection conn)
                                    conn.port1,
                                    conn.priority,
                                    conn.tpn2,
-                                   conn.tpn1);
+                                   conn.tpn1,
+                                   conn.peerSchedulingWeight);
     return conn.tpn1;
 }
 
@@ -603,6 +667,10 @@ uint32_t TpConnectionManager::ReconstructTp(Connection conn)
         sendCtrl->CreateTp(conn.node1, conn.node2, conn.port1, conn.port2,
                            conn.priority, conn.tpn1, conn.tpn2, sendHostCaqm);
     }
+    auto sendTp = sendCtrl->GetTp(conn.tpn1);
+    if (sendTp != nullptr) {
+        sendTp->SetSchedulingWeight(conn.schedulingWeight);
+    }
     if (!recvCtrl->IsTPExists(conn.tpn2)) {
         Simulator::ScheduleWithContext(conn.node2,
                                        Time(0),
@@ -614,7 +682,8 @@ uint32_t TpConnectionManager::ReconstructTp(Connection conn)
                                        conn.port1,
                                        conn.priority,
                                        conn.tpn2,
-                                       conn.tpn1);
+                                       conn.tpn1,
+                                       conn.peerSchedulingWeight);
     }
     return conn.tpn1;
 }

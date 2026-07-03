@@ -210,6 +210,12 @@ public:
      */
     uint16_t GetDport() const { return m_dport; }
 
+    uint64_t GetSchedulingWeight() const { return m_schedulingWeight; }
+    void SetSchedulingWeight(uint64_t weight)
+    {
+        m_schedulingWeight = weight == 0 ? 1 : weight;
+    }
+
     /**
     * @brief Move right Bitset
     * @return
@@ -489,6 +495,7 @@ private:
     uint16_t m_priority;      // Process group identifier
     uint16_t m_sport;
     uint16_t m_dport;
+    uint64_t m_schedulingWeight {1};
 
     // IP addresses
     Ipv4Address m_sip;        // Source IP address

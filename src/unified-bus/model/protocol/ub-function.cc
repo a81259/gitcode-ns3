@@ -262,6 +262,36 @@ Ptr<UbWqeSegment> UbJetty::GetNextWqeSegment()
     return segment;
 }
 
+bool UbJetty::PeekNextWqeId(uint32_t& wqeId)
+{
+    if (IsLimited() || m_wqeVector.empty()) {
+        return false;
+    }
+
+    Ptr<UbWqe> currentWqe = nullptr;
+    for (auto it = m_wqeVector.begin(); it != m_wqeVector.end(); ++it) {
+        if (*it && !(*it)->IsSentCompleted()) {
+            currentWqe = *it;
+            if (currentWqe->CanSend()) {
+                break;
+            }
+
+            auto ubTa = GetTransaction();
+            if (ubTa->IsOrderedByInitiator(m_jettyNum, currentWqe)) {
+                currentWqe->SetCanSend(true);
+                break;
+            }
+        }
+    }
+
+    if (currentWqe == nullptr || !currentWqe->CanSend()) {
+        return false;
+    }
+
+    wqeId = currentWqe->GetWqeId();
+    return true;
+}
+
 Ptr<UbWqeSegment> UbJetty::GenWqeSegment(Ptr<UbWqe> wqe, uint32_t segmentSize)
 {
     NS_LOG_FUNCTION(this << segmentSize);

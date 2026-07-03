@@ -3,6 +3,7 @@
 #define UB_TRANSACTION_H
 
 #include <ns3/node.h>
+#include <map>
 #include <vector>
 #include <unordered_map>
 #include "ns3/ub-datatype.h"
@@ -98,6 +99,10 @@ namespace ns3 {
 
         void ScheduleWqeSegment(Ptr<UbTransportChannel> tp);
 
+        bool HasNonUniformSchedulingWeights(const std::vector<Ptr<UbJetty>>& jetties) const;
+
+        bool ScheduleNextLocalWqeSegment(uint32_t jettyNum);
+
         void OnScheduleWqeSegmentFinish(Ptr<UbWqeSegment> segment);
 
         bool IsUrmaReadWriteRequest(const Ptr<UbWqeSegment>& segment);
@@ -116,6 +121,8 @@ namespace ns3 {
         std::map<uint32_t, Ptr<UbTransportChannel>> m_tpnMap;
         // Jetty和TP的绑定关系
         std::map<uint32_t, std::vector<Ptr<UbTransportChannel>>> m_jettyTpGroup;
+        // Jetty对应的远端节点，用于给多流端口喷洒生成稳定相位
+        std::map<uint32_t, uint32_t> m_jettyDestNode;
         // Tp与jetty的绑定关系
         std::map<uint32_t, std::vector<Ptr<UbJetty>>> m_tpRelatedJetties;
         //  TP收到的各个remote解析后存储的segment
@@ -127,6 +134,14 @@ namespace ns3 {
 
         // 记录每个TP下次轮询的开始位置
         std::map<uint32_t, uint32_t> m_tpRRIndex;
+        // 记录每个 Jetty 在加权 TP 列表中的下次起始位置
+        std::map<uint32_t, uint32_t> m_jettyTpScheduleIndex;
+        // 记录当前 Jetty 正在调度的 WQE/task，切换 task 时清零加权调度统计
+        std::map<uint32_t, uint32_t> m_jettyScheduledWqeId;
+        // 记录每个 Jetty 已经分配到各本地出端口的字节数，用于按端口权重喷洒
+        std::map<uint32_t, std::map<uint16_t, uint64_t>> m_jettyPortScheduledSegmentCount;
+        // 记录每个 Jetty 已经分配到各 TP 的字节数，用于按路径权重喷洒
+        std::map<uint32_t, std::map<uint32_t, uint64_t>> m_jettyTpScheduledSegmentCount;
         // 记录每个TP当前是否正处于调度WqeSegment的过程中
         std::map<uint32_t, bool> m_tpSchedulingStatus;
         Ptr<UniformRandomVariable> m_random;        //随机数产生工具，伪随机，多次仿真可复现

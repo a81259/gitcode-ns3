@@ -1,0 +1,26 @@
+[11:30:42] [case] Run case: /tmp/pod1d_no_access_pairwise_2mb_full_ps
+[11:30:42] [setup] Load network_attribute.txt
+[11:30:42] [setup] Rewrite legacy network attribute aliases: 1
+[11:30:42] [setup] Prepare runlog directory: /tmp/pod1d_no_access_pairwise_2mb_full_ps/runlog
+[11:30:42] [setup] Load node.csv
+[11:30:51] [setup] Load topology.csv
+[11:30:51] [setup] Load routing_table.csv
+[11:31:08] [setup] Load transport_channel.csv
+[11:31:08] [traffic] Load traffic.csv
+[11:31:08] [traffic] Activate clients and enqueue tasks.
+[11:31:08] [traffic] Scheduled local tasks: 1368
+[11:31:08] Simulation time progress: 0 us[11:34:42] Simulation time progress: 100 us
+[11:34:56] [run] Simulation finished.
+[11:34:56] [trace] Parse runlog into output artifacts.
+Stats: Processed 1368 tasks.
+Note: 1368/1368 tasks missing packet timestamps (First Packet Sends / Last Packet ACKs).
+      This is expected if UB_PACKET_TRACE_ENABLE is set to 'false'.
+Saved traffic tasks throughput results to /tmp/pod1d_no_access_pairwise_2mb_full_ps/output/task_statistics.csv
+Stats: Generated throughput metrics for 0 port-directions.
+Note: No port throughput data found. This is expected if UB_PORT_TRACE_ENABLE is set to 'false'.
+[11:34:56] [summary] Program finished.
+[11:34:56] [summary] Wall-clock:
+[11:34:56] [summary]   config : 261 us
+[11:34:56] [summary]   run    : 240.535985 s
+[11:34:56] [summary]   trace  : 328.797 ms
+[11:34:56] [summary]   total  : 254.308225 s

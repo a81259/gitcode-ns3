@@ -23,6 +23,8 @@ struct Connection {
     uint32_t tpn2;
     uint32_t priority;
     uint32_t metrics;
+    uint64_t schedulingWeight{1};
+    uint64_t peerSchedulingWeight{1};
 };
 
 /**

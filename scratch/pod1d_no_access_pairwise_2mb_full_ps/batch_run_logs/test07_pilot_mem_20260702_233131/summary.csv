@@ -1,0 +1,2 @@
+rc,elapsed_s,fresh,tasks,max_complete_us,avg_complete_us,max_rss_kb,max_rss_gib,max_vsz_kb,log,mem_csv
+0,405.2,True,342,1761.368808,931.8264074035088,4921868,4.693859100341797,4928492,scratch/pod1d_no_access_pairwise_2mb_full_ps/batch_run_logs/test07_pilot_mem_20260702_233131/case01_standard.log,scratch/pod1d_no_access_pairwise_2mb_full_ps/batch_run_logs/test07_pilot_mem_20260702_233131/memory_samples.csv

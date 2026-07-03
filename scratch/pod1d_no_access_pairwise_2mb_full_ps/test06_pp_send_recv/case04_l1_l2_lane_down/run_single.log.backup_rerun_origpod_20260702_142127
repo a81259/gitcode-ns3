@@ -1,0 +1,31 @@
+[23:58:25] [case] Run case: /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/test06_pp_send_recv/case04_l1_l2_lane_down
+[23:58:25] [setup] Load network_attribute.txt
+[23:58:25] [setup] Rewrite legacy network attribute aliases: 1
+[23:58:25] [setup] Prepare runlog directory: /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/test06_pp_send_recv/case04_l1_l2_lane_down/runlog
+[23:58:25] [setup] Load node.csv
+[23:58:27] [setup] Load topology.csv
+[23:58:27] [setup] Load routing_table.csv
+[23:58:37] [setup] Skip transport_channel.csv (not found; TP channels will be created on demand).
+[23:58:37] [traffic] Load traffic.csv
+[23:58:37] [traffic] Activate clients and enqueue tasks.
+[23:58:37] [traffic] Scheduled local tasks: 8
+
+[23:58:37] Simulation time progress: 0 us
+[23:58:51] Simulation time progress: 100 us
+[23:59:06] Simulation time progress: 200 us
+[23:59:22] Simulation time progress: 300 us
+[23:59:33] Simulation time progress: 400 us
+[23:59:34] [run] Simulation finished.
+[23:59:34] [trace] Parse runlog into output artifacts.
+Stats: Processed 8 tasks.
+Note: 8/8 tasks missing packet timestamps (First Packet Sends / Last Packet ACKs).
+      This is expected if UB_PACKET_TRACE_ENABLE is set to 'false'.
+Saved traffic tasks throughput results to /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/test06_pp_send_recv/case04_l1_l2_lane_down/output/task_statistics.csv
+Stats: Generated throughput metrics for 0 port-directions.
+Note: No port throughput data found. This is expected if UB_PORT_TRACE_ENABLE is set to 'false'.
+[23:59:34] [summary] Program finished.
+[23:59:34] [summary] Wall-clock:
+[23:59:34] [summary]   config : 50 us
+[23:59:34] [summary]   run    : 67.801773 s
+[23:59:34] [summary]   trace  : 305.665 ms
+[23:59:34] [summary]   total  : 68.640915 s
