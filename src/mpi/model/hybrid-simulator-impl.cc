@@ -49,6 +49,17 @@ NS_LOG_COMPONENT_DEFINE("HybridSimulatorImpl");
 
 NS_OBJECT_ENSURE_REGISTERED(HybridSimulatorImpl);
 
+namespace
+{
+
+uint32_t
+GetHybridRank(uint32_t systemId)
+{
+    return systemId >> 16 == 0 ? systemId : systemId & 0xffff;
+}
+
+} // namespace
+
 HybridSimulatorImpl::HybridSimulatorImpl()
 {
     NS_LOG_FUNCTION(this);
@@ -86,6 +97,32 @@ HybridSimulatorImpl::GetTypeId()
                                           MakeTimeAccessor(&HybridSimulatorImpl::m_minLookahead),
                                           MakeTimeChecker(TimeStep(0)));
     return tid;
+}
+
+void
+HybridSimulatorImpl::BoundLookAhead(Time lookAhead)
+{
+    if (lookAhead.IsStrictlyPositive())
+    {
+        NS_LOG_FUNCTION(this << lookAhead);
+        if (m_minLookahead == TimeStep(0))
+        {
+            m_minLookahead = lookAhead;
+        }
+        else
+        {
+            m_minLookahead = Min(m_minLookahead, lookAhead);
+        }
+        if (MtpInterface::isPartitioned())
+        {
+            MtpInterface::BoundLookAhead(lookAhead);
+        }
+    }
+    else
+    {
+        NS_LOG_WARN("attempted to set hybrid lookahead bound to a non-positive time: "
+                    << lookAhead);
+    }
 }
 
 void
@@ -460,7 +497,7 @@ HybridSimulatorImpl::Partition()
                     {
                         Ptr<Node> remote = channel->GetDevice(j)->GetNode();
                         // if it's not visited, and not remote, add it to the current partition
-                        if (!visited[remote->GetId()] && node->GetSystemId() == m_myId)
+                        if (!visited[remote->GetId()] && GetHybridRank(remote->GetSystemId()) == m_myId)
                         {
                             q.push(remote);
                         }
