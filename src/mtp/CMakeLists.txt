@@ -27,5 +27,7 @@ build_lib(
     model/mtp-interface.h
     model/multithreaded-simulator-impl.h
   LIBRARIES_TO_LINK ${mtp_libs}
-  TEST_SOURCES ${example_as_test_suite}
+  TEST_SOURCES
+    test/mtp-partition-test.cc
+    ${example_as_test_suite}
 )

@@ -283,6 +283,7 @@ private:
 
     bool TraceEnable = false;
     bool TaskTraceEnable = true;
+    bool TaskSegmentTraceEnable = false;
     bool PacketTraceEnable = true;
     bool PortTraceEnable = true;
     bool RecordTraceEnabled = false;
@@ -294,9 +295,15 @@ private:
                                                        ns3::MakeBooleanChecker());
 
     ns3::GlobalValue g_task_trace_enable = ns3::GlobalValue("UB_TASK_TRACE_ENABLE",
-                                                            "Enable task and WQE level traces",
+                                                            "Enable task start/complete traces used by task_statistics.csv",
                                                             ns3::BooleanValue(true),
                                                             ns3::MakeBooleanChecker());
+
+    ns3::GlobalValue g_task_segment_trace_enable =
+    ns3::GlobalValue("UB_TASK_SEGMENT_TRACE_ENABLE",
+                     "Enable high-volume WQE segment send/complete traces.",
+                     ns3::BooleanValue(false),
+                     ns3::MakeBooleanChecker());
 
     ns3::GlobalValue g_packet_trace_enable = ns3::GlobalValue("UB_PACKET_TRACE_ENABLE",
                                                               "Enable packet send/ack/receive traces",

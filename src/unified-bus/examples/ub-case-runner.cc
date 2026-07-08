@@ -45,7 +45,7 @@ struct QuickExampleOptions
     uint32_t stopMs = 0;
     uint32_t rngRun = 10;
     std::string configPath;
-    std::string dependencyVisibilityDelay;
+    std::string dependencyVisibilityDelay = "10ns";
     std::string canonicalOutputPath;
 };
 
@@ -582,7 +582,8 @@ QuickExampleOptions ParseOptions(int argc, char* argv[])
     cmd.AddValue("stop-ms", "Optional simulation stop time in milliseconds", options.stopMs);
     cmd.AddValue("rng-run", "Random seed value passed to RngSeedManager::SetSeed", options.rngRun);
     cmd.AddValue("dependency-visibility-delay",
-                 "Delay before a completed traffic task becomes visible to dependent tasks",
+                 "Delay before a completed traffic task becomes visible to dependent tasks "
+                 "(default: 10ns)",
                  options.dependencyVisibilityDelay);
     cmd.AddValue("canonical-output",
                  "Write deterministic UbTrafficGen canonical events to this output basename",

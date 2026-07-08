@@ -4,7 +4,9 @@
 
 #include "ns3/node.h"
 #include <map>
+#include <mutex>
 #include <set>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 namespace ns3 {
@@ -105,6 +107,7 @@ private:
     bool m_hasNodeId = false;
     UbRoutingAlgorithm m_routingAlgorithm = UbRoutingAlgorithm::HASH;
     bool m_bwWeightedPacketSpray = false;
+    std::string m_bwWeightedPacketSprayScope = "all";
     uint64_t CalcHash(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, uint8_t priority, uint32_t salt);
     uint64_t GetLocalPortWeight(uint16_t outPort) const;
     uint64_t GetPacketSprayPortWeight(uint16_t outPort,
@@ -122,6 +125,15 @@ private:
                                                  uint16_t inPortId,
                                                  bool useShortestPath) const;
     uint64_t GetPacketSprayStride(uint64_t flowBase, uint64_t cycleLength) const;
+    void FilterUnreachablePacketSprayPorts(std::vector<uint16_t>& shortestPorts,
+                                           std::vector<uint16_t>& nonShortestPorts,
+                                           uint32_t destIP,
+                                           uint16_t inPortId,
+                                           bool useShortestPath) const;
+    bool HasParallelLinksToPeer(uint32_t peerNodeId) const;
+    bool BwWeightedPacketSprayScopeMatchesPort(uint16_t outPort) const;
+    bool BwWeightedPacketSprayScopeMatches(const std::vector<uint16_t>& shortestPorts,
+                                           const std::vector<uint16_t>& nonShortestPorts) const;
     int SelectWeightedPacketSprayOutPort(uint64_t hash64,
                                          const std::vector<uint16_t>& shortestPorts,
                                          const std::vector<uint16_t>& nonShortestPorts,
@@ -165,6 +177,8 @@ private:
     RouteRangeByPortMap m_rtOtherRanges;
     mutable std::map<std::tuple<uint32_t, uint32_t, uint16_t, bool>,
                      std::map<uint16_t, uint64_t>> m_globalOracleCache;
+    mutable std::map<std::pair<uint32_t, uint32_t>, bool> m_parallelLinkCache;
+    mutable std::mutex m_cacheMutex;
     
     // 辅助函数：标准化端口集合（排序去重）
     std::vector<uint16_t> normalizePorts(const std::vector<uint16_t>& ports)

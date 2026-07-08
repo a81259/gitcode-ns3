@@ -2304,6 +2304,9 @@ void UbUtils::TopoTraceConnect()
     g_task_trace_enable.GetValue(val);
     TaskTraceEnable = val.Get();
 
+    g_task_segment_trace_enable.GetValue(val);
+    TaskSegmentTraceEnable = val.Get();
+
     g_packet_trace_enable.GetValue(val);
     PacketTraceEnable = val.Get();
 
@@ -2335,6 +2338,9 @@ void UbUtils::TopoTraceConnect()
     NS_LOG_UNCOND("UB_TRACE_ENABLE: " << (TraceEnable ? "ON" : "OFF"));
     if (TraceEnable) {
         NS_LOG_UNCOND("  UB_TASK_TRACE_ENABLE:   " << (TaskTraceEnable ? "ON" : "OFF") << "  (Task level events)");
+        NS_LOG_UNCOND("  UB_TASK_SEGMENT_TRACE_ENABLE: "
+                      << (TaskSegmentTraceEnable ? "ON" : "OFF")
+                      << "  (High-volume WQE segment events)");
         NS_LOG_UNCOND("  UB_PACKET_TRACE_ENABLE: " << (PacketTraceEnable ? "ON" : "OFF") << "  (Packet Send/ACK timestamps, essential for detailed task latency breakdown)");
         NS_LOG_UNCOND("  UB_PORT_TRACE_ENABLE:   " << (PortTraceEnable ? "ON" : "OFF") << "  (All port traffic, high volume, for throughput)");
         NS_LOG_UNCOND("  UB_RECORD_PKT_TRACE:    " << (RecordTraceEnabled ? "ON" : "OFF") << "  (Per-hop packet path tracking)");
@@ -2371,7 +2377,7 @@ void UbUtils::TopoTraceConnect()
                         tp->TraceConnectWithoutContext("LastPacketACKsNotify", MakeCallback(TpLastPacketACKsNotify));
                         tp->TraceConnectWithoutContext("LastPacketReceivesNotify", MakeCallback(TpLastPacketReceivesNotify));
                     }
-                    if (TaskTraceEnable) {
+                    if (TaskTraceEnable && TaskSegmentTraceEnable) {
                         tp->TraceConnectWithoutContext("WqeSegmentSendsNotify", MakeCallback(TpWqeSegmentSendsNotify));
                         tp->TraceConnectWithoutContext("WqeSegmentCompletesNotify", MakeCallback(TpWqeSegmentCompletesNotify));
                     }
@@ -2440,6 +2446,9 @@ void UbUtils::SingleTpTraceConnect(uint32_t nodeId, uint32_t tpn)
     g_task_trace_enable.GetValue(val);
     TaskTraceEnable = val.Get();
 
+    g_task_segment_trace_enable.GetValue(val);
+    TaskSegmentTraceEnable = val.Get();
+
     g_packet_trace_enable.GetValue(val);
     PacketTraceEnable = val.Get();
 
@@ -2456,7 +2465,7 @@ void UbUtils::SingleTpTraceConnect(uint32_t nodeId, uint32_t tpn)
             tp->TraceConnectWithoutContext("LastPacketACKsNotify", MakeCallback(TpLastPacketACKsNotify));
             tp->TraceConnectWithoutContext("LastPacketReceivesNotify", MakeCallback(TpLastPacketReceivesNotify));
         }
-        if (TaskTraceEnable) {
+        if (TaskTraceEnable && TaskSegmentTraceEnable) {
             tp->TraceConnectWithoutContext("WqeSegmentSendsNotify", MakeCallback(TpWqeSegmentSendsNotify));
             tp->TraceConnectWithoutContext("WqeSegmentCompletesNotify", MakeCallback(TpWqeSegmentCompletesNotify));
         }

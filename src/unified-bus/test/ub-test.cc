@@ -46,6 +46,7 @@
 #include <limits>
 #include <map>
 #include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -1277,17 +1278,15 @@ public:
 
         portRouting->GetShortestOutPorts(NodeIdToIp(101, 2).Get(), outPorts);
         NS_TEST_ASSERT_MSG_EQ(outPorts.size(),
-                              2u,
-                              "port-scoped range route should aggregate all destination-port routes for the node");
-        NS_TEST_ASSERT_MSG_EQ(outPorts[0], 4u, "port-scoped range route should include port 0 route");
-        NS_TEST_ASSERT_MSG_EQ(outPorts[1], 9u, "port-scoped range route should include port 2 route");
+                              1u,
+                              "port-scoped range route should only resolve the requested destination port");
+        NS_TEST_ASSERT_MSG_EQ(outPorts[0], 9u, "port-scoped range route should keep port 2 route");
 
         portRouting->GetShortestOutPorts(NodeIdToIp(101, 0).Get(), outPorts);
         NS_TEST_ASSERT_MSG_EQ(outPorts.size(),
-                              2u,
-                              "port 0 range route should aggregate all destination-port routes for the node");
+                              1u,
+                              "port 0 range route should only resolve destination port 0");
         NS_TEST_ASSERT_MSG_EQ(outPorts[0], 4u, "port 0 range route should include port 0 route");
-        NS_TEST_ASSERT_MSG_EQ(outPorts[1], 9u, "port 0 range route should include port 2 route");
 
         portRouting->GetShortestOutPorts(NodeIdToIp(101).Get(), outPorts);
         NS_TEST_ASSERT_MSG_EQ(outPorts.size(),
@@ -1295,6 +1294,88 @@ public:
                               "primary node IP should aggregate all destination-port range routes");
         NS_TEST_ASSERT_MSG_EQ(outPorts[0], 4u, "primary node IP should include port 0 route");
         NS_TEST_ASSERT_MSG_EQ(outPorts[1], 9u, "primary node IP should include port 2 route");
+    }
+};
+
+class UbRoutingWeightedPacketSpraySkipsZeroCapacityPortTest : public TestCase
+{
+  public:
+    UbRoutingWeightedPacketSpraySkipsZeroCapacityPortTest()
+        : TestCase("UnifiedBus - weighted packet spray skips zero-capacity oracle ports")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<Node> source = CreateObject<Node>(0);
+        Ptr<Node> deadSwitch = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+
+        InitNode(source, UB_SWITCH, 2);
+        InitNode(deadSwitch, UB_SWITCH, 1);
+        InitNode(dest, UB_DEVICE, 1);
+
+        Ptr<UbPort> sourceDeadPort = DynamicCast<UbPort>(source->GetDevice(0));
+        Ptr<UbPort> sourceLivePort = DynamicCast<UbPort>(source->GetDevice(1));
+        Ptr<UbPort> deadIngressPort = DynamicCast<UbPort>(deadSwitch->GetDevice(0));
+        Ptr<UbPort> destPort = DynamicCast<UbPort>(dest->GetDevice(0));
+
+        sourceDeadPort->SetDataRate(DataRate("1bps"));
+        sourceLivePort->SetDataRate(DataRate("1bps"));
+        deadIngressPort->SetDataRate(DataRate("1bps"));
+        destPort->SetDataRate(DataRate("1bps"));
+
+        AttachPorts(sourceDeadPort, deadIngressPort);
+        AttachPorts(sourceLivePort, destPort);
+
+        const uint16_t deadPortId = static_cast<uint16_t>(sourceDeadPort->GetIfIndex());
+        const uint16_t livePortId = static_cast<uint16_t>(sourceLivePort->GetIfIndex());
+
+        Ptr<UbRoutingProcess> routing = source->GetObject<UbSwitch>()->GetRoutingProcess();
+        routing->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        routing->AddShortestRoute(NodeIdToIp(dest->GetId()).Get(),
+                                  std::vector<uint16_t>{deadPortId, livePortId});
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        NS_TEST_ASSERT_MSG_EQ(routing->GetGlobalOracleOutPortWeight(deadPortId,
+                                                                    destIp,
+                                                                    UINT16_MAX,
+                                                                    true),
+                              0ULL,
+                              "dead downstream route should have zero oracle capacity");
+        NS_TEST_ASSERT_MSG_GT(routing->GetGlobalOracleOutPortWeight(livePortId,
+                                                                    destIp,
+                                                                    UINT16_MAX,
+                                                                    true),
+                              0ULL,
+                              "direct destination route should have positive oracle capacity");
+
+        std::vector<uint16_t> shortestPorts = {deadPortId, livePortId};
+        std::vector<uint16_t> nonShortestPorts;
+        for (uint16_t sport = 0; sport < 8; ++sport)
+        {
+            RoutingKey rtKey{
+                NodeIdToIp(source->GetId()).Get(),
+                destIp,
+                sport,
+                4792,
+                UB_PRIORITY_DEFAULT,
+                true,
+                true,
+            };
+            bool selectedShortestPath = false;
+            const int outPort = routing->SelectOutPort(rtKey,
+                                                       shortestPorts,
+                                                       nonShortestPorts,
+                                                       selectedShortestPath,
+                                                       UINT16_MAX);
+            NS_TEST_ASSERT_MSG_EQ(outPort,
+                                  static_cast<int>(livePortId),
+                                  "zero-capacity candidate must not be selected");
+        }
+
+        Simulator::Destroy();
+        Config::Reset();
     }
 };
 
@@ -7729,7 +7810,7 @@ class UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest : public TestCase
             counts[port] = 0;
         }
 
-        for (uint32_t spraySalt = 1; spraySalt <= 977; ++spraySalt)
+        for (uint32_t spraySalt = 0; spraySalt < 977; ++spraySalt)
         {
             rtKey.sport = static_cast<uint16_t>(spraySalt);
             bool selectedShortestPath = false;
@@ -7803,7 +7884,7 @@ class UbPacketSprayWeightsPortsByBandwidthTest : public TestCase
         counts[0] = 0;
         counts[1] = 0;
 
-        for (uint32_t spraySalt = 1; spraySalt <= 300; ++spraySalt)
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
         {
             rtKey.sport = static_cast<uint16_t>(spraySalt);
             bool selectedShortestPath = false;
@@ -7875,7 +7956,7 @@ class UbBwWeightedPacketSprayWeightsSwitchToSwitchLinksTest : public TestCase
         counts[0] = 0;
         counts[1] = 0;
 
-        for (uint32_t spraySalt = 1; spraySalt <= 300; ++spraySalt)
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
         {
             rtKey.sport = static_cast<uint16_t>(spraySalt);
             bool selectedShortestPath = false;
@@ -7896,6 +7977,398 @@ class UbBwWeightedPacketSprayWeightsSwitchToSwitchLinksTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(counts[1],
                               100u,
                               "50Gbps switch-to-switch link should receive one third of packets");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbBwWeightedPacketSprayKeepsIngressLinkRatioAcrossSharedBottleneckTest : public TestCase
+{
+  public:
+    UbBwWeightedPacketSprayKeepsIngressLinkRatioAcrossSharedBottleneckTest()
+        : TestCase("UnifiedBus - bandwidth weighted packet spray keeps ingress link ratio across shared bottleneck")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> l2 = CreateObject<Node>(0);
+        Ptr<Node> l1 = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+        InitNode(l2, UB_SWITCH, 2);
+        InitNode(l1, UB_SWITCH, 3);
+        InitNode(dest, UB_DEVICE, 1);
+
+        Ptr<UbPort> l2Port0 = DynamicCast<UbPort>(l2->GetDevice(0));
+        Ptr<UbPort> l2Port1 = DynamicCast<UbPort>(l2->GetDevice(1));
+        Ptr<UbPort> l1Port0 = DynamicCast<UbPort>(l1->GetDevice(0));
+        Ptr<UbPort> l1Port1 = DynamicCast<UbPort>(l1->GetDevice(1));
+        Ptr<UbPort> l1DownPort = DynamicCast<UbPort>(l1->GetDevice(2));
+        Ptr<UbPort> destPort = DynamicCast<UbPort>(dest->GetDevice(0));
+
+        l2Port0->SetDataRate(DataRate("224Gbps"));
+        l1Port0->SetDataRate(DataRate("224Gbps"));
+        l2Port1->SetDataRate(DataRate("448Gbps"));
+        l1Port1->SetDataRate(DataRate("448Gbps"));
+        l1DownPort->SetDataRate(DataRate("224Gbps"));
+        destPort->SetDataRate(DataRate("224Gbps"));
+
+        AttachPorts(l2Port0, l1Port0);
+        AttachPorts(l2Port1, l1Port1);
+        AttachPorts(l1DownPort, destPort);
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        Ptr<UbRoutingProcess> l2Routing = l2->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> l1Routing = l1->GetObject<UbSwitch>()->GetRoutingProcess();
+        l2Routing->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        l2Routing->SetAttribute("BwWeightedPacketSprayScope", StringValue("l1-l2"));
+        l1Routing->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        l1Routing->SetAttribute("BwWeightedPacketSprayScope", StringValue("l1-l2"));
+        l2Routing->AddShortestRoute(destIp, std::vector<uint16_t>{0, 1});
+        l1Routing->AddShortestRoute(destIp, std::vector<uint16_t>{2});
+
+        NS_TEST_ASSERT_MSG_EQ(l2Routing->GetGlobalOracleOutPortWeight(0,
+                                                                      destIp,
+                                                                      UINT16_MAX,
+                                                                      true),
+                              DataRate("224Gbps").GetBitRate(),
+                              "224Gbps L2->L1 link should keep its own bandwidth weight");
+        NS_TEST_ASSERT_MSG_EQ(l2Routing->GetGlobalOracleOutPortWeight(1,
+                                                                      destIp,
+                                                                      UINT16_MAX,
+                                                                      true),
+                              DataRate("448Gbps").GetBitRate(),
+                              "448Gbps L2->L1 link should not be flattened by shared downstream bottleneck");
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = destIp;
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::map<uint16_t, uint32_t> counts;
+        counts[0] = 0;
+        counts[1] = 0;
+
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = l2Routing->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ((counts.count(static_cast<uint16_t>(outPort)) == 1),
+                                  true,
+                                  "Packet spray must select one of the configured ports");
+            counts[static_cast<uint16_t>(outPort)]++;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(counts[0],
+                              100u,
+                              "224Gbps ingress link should receive one third of packets");
+        NS_TEST_ASSERT_MSG_EQ(counts[1],
+                              200u,
+                              "448Gbps ingress link should receive two thirds of packets");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbBwWeightedPacketSprayAccessScopeSkipsParallelLinksTest : public TestCase
+{
+  public:
+    UbBwWeightedPacketSprayAccessScopeSkipsParallelLinksTest()
+        : TestCase("UnifiedBus - access-L1 scoped bandwidth weighting skips parallel L1-L2 links")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> l2 = CreateObject<Node>(0);
+        Ptr<Node> l1 = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+        InitNode(l2, UB_SWITCH, 2);
+        InitNode(l1, UB_SWITCH, 3);
+        InitNode(dest, UB_DEVICE, 1);
+
+        Ptr<UbPort> l2Port0 = DynamicCast<UbPort>(l2->GetDevice(0));
+        Ptr<UbPort> l2Port1 = DynamicCast<UbPort>(l2->GetDevice(1));
+        Ptr<UbPort> l1Port0 = DynamicCast<UbPort>(l1->GetDevice(0));
+        Ptr<UbPort> l1Port1 = DynamicCast<UbPort>(l1->GetDevice(1));
+        Ptr<UbPort> l1DownPort = DynamicCast<UbPort>(l1->GetDevice(2));
+        Ptr<UbPort> destPort = DynamicCast<UbPort>(dest->GetDevice(0));
+
+        l2Port0->SetDataRate(DataRate("224Gbps"));
+        l1Port0->SetDataRate(DataRate("224Gbps"));
+        l2Port1->SetDataRate(DataRate("448Gbps"));
+        l1Port1->SetDataRate(DataRate("448Gbps"));
+        l1DownPort->SetDataRate(DataRate("224Gbps"));
+        destPort->SetDataRate(DataRate("224Gbps"));
+
+        AttachPorts(l2Port0, l1Port0);
+        AttachPorts(l2Port1, l1Port1);
+        AttachPorts(l1DownPort, destPort);
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        Ptr<UbRoutingProcess> l2Routing = l2->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> l1Routing = l1->GetObject<UbSwitch>()->GetRoutingProcess();
+        l2Routing->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        l2Routing->SetAttribute("BwWeightedPacketSprayScope", StringValue("access-l1"));
+        l1Routing->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        l1Routing->SetAttribute("BwWeightedPacketSprayScope", StringValue("access-l1"));
+        l2Routing->AddShortestRoute(destIp, std::vector<uint16_t>{0, 1});
+        l1Routing->AddShortestRoute(destIp, std::vector<uint16_t>{2});
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = destIp;
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::map<uint16_t, uint32_t> counts;
+        counts[0] = 0;
+        counts[1] = 0;
+
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = l2Routing->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ((counts.count(static_cast<uint16_t>(outPort)) == 1),
+                                  true,
+                                  "Packet spray must select one of the configured ports");
+            counts[static_cast<uint16_t>(outPort)]++;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(counts[0],
+                              150u,
+                              "access-L1 scope should leave parallel L1-L2 links on ordinary packet spray");
+        NS_TEST_ASSERT_MSG_EQ(counts[1],
+                              150u,
+                              "access-L1 scope should leave parallel L1-L2 links on ordinary packet spray");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbBwWeightedPacketSprayCapsSingleLinksByDownstreamCapacityTest : public TestCase
+{
+  public:
+    UbBwWeightedPacketSprayCapsSingleLinksByDownstreamCapacityTest()
+        : TestCase("UnifiedBus - bandwidth weighted packet spray caps non-parallel links by downstream capacity")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> source = CreateObject<Node>(0);
+        Ptr<Node> slowNextHop = CreateObject<Node>(0);
+        Ptr<Node> fastNextHop = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+        InitNode(source, UB_SWITCH, 2);
+        InitNode(slowNextHop, UB_SWITCH, 2);
+        InitNode(fastNextHop, UB_SWITCH, 2);
+        InitNode(dest, UB_DEVICE, 2);
+
+        Ptr<UbPort> sourceSlowPort = DynamicCast<UbPort>(source->GetDevice(0));
+        Ptr<UbPort> sourceFastPort = DynamicCast<UbPort>(source->GetDevice(1));
+        Ptr<UbPort> slowIngressPort = DynamicCast<UbPort>(slowNextHop->GetDevice(0));
+        Ptr<UbPort> fastIngressPort = DynamicCast<UbPort>(fastNextHop->GetDevice(0));
+        Ptr<UbPort> slowDownPort = DynamicCast<UbPort>(slowNextHop->GetDevice(1));
+        Ptr<UbPort> fastDownPort = DynamicCast<UbPort>(fastNextHop->GetDevice(1));
+        Ptr<UbPort> destSlowPort = DynamicCast<UbPort>(dest->GetDevice(0));
+        Ptr<UbPort> destFastPort = DynamicCast<UbPort>(dest->GetDevice(1));
+
+        sourceSlowPort->SetDataRate(DataRate("224Gbps"));
+        slowIngressPort->SetDataRate(DataRate("224Gbps"));
+        sourceFastPort->SetDataRate(DataRate("224Gbps"));
+        fastIngressPort->SetDataRate(DataRate("224Gbps"));
+        slowDownPort->SetDataRate(DataRate("112Gbps"));
+        destSlowPort->SetDataRate(DataRate("112Gbps"));
+        fastDownPort->SetDataRate(DataRate("224Gbps"));
+        destFastPort->SetDataRate(DataRate("224Gbps"));
+
+        AttachPorts(sourceSlowPort, slowIngressPort);
+        AttachPorts(sourceFastPort, fastIngressPort);
+        AttachPorts(slowDownPort, destSlowPort);
+        AttachPorts(fastDownPort, destFastPort);
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        Ptr<UbRoutingProcess> sourceRouting = source->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> slowRouting = slowNextHop->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> fastRouting = fastNextHop->GetObject<UbSwitch>()->GetRoutingProcess();
+        sourceRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        sourceRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("access-l1"));
+        slowRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        slowRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("access-l1"));
+        fastRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        fastRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("access-l1"));
+        sourceRouting->AddShortestRoute(destIp, std::vector<uint16_t>{0, 1});
+        slowRouting->AddShortestRoute(destIp, std::vector<uint16_t>{1});
+        fastRouting->AddShortestRoute(destIp, std::vector<uint16_t>{1});
+
+        NS_TEST_ASSERT_MSG_EQ(sourceRouting->GetGlobalOracleOutPortWeight(0,
+                                                                          destIp,
+                                                                          UINT16_MAX,
+                                                                          true),
+                              DataRate("112Gbps").GetBitRate(),
+                              "single link through a 112Gbps downstream bottleneck should be capped");
+        NS_TEST_ASSERT_MSG_EQ(sourceRouting->GetGlobalOracleOutPortWeight(1,
+                                                                          destIp,
+                                                                          UINT16_MAX,
+                                                                          true),
+                              DataRate("224Gbps").GetBitRate(),
+                              "single link through a 224Gbps downstream bottleneck should keep 224Gbps");
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = destIp;
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::map<uint16_t, uint32_t> counts;
+        counts[0] = 0;
+        counts[1] = 0;
+
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = sourceRouting->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ((counts.count(static_cast<uint16_t>(outPort)) == 1),
+                                  true,
+                                  "Packet spray must select one of the configured ports");
+            counts[static_cast<uint16_t>(outPort)]++;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(counts[0],
+                              100u,
+                              "112Gbps downstream bottleneck should receive one third of packets");
+        NS_TEST_ASSERT_MSG_EQ(counts[1],
+                              200u,
+                              "224Gbps downstream bottleneck should receive two thirds of packets");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbBwWeightedPacketSprayL1L2ScopeSkipsAccessLinksTest : public TestCase
+{
+  public:
+    UbBwWeightedPacketSprayL1L2ScopeSkipsAccessLinksTest()
+        : TestCase("UnifiedBus - L1-L2 scoped bandwidth weighting skips single access-L1 links")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> source = CreateObject<Node>(0);
+        Ptr<Node> slowNextHop = CreateObject<Node>(0);
+        Ptr<Node> fastNextHop = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+        InitNode(source, UB_SWITCH, 2);
+        InitNode(slowNextHop, UB_SWITCH, 2);
+        InitNode(fastNextHop, UB_SWITCH, 2);
+        InitNode(dest, UB_DEVICE, 2);
+
+        Ptr<UbPort> sourceSlowPort = DynamicCast<UbPort>(source->GetDevice(0));
+        Ptr<UbPort> sourceFastPort = DynamicCast<UbPort>(source->GetDevice(1));
+        Ptr<UbPort> slowIngressPort = DynamicCast<UbPort>(slowNextHop->GetDevice(0));
+        Ptr<UbPort> fastIngressPort = DynamicCast<UbPort>(fastNextHop->GetDevice(0));
+        Ptr<UbPort> slowDownPort = DynamicCast<UbPort>(slowNextHop->GetDevice(1));
+        Ptr<UbPort> fastDownPort = DynamicCast<UbPort>(fastNextHop->GetDevice(1));
+        Ptr<UbPort> destSlowPort = DynamicCast<UbPort>(dest->GetDevice(0));
+        Ptr<UbPort> destFastPort = DynamicCast<UbPort>(dest->GetDevice(1));
+
+        sourceSlowPort->SetDataRate(DataRate("224Gbps"));
+        slowIngressPort->SetDataRate(DataRate("224Gbps"));
+        sourceFastPort->SetDataRate(DataRate("224Gbps"));
+        fastIngressPort->SetDataRate(DataRate("224Gbps"));
+        slowDownPort->SetDataRate(DataRate("112Gbps"));
+        destSlowPort->SetDataRate(DataRate("112Gbps"));
+        fastDownPort->SetDataRate(DataRate("224Gbps"));
+        destFastPort->SetDataRate(DataRate("224Gbps"));
+
+        AttachPorts(sourceSlowPort, slowIngressPort);
+        AttachPorts(sourceFastPort, fastIngressPort);
+        AttachPorts(slowDownPort, destSlowPort);
+        AttachPorts(fastDownPort, destFastPort);
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        Ptr<UbRoutingProcess> sourceRouting = source->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> slowRouting = slowNextHop->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> fastRouting = fastNextHop->GetObject<UbSwitch>()->GetRoutingProcess();
+        sourceRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        sourceRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("l1-l2"));
+        slowRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        slowRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("l1-l2"));
+        fastRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(true));
+        fastRouting->SetAttribute("BwWeightedPacketSprayScope", StringValue("l1-l2"));
+        sourceRouting->AddShortestRoute(destIp, std::vector<uint16_t>{0, 1});
+        slowRouting->AddShortestRoute(destIp, std::vector<uint16_t>{1});
+        fastRouting->AddShortestRoute(destIp, std::vector<uint16_t>{1});
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = destIp;
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::map<uint16_t, uint32_t> counts;
+        counts[0] = 0;
+        counts[1] = 0;
+
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = sourceRouting->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ((counts.count(static_cast<uint16_t>(outPort)) == 1),
+                                  true,
+                                  "Packet spray must select one of the configured ports");
+            counts[static_cast<uint16_t>(outPort)]++;
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(counts[0],
+                              150u,
+                              "L1-L2 scope should leave single access-L1 links on ordinary packet spray");
+        NS_TEST_ASSERT_MSG_EQ(counts[1],
+                              150u,
+                              "L1-L2 scope should leave single access-L1 links on ordinary packet spray");
 
         Simulator::Destroy();
         Config::Reset();
@@ -7939,7 +8412,7 @@ class UbPacketSprayCanDisableBandwidthWeightingTest : public TestCase
         counts[0] = 0;
         counts[1] = 0;
 
-        for (uint32_t spraySalt = 1; spraySalt <= 300; ++spraySalt)
+        for (uint32_t spraySalt = 0; spraySalt < 300; ++spraySalt)
         {
             rtKey.sport = static_cast<uint16_t>(spraySalt);
             bool selectedShortestPath = false;
@@ -7960,6 +8433,85 @@ class UbPacketSprayCanDisableBandwidthWeightingTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(counts[1],
                               150u,
                               "Disabled bandwidth weighting should restore even port spraying");
+
+        Simulator::Destroy();
+        Config::Reset();
+    }
+};
+
+class UbPacketSpraySkipsUnreachableDownstreamCandidateTest : public TestCase
+{
+  public:
+    UbPacketSpraySkipsUnreachableDownstreamCandidateTest()
+        : TestCase("UnifiedBus - ordinary packet spray skips candidates with no downstream route")
+    {
+    }
+
+    void DoRun() override
+    {
+        Config::Reset();
+
+        Ptr<Node> source = CreateObject<Node>(0);
+        Ptr<Node> badNextHop = CreateObject<Node>(0);
+        Ptr<Node> goodNextHop = CreateObject<Node>(0);
+        Ptr<Node> dest = CreateObject<Node>(0);
+        InitNode(source, UB_SWITCH, 2);
+        InitNode(badNextHop, UB_SWITCH, 1);
+        InitNode(goodNextHop, UB_SWITCH, 2);
+        InitNode(dest, UB_DEVICE, 1);
+
+        Ptr<UbPort> sourceBadPort = DynamicCast<UbPort>(source->GetDevice(0));
+        Ptr<UbPort> sourceGoodPort = DynamicCast<UbPort>(source->GetDevice(1));
+        Ptr<UbPort> badIngressPort = DynamicCast<UbPort>(badNextHop->GetDevice(0));
+        Ptr<UbPort> goodIngressPort = DynamicCast<UbPort>(goodNextHop->GetDevice(0));
+        Ptr<UbPort> goodDownPort = DynamicCast<UbPort>(goodNextHop->GetDevice(1));
+        Ptr<UbPort> destPort = DynamicCast<UbPort>(dest->GetDevice(0));
+
+        AttachPorts(sourceBadPort, badIngressPort);
+        AttachPorts(sourceGoodPort, goodIngressPort);
+        AttachPorts(goodDownPort, destPort);
+
+        const uint32_t destIp = NodeIdToIp(dest->GetId()).Get();
+        Ptr<UbRoutingProcess> sourceRouting = source->GetObject<UbSwitch>()->GetRoutingProcess();
+        Ptr<UbRoutingProcess> goodRouting = goodNextHop->GetObject<UbSwitch>()->GetRoutingProcess();
+        sourceRouting->SetAttribute("BwWeightedPacketSpray", BooleanValue(false));
+        sourceRouting->AddShortestRoute(destIp, std::vector<uint16_t>{0, 1});
+        goodRouting->AddShortestRoute(destIp, std::vector<uint16_t>{1});
+
+        NS_TEST_ASSERT_MSG_EQ(sourceRouting->GetGlobalOracleOutPortWeight(0,
+                                                                          destIp,
+                                                                          UINT16_MAX,
+                                                                          true),
+                              0u,
+                              "bad next hop has no route to the destination");
+        NS_TEST_ASSERT_MSG_GT(sourceRouting->GetGlobalOracleOutPortWeight(1,
+                                                                          destIp,
+                                                                          UINT16_MAX,
+                                                                          true),
+                              0u,
+                              "good next hop has a route to the destination");
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(1).Get();
+        rtKey.dip = destIp;
+        rtKey.dport = 7;
+        rtKey.priority = 2;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        for (uint32_t spraySalt = 0; spraySalt < 64; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+            bool selectedShortestPath = false;
+            const int outPort = sourceRouting->GetOutPort(rtKey, selectedShortestPath);
+
+            NS_TEST_ASSERT_MSG_EQ(selectedShortestPath,
+                                  true,
+                                  "Packet spray should stay within the shortest-path set");
+            NS_TEST_ASSERT_MSG_EQ(outPort,
+                                  1,
+                                  "ordinary packet spray should not choose a known unreachable next hop");
+        }
 
         Simulator::Destroy();
         Config::Reset();
@@ -8010,6 +8562,73 @@ class UbRoundRobinAllocatorSeedsDifferentInitialPhasesPerOutPortTest : public Te
 
         Simulator::Destroy();
         Config::Reset();
+    }
+};
+
+class UbPacketSprayDecouplesAdjacentFanoutCyclesTest : public TestCase
+{
+  public:
+    UbPacketSprayDecouplesAdjacentFanoutCyclesTest()
+        : TestCase("UnifiedBus - packet spray decouples adjacent fanout cycles")
+    {
+    }
+
+    void DoRun() override
+    {
+        Ptr<UbRoutingProcess> accessRouting = CreateObject<UbRoutingProcess>();
+        Ptr<UbRoutingProcess> l1Routing = CreateObject<UbRoutingProcess>();
+        accessRouting->SetNodeId(1368);
+        l1Routing->SetNodeId(2736);
+
+        std::vector<uint16_t> accessPorts;
+        for (uint16_t port = 1; port <= 24; ++port)
+        {
+            accessPorts.push_back(port);
+        }
+
+        std::vector<uint16_t> l1Ports;
+        for (uint16_t port = 72; port <= 107; ++port)
+        {
+            l1Ports.push_back(port);
+        }
+
+        RoutingKey rtKey{};
+        rtKey.sip = NodeIdToIp(0).Get();
+        rtKey.dip = NodeIdToIp(72).Get();
+        rtKey.dport = 4792;
+        rtKey.priority = UB_PRIORITY_DEFAULT;
+        rtKey.useShortestPath = true;
+        rtKey.usePacketSpray = true;
+
+        std::set<uint16_t> l1PortsUsedByOneAccessPlane;
+        for (uint32_t spraySalt = 0; spraySalt < 2560; ++spraySalt)
+        {
+            rtKey.sport = static_cast<uint16_t>(spraySalt);
+
+            bool accessShortestPath = false;
+            const int accessOutPort =
+                accessRouting->SelectOutPort(rtKey, accessPorts, {}, accessShortestPath);
+            NS_TEST_ASSERT_MSG_EQ(accessShortestPath,
+                                  true,
+                                  "Access packet spray should select shortest-path ports");
+
+            if (accessOutPort != 1)
+            {
+                continue;
+            }
+
+            bool l1ShortestPath = false;
+            const int l1OutPort = l1Routing->SelectOutPort(rtKey, l1Ports, {}, l1ShortestPath);
+            NS_TEST_ASSERT_MSG_EQ(l1ShortestPath,
+                                  true,
+                                  "L1 packet spray should select shortest-path ports");
+            l1PortsUsedByOneAccessPlane.insert(static_cast<uint16_t>(l1OutPort));
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(l1PortsUsedByOneAccessPlane.size(),
+                              l1Ports.size(),
+                              "Packets assigned to one access->L1 plane should still cover all "
+                              "downstream L1->L2 ports");
     }
 };
 
@@ -8080,6 +8699,12 @@ class UbTransportRetransTestSuite : public TestSuite
 {
   public:
     UbTransportRetransTestSuite();
+};
+
+class UbPacketSprayTestSuite : public TestSuite
+{
+  public:
+    UbPacketSprayTestSuite();
 };
 
 class UbTransactionUrmaTestSuite : public TestSuite
@@ -8178,6 +8803,8 @@ UbTestSuite::UbTestSuite()
                 TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpOpcodeIsValidTransportOpcodeTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbRoutingProcessRangeRouteTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbRoutingWeightedPacketSpraySkipsZeroCapacityPortTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSwitchDoesNotRemarkMarkedFecnTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnSenderCutsRateOnCnpTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbDcqcnCnpDoesNotAdvanceAckStateTest(), TestCase::Duration::QUICK);
@@ -8225,10 +8852,24 @@ UbTestSuite::UbTestSuite()
     AddTestCase(new UbPfcForwardingUsesIngressPortConfigTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbFlowControlReleaseHookRunsAfterIngressDequeueTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbAllocatorKeepsIngressPacketWhenEgressQueueIsFullTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbPacketSprayWeightsPortsByBandwidthTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbBwWeightedPacketSprayWeightsSwitchToSwitchLinksTest(),
                 TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayKeepsIngressLinkRatioAcrossSharedBottleneckTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayAccessScopeSkipsParallelLinksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayCapsSingleLinksByDownstreamCapacityTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayL1L2ScopeSkipsAccessLinksTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbPacketSprayCanDisableBandwidthWeightingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSpraySkipsUnreachableDownstreamCandidateTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayDecouplesAdjacentFanoutCyclesTest(),
+                TestCase::Duration::QUICK);
     AddTestCase(new UbSwitchCreatesVoqsOnDemandTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbQueueManagerReserveOnlyAdmissionTest(), TestCase::Duration::QUICK);
     AddTestCase(new UbQueueManagerStickyHeadroomAccountingTest(), TestCase::Duration::QUICK);
@@ -8325,6 +8966,33 @@ UbTransportRetransTestSuite::UbTransportRetransTestSuite()
 }
 
 static UbTransportRetransTestSuite g_ubTransportRetransTestSuite;
+
+UbPacketSprayTestSuite::UbPacketSprayTestSuite()
+    : TestSuite("unified-bus-packet-spray", Type::UNIT)
+{
+    AddTestCase(new UbRoutingWeightedPacketSpraySkipsZeroCapacityPortTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayUsesEvenRoundRobinAcrossEqualPortsTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayWeightsPortsByBandwidthTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayWeightsSwitchToSwitchLinksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayKeepsIngressLinkRatioAcrossSharedBottleneckTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayAccessScopeSkipsParallelLinksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayCapsSingleLinksByDownstreamCapacityTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbBwWeightedPacketSprayL1L2ScopeSkipsAccessLinksTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayCanDisableBandwidthWeightingTest(), TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSpraySkipsUnreachableDownstreamCandidateTest(),
+                TestCase::Duration::QUICK);
+    AddTestCase(new UbPacketSprayDecouplesAdjacentFanoutCyclesTest(),
+                TestCase::Duration::QUICK);
+}
+
+static UbPacketSprayTestSuite g_ubPacketSprayTestSuite;
 
 UbTransactionUrmaTestSuite::UbTransactionUrmaTestSuite()
     : TestSuite("unified-bus-transaction-urma", Type::UNIT)
@@ -9318,6 +9986,59 @@ class UbQuickExampleOptionalTransportChannelSystemTest : public TestCase
     }
 };
 
+class UbQuickExampleTaskSegmentTraceDefaultOffSystemTest : public TestCase
+{
+  public:
+    UbQuickExampleTaskSegmentTraceDefaultOffSystemTest()
+        : TestCase("UnifiedBus - ub-quick-example leaves task segment traces off by default")
+    {
+    }
+
+    void DoRun() override
+    {
+        namespace fs = std::filesystem;
+
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const fs::path caseDir =
+            CopyCaseDirWithoutFile("scratch/2nodes_single-tp", "transport_channel.csv");
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--stop-ms=1",
+                                               "",
+                                               caseDir);
+
+        NS_TEST_ASSERT_MSG_EQ(status, 0, "ub-quick-example should complete the minimal case");
+
+        std::string taskTraceContents;
+        for (const auto& entry : fs::directory_iterator(caseDir / "runlog"))
+        {
+            if (entry.path().filename().string().find("TaskTrace_node_") == std::string::npos)
+            {
+                continue;
+            }
+            std::ifstream in(entry.path());
+            taskTraceContents.append(std::string((std::istreambuf_iterator<char>(in)),
+                                                 std::istreambuf_iterator<char>()));
+        }
+
+        std::error_code ec;
+        fs::remove_all(caseDir, ec);
+
+        NS_TEST_ASSERT_MSG_NE(taskTraceContents.find("WQE Starts"),
+                              std::string::npos,
+                              "Task starts should still be traced");
+        NS_TEST_ASSERT_MSG_NE(taskTraceContents.find("WQE Completes"),
+                              std::string::npos,
+                              "Task completes should still be traced");
+        NS_TEST_ASSERT_MSG_EQ(taskTraceContents.find("WQE Segment Sends"),
+                              std::string::npos,
+                              "Segment sends should be disabled by default");
+        NS_TEST_ASSERT_MSG_EQ(taskTraceContents.find("WQE Segment Completes"),
+                              std::string::npos,
+                              "Segment completes should be disabled by default");
+    }
+};
+
 class UbQuickExampleLegacyNetworkAttributeHintSystemTest : public TestCase
 {
   public:
@@ -9792,6 +10513,58 @@ class UbQuickExampleLocalDependencyVisibilityDelaySystemTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ((taskTimes.at(1).startNs >= taskTimes.at(0).finishNs + 20 + 10),
                               true,
                               "dependent task should start after finish, visibility delay, and "
+                              "task delay");
+    }
+};
+
+class UbQuickExampleLocalDefaultDependencyVisibilityDelaySystemTest : public TestCase
+{
+  public:
+    UbQuickExampleLocalDefaultDependencyVisibilityDelaySystemTest()
+        : TestCase("UnifiedBus - ub-quick-example local dependency visibility delay defaults to 10ns")
+    {
+    }
+
+    void DoRun() override
+    {
+        SetDataDir(NS_TEST_SOURCEDIR);
+        const std::string trafficCsv =
+            "taskId,sourceNode,destNode,dataSize(Byte),opType,priority,delay,phaseId,dependOnPhases\n"
+            "0,0,1,4096,URMA_WRITE,7,10ns,10,\n"
+            "1,0,1,4096,URMA_WRITE,7,10ns,20,10\n";
+        const std::filesystem::path caseDir =
+            CopyCaseDirWithTrafficFile(kLocalSingleThreadQuickExampleCase, trafficCsv);
+
+        auto [status, output] =
+            RunQuickExampleAbsoluteCaseCommand(CreateTempDirFilename(GetName() + ".log"),
+                                               "--mtp-threads=1 --test",
+                                               "",
+                                               caseDir);
+
+        NS_TEST_ASSERT_MSG_EQ(status,
+                              0,
+                              "local dependency visibility delay should default to 10ns");
+        NS_TEST_ASSERT_MSG_NE(output.find("TEST : 00000 : PASSED"),
+                              std::string::npos,
+                              "default dependency visibility delay case should report PASSED");
+        if (status != 0)
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(caseDir, ec);
+            return;
+        }
+        const auto taskTimes = ReadTaskStatisticsTimes(caseDir);
+        std::error_code ec;
+        std::filesystem::remove_all(caseDir, ec);
+        const bool hasTaskTimes = HasDependencyVisibilityTaskTimes(taskTimes);
+        NS_TEST_ASSERT_MSG_EQ(hasTaskTimes, true, "dependent tasks should have start/finish times");
+        if (!hasTaskTimes)
+        {
+            return;
+        }
+        NS_TEST_ASSERT_MSG_EQ((taskTimes.at(1).startNs >= taskTimes.at(0).finishNs + 10 + 10),
+                              true,
+                              "dependent task should start after finish, default visibility delay, and "
                               "task delay");
     }
 };
@@ -10280,6 +11053,8 @@ class UbQuickExampleSystemTestSuite : public TestSuite
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleLocalDependencyVisibilityDelaySystemTest(),
                     TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleLocalDefaultDependencyVisibilityDelaySystemTest(),
+                    TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleMtpDependencyVisibilityDelaySystemTest(),
                     TestCase::Duration::QUICK);
 #ifdef NS3_MTP
@@ -10333,6 +11108,8 @@ class UbQuickExampleSmokeTestSuite : public TestSuite
     {
         AddTestCase(new UbQuickExampleLocalSingleThreadSystemTest(), TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleOptionalTransportChannelSystemTest(),
+                    TestCase::Duration::QUICK);
+        AddTestCase(new UbQuickExampleTaskSegmentTraceDefaultOffSystemTest(),
                     TestCase::Duration::QUICK);
         AddTestCase(new UbQuickExampleConfiguredGbnRetransCanContinueSystemTest(),
                     TestCase::Duration::QUICK);

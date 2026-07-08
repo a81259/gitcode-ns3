@@ -1,59 +1,0 @@
-[11:30:37] [case] Run case: /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/case05_op0032_ep_all_to_all/standard
-[11:30:37] [setup] Load network_attribute.txt
-[11:30:37] [setup] Rewrite legacy network attribute aliases: 1
-[11:30:37] [setup] Prepare runlog directory: /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/case05_op0032_ep_all_to_all/standard/runlog
-[11:30:37] [setup] Load node.csv
-[11:30:39] [setup] Load topology.csv
-[11:30:39] [setup] Load routing_table.csv
-[11:30:56] [setup] Skip transport_channel.csv (not found; TP channels will be created on demand).
---- UnifiedBus Trace System Configuration ---
-UB_TRACE_ENABLE: ON
-  UB_TASK_TRACE_ENABLE:   ON  (Task level events)
-  UB_PACKET_TRACE_ENABLE: OFF  (Packet Send/ACK timestamps, essential for detailed task latency breakdown)
-  UB_PORT_TRACE_ENABLE:   OFF  (All port traffic, high volume, for throughput)
-  UB_RECORD_PKT_TRACE:    OFF  (Per-hop packet path tracking)
-  UB_QUEUE_TRACE_ENABLE:  OFF  (QueueTrace_* files from queue events and periodic sampling)
-  UB_FLOW_CONTROL_TRACE_ENABLE: OFF  (Algorithm-emitted PFC/CBFC trace files)
-  UB_CONGESTION_CONTROL_TRACE_ENABLE: OFF  (Algorithm-emitted DCQCN/CAQM trace files)
--------------------------------------------
-[11:30:56] [traffic] Load traffic.csv
-[11:30:56] [traffic] Activate clients and enqueue tasks.
-[11:30:56] [traffic] Scheduled local tasks: 4104
-[11:30:56] Simulation time progress: 0 us[11:42:07] Simulation time progress: 100 us[11:54:03] Simulation time progress: 200 us[12:05:54] Simulation time progress: 300 us[12:17:41] Simulation time progress: 400 us[12:29:27] Simulation time progress: 500 us[12:41:10] Simulation time progress: 600 us[12:52:51] Simulation time progress: 700 us[13:04:38] Simulation time progress: 800 us[13:16:24] Simulation time progress: 900 us[13:28:17] Simulation time progress: 1.000 ms[13:40:13] Simulation time progress: 1.100 ms[13:52:09] Simulation time progress: 1.200 ms[13:56:06] Simulation time progress: 1.300 ms
-[13:56:07] [run] Simulation finished.
-[13:56:07] [trace] Parse runlog into output artifacts.
-Stats: Processed 4104 tasks.
-Note: 4104/4104 tasks missing packet timestamps (First Packet Sends / Last Packet ACKs).
-      This is expected if UB_PACKET_TRACE_ENABLE is set to 'false'.
-Saved traffic tasks throughput results to /home/a81257/gitcode0519/ns-3-ub/scratch/pod1d_no_access_pairwise_2mb_full_ps/case05_op0032_ep_all_to_all/standard/output/task_statistics.csv
-Stats: Generated throughput metrics for 0 port-directions.
-Note: No port throughput data found. This is expected if UB_PORT_TRACE_ENABLE is set to 'false'.
-[13:56:26] [summary] Program finished.
-[13:56:26] [summary] Wall-clock:
-[13:56:26] [summary]   config : 96 us
-[13:56:26] [summary]   run    : 8728.066527 s
-[13:56:26] [summary]   trace  : 19.087740 s
-[13:56:26] [summary]   total  : 8748.859738 s
-	Command being timed: "/home/a81257/gitcode0519/ns-3-ub/build/scratch/ns3.44-ub-quick-example-default --case-path=scratch/pod1d_no_access_pairwise_2mb_full_ps/case05_op0032_ep_all_to_all/standard --mtp-threads=1"
-	User time (seconds): 8741.79
-	System time (seconds): 7.28
-	Percent of CPU this job got: 100%
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:25:49
-	Average shared text size (kbytes): 0
-	Average unshared data size (kbytes): 0
-	Average stack size (kbytes): 0
-	Average total size (kbytes): 0
-	Maximum resident set size (kbytes): 4683568
-	Average resident set size (kbytes): 0
-	Major (requiring I/O) page faults: 180
-	Minor (reclaiming a frame) page faults: 1178966
-	Voluntary context switches: 145
-	Involuntary context switches: 8679
-	Swaps: 0
-	File system inputs: 67912
-	File system outputs: 4777592
-	Socket messages sent: 0
-	Socket messages received: 0
-	Signals delivered: 0
-	Page size (bytes): 4096
-	Exit status: 0

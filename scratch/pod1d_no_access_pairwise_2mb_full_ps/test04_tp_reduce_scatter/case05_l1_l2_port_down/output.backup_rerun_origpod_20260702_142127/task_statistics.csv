@@ -1,3 +1,0 @@
-taskId,sourceNode,destNode,dataSize(Byte),opType,priority,delay,phaseId,dependOnPhases,taskStartTime(us),taskCompletesTime(us),firstPacketSends(us),lastPacketACKs(us),taskThroughput(Gbps)
-0,0,1,58720256,URMA_WRITE,7,10ns,0,,0.01,91.721864,0.0,0.0,5122.1514
-1,1,0,58720256,URMA_WRITE,7,10ns,0,,0.01,91.721864,0.0,0.0,5122.1514

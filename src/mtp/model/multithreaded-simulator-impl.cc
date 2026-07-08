@@ -322,7 +322,10 @@ MultithreadedSimulatorImpl::Partition()
                 {
                     TimeValue delay;
                     channel->GetAttribute("Delay", delay);
-                    delays.push_back(delay.Get());
+                    if (delay.Get().IsStrictlyPositive())
+                    {
+                        delays.push_back(delay.Get());
+                    }
                 }
             }
         }
@@ -373,8 +376,10 @@ MultithreadedSimulatorImpl::Partition()
                     {
                         TimeValue delay;
                         channel->GetAttribute("Delay", delay);
-                        // if delay is below threshold, do not cut-off
-                        if (delay.Get() >= m_minLookahead)
+                        // Zero-delay links cannot safely span LPs because they provide no
+                        // positive lookahead; keep them inside the same partition.
+                        if (m_minLookahead.IsStrictlyPositive() &&
+                            delay.Get().IsStrictlyPositive() && delay.Get() >= m_minLookahead)
                         {
                             continue;
                         }
