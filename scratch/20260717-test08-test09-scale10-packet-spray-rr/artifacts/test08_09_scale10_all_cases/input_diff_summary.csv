@@ -1,0 +1,11 @@
+test,case,role,topology_links,removed_links_vs_standard,added_links_vs_standard,bandwidth_changed_links_vs_standard,bandwidth_changes,routing_table_same_as_standard,node_same_as_standard,traffic_same_as_standard,network_attribute_same_as_standard
+test09_dp_all_gather,case01_标准topo,control,50616,0,0,0,,True,True,True,True
+test09_dp_all_gather,case02_故障1topo_单链路lane,treatment,50616,0,0,1,"('2736', '72', '3192', '0'):448Gbps->224Gbps",True,True,True,True
+test09_dp_all_gather,case03_故障2topo_单链路laport,treatment,50615,1,0,0,,False,True,True,True
+test09_dp_all_gather,case04_故障3topo_分布式多链路port,treatment,50598,18,0,0,,False,True,True,True
+test09_dp_all_gather,case05_故障4topo_分集中式多链路port,treatment,50598,18,0,0,,False,True,True,True
+test10_dp_reduce_scatter,case01_标准topo,control,50616,0,0,0,,True,True,True,True
+test10_dp_reduce_scatter,case02_故障1topo_单链路lane,treatment,50616,0,0,1,"('2736', '72', '3192', '0'):448Gbps->224Gbps",True,True,True,True
+test10_dp_reduce_scatter,case03_故障2topo_单链路laport,treatment,50615,1,0,0,,False,True,True,True
+test10_dp_reduce_scatter,case04_故障3topo_分布式多链路port,treatment,50598,18,0,0,,False,True,True,True
+test10_dp_reduce_scatter,case05_故障4topo_分集中式多链路port,treatment,50598,18,0,0,,False,True,True,True
