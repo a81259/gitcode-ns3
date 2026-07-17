@@ -53,6 +53,7 @@ Shared knowledge cards in `openusim-references/`:
 - `trace-observability.md` - Trace/debug semantics
 - `transport-channel-modes.md` - Transport channel semantics
 - `throughput-evidence.md` - Throughput and line-rate interpretation
+- `routing-strategy-selection.md` - Per-flow/per-packet routing strategy and path-scope selection
 - `spec-to-toolchain.md` - Spec-to-toolchain mapping
 - `topology-options.md` - Supported topology families and bounded `custom-graph` flow
 - `workload-options.md` - Workload modes

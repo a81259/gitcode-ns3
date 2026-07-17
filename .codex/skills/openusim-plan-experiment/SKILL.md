@@ -138,6 +138,7 @@ Return to `openusim-welcome` when:
   - `../openusim-references/workload-options.md`
   - `../openusim-references/spec-rules.md`
   - `../openusim-references/spec-to-toolchain.md`
+  - `../openusim-references/routing-strategy-selection.md`
   - `../openusim-references/controlled-experiment-method.md`
 
 ## Common Mistakes

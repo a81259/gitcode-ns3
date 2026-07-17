@@ -139,11 +139,11 @@ private:
  * 报文头格式：total 32 bits
  *              [Credit:1][ACK:1][Credit Target VL:4][Reverse:1]
  *              [VL of this packet:4][Reverse:1][Config(fixed 0011):4]
- *              [Load Balance Mode(0:per flow/1:per packet):1][Routing Policy(0: all paths/1: shortest paths):1]
+ *              [RT[1](0:all paths/1:shortest paths):1][RT[0](0:per flow/1:per packet):1]
  *              [Packet Length in block:4][Last Block Length in flit:5]
  *              [Tail Payload Length in bytes:5]
  *
- *              [Load Balance Mode][Routing Policy]合称RT字段
+ *              RT is encoded according to the UB specification.
  */
 class UbDatalinkPacketHeader : public Header {
 public:
@@ -156,16 +156,14 @@ public:
     void SetCreditTargetVL(uint8_t vlIndex);  // 4 bits: 指定接收credit的VL
     void SetPacketVL(uint8_t vl);             // 4 bits: 数据包的VL
     void SetConfig(uint8_t config);
-    void SetLoadBalanceMode(bool mode);  // 1 bit: 0=per flow, 1=per packet
-    void SetRoutingPolicy(bool policy);  // 1 bit: 0=all paths, 1=shortest paths
+    void SetRoutingType(RoutingType routingType);
 
     // Getters
     bool GetCredit() const;
     bool GetACK() const;
     uint8_t GetCreditTargetVL() const;  // 4 bits: 返回接收credit的VL索引
     uint8_t GetPacketVL() const;        // 4 bits: 返回数据包的VL
-    bool GetLoadBalanceMode() const;    // 1 bit: 返回负载均衡模式
-    bool GetRoutingPolicy() const;      // 1 bit: 返回路由策略
+    RoutingType GetRoutingType() const;
     uint8_t GetConfig() const;          // 返回固定值 0x03 (0011)
     bool IsUbDatalinkControlCreditHeader();
 
@@ -190,9 +188,8 @@ private:
     uint8_t reservE2Value = 0;                       // 1 bit: Reserved
     uint8_t m_config = 0b0011;                       // 4 bits: Config (fixed 0011)
     
-    // 字节2: [Load Balance Mode:1][Routing Policy:1][Packet Length in block (ignored):4][Last Block Length高2位:2]
-    bool m_loadBalanceMode = LB_MODE_PER_FLOW;       // 1 bit: 0=per flow, 1=per packet
-    bool m_routingPolicy = ROUTING_SHORTEST;         // 1 bit: 0=all paths, 1=shortest paths
+    // 字节2: [RT:2][Packet Length in block (ignored):4][Last Block Length高2位:2]
+    RoutingType m_routingType = RoutingType::PER_FLOW_SHORTEST_PATHS;
     // 未完成字段：Packet Length in block (4 bits) - 序列化时填充0
     // 未完成字段：Last Block Length高2位 (2 bits) - 序列化时填充0
     
@@ -499,6 +496,84 @@ private:
     
         static const uint32_t totalHeaderSize = 10;
     };
+
+class UbCtpHeader : public Header
+{
+  public:
+    UbCtpHeader();
+    ~UbCtpHeader() override;
+
+    static TypeId GetTypeId(void);
+    TypeId GetInstanceTypeId(void) const override;
+    void Print(std::ostream& os) const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    uint32_t GetSerializedSize(void) const override;
+
+    void SetTPOpcode(uint8_t opcode);
+    void SetTPOpcode(CtpOpcode opcode);
+    void SetPadding(uint8_t padding);
+    void SetNlp(uint8_t nlp);
+    uint8_t GetTPOpcode() const;
+    uint8_t GetPadding() const;
+    uint8_t GetNlp() const;
+
+  private:
+    uint8_t m_tpOpcode{0};
+    uint8_t m_padding{0};
+    uint8_t m_nlp{0};
+};
+
+/**
+ * \ingroup ub-header
+ * \brief UB compact UPI header, 16-bit form used by CTPH.NLP=0x2.
+ */
+class UbCompactUpiHeader : public Header
+{
+  public:
+    UbCompactUpiHeader();
+    ~UbCompactUpiHeader() override;
+
+    static TypeId GetTypeId(void);
+    TypeId GetInstanceTypeId(void) const override;
+    void Print(std::ostream& os) const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    uint32_t GetSerializedSize(void) const override;
+
+    void SetUpi(uint16_t upi);
+    uint16_t GetUpi() const;
+
+  private:
+    uint16_t m_upi{0};
+};
+
+/**
+ * \ingroup ub-header
+ * \brief UB compact EID header, 20-bit SEID followed by 20-bit DEID.
+ */
+class UbCompactEidHeader : public Header
+{
+  public:
+    UbCompactEidHeader();
+    ~UbCompactEidHeader() override;
+
+    static TypeId GetTypeId(void);
+    TypeId GetInstanceTypeId(void) const override;
+    void Print(std::ostream& os) const override;
+    void Serialize(Buffer::Iterator start) const override;
+    uint32_t Deserialize(Buffer::Iterator start) override;
+    uint32_t GetSerializedSize(void) const override;
+
+    void SetSourceEid(uint32_t eid);
+    void SetDestinationEid(uint32_t eid);
+    uint32_t GetSourceEid() const;
+    uint32_t GetDestinationEid() const;
+
+  private:
+    uint32_t m_sourceEid{0};
+    uint32_t m_destinationEid{0};
+};
 
 /**
  * \ingroup ub-header

@@ -1,0 +1,13 @@
+exec_prefix="/usr/local/bin"
+libdir="/usr/local/lib"
+includedir="/usr/local/include"
+
+Name: ns3-bridge
+Description: 
+URL: 
+Version: 3.44
+Requires:  ns3-network
+Requires.private: 
+Cflags: -I"${includedir}" 
+Libs: -L"${libdir}" -lns3.44-bridge  -lns3.44-network
+Libs.private: -L"${libdir}" 

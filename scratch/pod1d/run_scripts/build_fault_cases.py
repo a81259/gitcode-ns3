@@ -19,12 +19,20 @@ FAULT_HOST_L1_BW_HALF_CASE = "case02_host_l1_lane_down"
 FAULT_HOST_L1_LINK_DOWN_CASE = "case03_host_l1_port_down"
 FAULT_L1_L2_BW_HALF_CASE = "case04_l1_l2_lane_down"
 FAULT_L1_L2_LINK_DOWN_CASE = "case05_l1_l2_port_down"
+FAULT_PODS_FIRST_L1_FIRST_L2_LINK_DOWN_CASE = (
+    "case06_pod1_18_l1_first_l2_port_down"
+)
+FAULT_POD1_FIRST_L1_PLANE1_L2_LINK_DOWN_CASE = (
+    "case07_pod1_4l1_full_1l1_half_l2_port_down"
+)
 CASE_VARIANTS = (
     STANDARD_CASE,
     FAULT_HOST_L1_BW_HALF_CASE,
     FAULT_HOST_L1_LINK_DOWN_CASE,
     FAULT_L1_L2_BW_HALF_CASE,
     FAULT_L1_L2_LINK_DOWN_CASE,
+    FAULT_PODS_FIRST_L1_FIRST_L2_LINK_DOWN_CASE,
+    FAULT_POD1_FIRST_L1_PLANE1_L2_LINK_DOWN_CASE,
 )
 LEGACY_CASE_VARIANTS = (
     "standard",
@@ -56,7 +64,7 @@ ACCESS_L1_TARGET = LinkFaultTarget(
 )
 HOST_L1_TARGET = ACCESS_L1_TARGET
 HOST_L1_TARGET_OVERRIDES = {
-    "test06_pp_send_recv": LinkFaultTarget(
+    "test05_pp_send_recv": LinkFaultTarget(
         node1=1492,
         port1=1,
         node2=2760,
@@ -70,6 +78,27 @@ L1_L2_TARGET = LinkFaultTarget(
     node2=3192,
     port2=0,
     half_bandwidth="224Gbps",
+)
+PODS_1_TO_18_FIRST_L1_FIRST_L2_TARGETS = tuple(
+    LinkFaultTarget(
+        node1=2736 + pod_index * 24,
+        port1=72,
+        node2=3192,
+        port2=pod_index * 9,
+        half_bandwidth="224Gbps",
+    )
+    for pod_index in range(18)
+)
+POD1_FIRST_L1_PLANE1_L2_TARGETS = tuple(
+    LinkFaultTarget(
+        node1=2736,
+        port1=72 + l2_index * 9 + link_index,
+        node2=3192 + l2_index,
+        port2=link_index,
+        half_bandwidth="224Gbps",
+    )
+    for l2_index, link_count in enumerate((5, 5, 4, 4))
+    for link_index in range(link_count)
 )
 
 GENERATED_OUTPUT_DIRS = {"output", "runlog", "test"}
@@ -431,6 +460,14 @@ def apply_fault_link_down_preserving_ports(dst_dir: Path, target: LinkFaultTarge
         append_access_l1_down_backup_routes(dst_dir, target)
 
 
+def apply_fault_links_down_preserving_ports(
+    dst_dir: Path,
+    targets: Iterable[LinkFaultTarget],
+) -> None:
+    for target in targets:
+        apply_fault_link_down_preserving_ports(dst_dir, target)
+
+
 def read_topology_links(topology_path: Path) -> TopologyLinks:
     links: TopologyLinks = {}
     with topology_path.open("r", encoding="utf-8", newline="") as f:
@@ -673,7 +710,7 @@ def set_default_attribute(lines: list[str], attribute: str, value: str) -> bool:
     return False
 
 
-def configure_packet_spray(case_dir: Path, enabled: bool, scope: str = "all") -> None:
+def configure_packet_spray(case_dir: Path) -> None:
     attribute_path = case_dir / "network_attribute.txt"
     if not attribute_path.exists():
         raise FileNotFoundError(f"missing network attributes: {attribute_path}")
@@ -682,14 +719,13 @@ def configure_packet_spray(case_dir: Path, enabled: bool, scope: str = "all") ->
     has_weighted = set_default_attribute(
         lines,
         "BwWeightedPacketSpray",
-        "true" if enabled else "false",
+        "false",
     )
-    has_scope = set_default_attribute(lines, "BwWeightedPacketSprayScope", scope)
+    has_scope = set_default_attribute(lines, "BwWeightedPacketSprayScope", "all")
 
     if not has_weighted:
         lines.append(
-            f'default ns3::UbRoutingProcess::BwWeightedPacketSpray '
-            f'"{"true" if enabled else "false"}"'
+            'default ns3::UbRoutingProcess::BwWeightedPacketSpray "false"'
         )
     if not has_scope:
         insert_after = next(
@@ -702,7 +738,7 @@ def configure_packet_spray(case_dir: Path, enabled: bool, scope: str = "all") ->
         )
         lines.insert(
             insert_after,
-            f'default ns3::UbRoutingProcess::BwWeightedPacketSprayScope "{scope}"',
+            'default ns3::UbRoutingProcess::BwWeightedPacketSprayScope "all"',
         )
 
     attribute_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -711,7 +747,7 @@ def configure_packet_spray(case_dir: Path, enabled: bool, scope: str = "all") ->
 def build_case_variants(case_dir: Path) -> None:
     standard_dir = move_root_case_files_to_standard(case_dir)
     sync_shared_case_files(standard_dir)
-    configure_packet_spray(standard_dir, enabled=False)
+    configure_packet_spray(standard_dir)
     host_l1_target = host_l1_target_for_case(case_dir)
 
     for legacy_name in LEGACY_CASE_VARIANTS:
@@ -723,25 +759,47 @@ def build_case_variants(case_dir: Path) -> None:
     copy_clean_case(standard_dir, host_l1_bw_dir)
     sync_shared_case_files(host_l1_bw_dir)
     rewrite_link_bandwidth(host_l1_bw_dir / "topology.csv", host_l1_target)
-    configure_packet_spray(host_l1_bw_dir, enabled=True, scope="access-l1")
+    configure_packet_spray(host_l1_bw_dir)
 
     host_l1_link_down_dir = case_dir / FAULT_HOST_L1_LINK_DOWN_CASE
     copy_clean_case(standard_dir, host_l1_link_down_dir)
     sync_shared_case_files(host_l1_link_down_dir)
     apply_fault_link_down_preserving_ports(host_l1_link_down_dir, host_l1_target)
-    configure_packet_spray(host_l1_link_down_dir, enabled=False)
+    configure_packet_spray(host_l1_link_down_dir)
 
     l1_l2_bw_dir = case_dir / FAULT_L1_L2_BW_HALF_CASE
     copy_clean_case(standard_dir, l1_l2_bw_dir)
     sync_shared_case_files(l1_l2_bw_dir)
     rewrite_link_bandwidth(l1_l2_bw_dir / "topology.csv", L1_L2_TARGET)
-    configure_packet_spray(l1_l2_bw_dir, enabled=True, scope="l1-l2")
+    configure_packet_spray(l1_l2_bw_dir)
 
     l1_l2_link_down_dir = case_dir / FAULT_L1_L2_LINK_DOWN_CASE
     copy_clean_case(standard_dir, l1_l2_link_down_dir)
     sync_shared_case_files(l1_l2_link_down_dir)
     apply_fault_link_down_preserving_ports(l1_l2_link_down_dir, L1_L2_TARGET)
-    configure_packet_spray(l1_l2_link_down_dir, enabled=False)
+    configure_packet_spray(l1_l2_link_down_dir)
+
+    pods_first_l1_link_down_dir = (
+        case_dir / FAULT_PODS_FIRST_L1_FIRST_L2_LINK_DOWN_CASE
+    )
+    copy_clean_case(standard_dir, pods_first_l1_link_down_dir)
+    sync_shared_case_files(pods_first_l1_link_down_dir)
+    apply_fault_links_down_preserving_ports(
+        pods_first_l1_link_down_dir,
+        PODS_1_TO_18_FIRST_L1_FIRST_L2_TARGETS,
+    )
+    configure_packet_spray(pods_first_l1_link_down_dir)
+
+    pod1_first_l1_link_down_dir = (
+        case_dir / FAULT_POD1_FIRST_L1_PLANE1_L2_LINK_DOWN_CASE
+    )
+    copy_clean_case(standard_dir, pod1_first_l1_link_down_dir)
+    sync_shared_case_files(pod1_first_l1_link_down_dir)
+    apply_fault_links_down_preserving_ports(
+        pod1_first_l1_link_down_dir,
+        POD1_FIRST_L1_PLANE1_L2_TARGETS,
+    )
+    configure_packet_spray(pod1_first_l1_link_down_dir)
 
 
 def main() -> None:

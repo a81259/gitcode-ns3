@@ -1,0 +1,13 @@
+exec_prefix="/usr/local/bin"
+libdir="/usr/local/lib"
+includedir="/usr/local/include"
+
+Name: ns3-internet
+Description: 
+URL: 
+Version: 3.44
+Requires:  ns3-bridge ns3-traffic-control
+Requires.private: 
+Cflags: -I"${includedir}" 
+Libs: -L"${libdir}" -lns3.44-internet  -lns3.44-bridge -lns3.44-traffic-control
+Libs.private: -L"${libdir}" 

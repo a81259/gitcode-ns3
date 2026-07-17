@@ -1,0 +1,1692 @@
+{
+  "cases": [
+    {
+      "case_id": "sem-flow-short",
+      "block_id": "semantic",
+      "role": "control",
+      "topology": "micro-mixed",
+      "workload": "semantic",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "One stable shortest path only.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/sem-flow-short",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "semantic-gate"
+      ]
+    },
+    {
+      "case_id": "sem-packet-short",
+      "block_id": "semantic",
+      "role": "treatment",
+      "topology": "micro-mixed",
+      "workload": "semantic",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Only the unique shortest path is used.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/sem-packet-short",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "semantic-gate"
+      ]
+    },
+    {
+      "case_id": "sem-flow-all",
+      "block_id": "semantic",
+      "role": "treatment",
+      "topology": "micro-mixed",
+      "workload": "semantic",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "One stable path from the full candidate set.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/sem-flow-all",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "semantic-gate"
+      ]
+    },
+    {
+      "case_id": "sem-packet-all",
+      "block_id": "semantic",
+      "role": "treatment",
+      "topology": "micro-mixed",
+      "workload": "semantic",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Shortest and non-shortest paths are both used.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/sem-packet-all",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "semantic-gate"
+      ]
+    },
+    {
+      "case_id": "hash-many-hash64",
+      "block_id": "hash-many",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-many",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Many flows remain path-affine and distribute across spine paths.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-many-hash64",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "hash-elephant-hash64",
+      "block_id": "hash-elephant",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-elephant",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Few elephant flows expose collision and load-skew sensitivity.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-elephant-hash64",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "hash-many-crc32",
+      "block_id": "hash-many",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-many",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "CRC32",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Many flows remain path-affine and distribute across spine paths.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-many-crc32",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "hash-elephant-crc32",
+      "block_id": "hash-elephant",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-elephant",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "CRC32",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Few elephant flows expose collision and load-skew sensitivity.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-elephant-crc32",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "hash-many-toeplitz",
+      "block_id": "hash-many",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-many",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Many flows remain path-affine and distribute across spine paths.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-many-toeplitz",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "hash-elephant-toeplitz",
+      "block_id": "hash-elephant",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "hash-elephant",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Few elephant flows expose collision and load-skew sensitivity.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/hash-elephant-toeplitz",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-equal-flow-hash",
+      "block_id": "spray-equal",
+      "role": "control",
+      "topology": "micro-equal",
+      "workload": "long-flow",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "The flow remains on one path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-equal-flow-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-equal-packet-hash",
+      "block_id": "spray-equal",
+      "role": "treatment",
+      "topology": "micro-equal",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Packets use multiple paths; unequal delay may increase reordering.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-equal-packet-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-equal-round-robin",
+      "block_id": "spray-equal",
+      "role": "treatment",
+      "topology": "micro-equal",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Packet counts differ by at most one on equal paths; unequal delay exposes reordering.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-equal-round-robin",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-delay-flow-hash",
+      "block_id": "spray-delay",
+      "role": "control",
+      "topology": "micro-delay",
+      "workload": "long-flow",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "The flow remains on one path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-delay-flow-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-delay-packet-hash",
+      "block_id": "spray-delay",
+      "role": "treatment",
+      "topology": "micro-delay",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Packets use multiple paths; unequal delay may increase reordering.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-delay-packet-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-delay-round-robin",
+      "block_id": "spray-delay",
+      "role": "treatment",
+      "topology": "micro-delay",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Packet counts differ by at most one on equal paths; unequal delay exposes reordering.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-delay-round-robin",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "adaptive-hot-hash",
+      "block_id": "adaptive-hot",
+      "role": "control",
+      "topology": "micro-slow",
+      "workload": "adaptive-hot",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Static hashing continues to use the slow queued path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/adaptive-hot-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "adaptive-hot-adaptive",
+      "block_id": "adaptive-hot",
+      "role": "treatment",
+      "topology": "micro-slow",
+      "workload": "adaptive-hot",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Adaptive reduces traffic share and queueing on the slow path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/adaptive-hot-adaptive",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "adaptive-sparse-rr",
+      "block_id": "adaptive-sparse",
+      "role": "control",
+      "topology": "micro-equal",
+      "workload": "adaptive-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Sparse packets remain evenly striped.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/adaptive-sparse-rr",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "adaptive-sparse-adaptive",
+      "block_id": "adaptive-sparse",
+      "role": "treatment",
+      "topology": "micro-equal",
+      "workload": "adaptive-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Empty-queue ties reveal first-candidate bias.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/adaptive-sparse-adaptive",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "stripe-multi-hash",
+      "block_id": "stripe-multi",
+      "role": "control",
+      "topology": "clos-32-4-8",
+      "workload": "ingress-multi",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Hash provides a static flow baseline.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/stripe-multi-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "stripe-multi-stripe",
+      "block_id": "stripe-multi",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "ingress-multi",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Eight ingress ports map one-to-one onto eight spine uplinks.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/stripe-multi-stripe",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "stripe-single-hash",
+      "block_id": "stripe-single",
+      "role": "control",
+      "topology": "clos-32-4-8",
+      "workload": "ingress-single",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Different flow keys may use multiple uplinks.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/stripe-single-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "stripe-single-stripe",
+      "block_id": "stripe-single",
+      "role": "treatment",
+      "topology": "clos-32-4-8",
+      "workload": "ingress-single",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "One ingress port concentrates all flows on one uplink.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/stripe-single-stripe",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-hot-short",
+      "block_id": "all-hot",
+      "role": "control",
+      "topology": "micro-all-hot",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Traffic is capped by the slow shortest path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-hot-short",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-hot-all",
+      "block_id": "all-hot",
+      "role": "treatment",
+      "topology": "micro-all-hot",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Non-shortest high-rate detours improve completion.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-hot-all",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-delay-short",
+      "block_id": "all-delay",
+      "role": "control",
+      "topology": "micro-all-delay",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Traffic avoids delayed detours.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-delay-short",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-delay-all",
+      "block_id": "all-delay",
+      "role": "treatment",
+      "topology": "micro-all-delay",
+      "workload": "long-flow",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Delayed detours increase path stretch and reordering.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-delay-all",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-hash64-per-flow-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-hash64-per-flow-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-hash64-per-packet-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-hash64-per-packet-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-hash64-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-hash64-per-flow-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-hash64-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-hash64-per-packet-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-crc32-per-flow-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "CRC32",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-crc32-per-flow-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-crc32-per-packet-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "CRC32",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-crc32-per-packet-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-crc32-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "CRC32",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-crc32-per-flow-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-crc32-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "CRC32",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-crc32-per-packet-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-toeplitz-per-flow-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-toeplitz-per-flow-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-toeplitz-per-packet-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-toeplitz-per-packet-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-toeplitz-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-toeplitz-per-flow-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-toeplitz-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "TOEPLITZ",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-toeplitz-per-packet-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-round-robin-per-packet-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-round-robin-per-packet-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-round-robin-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-round-robin-per-packet-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-adaptive-per-packet-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-adaptive-per-packet-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-adaptive-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-adaptive-per-packet-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-ingress-port-stripe-per-flow-all-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-ingress-port-stripe-per-flow-all-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "cover-ingress-port-stripe-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "role": "coverage",
+      "topology": "micro-mixed",
+      "workload": "coverage",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "balanced",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Legal combination loads and completes successfully.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/cover-ingress-port-stripe-per-flow-shortest-paths",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ctp-flow-hash",
+      "block_id": "smoke-ctp",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "CTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "CTP completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ctp-flow-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ctp-packet-hash",
+      "block_id": "smoke-ctp",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "CTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "CTP completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ctp-packet-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ctp-round-robin",
+      "block_id": "smoke-ctp",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "balanced",
+      "transport": "CTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "CTP completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ctp-round-robin",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ctp-adaptive",
+      "block_id": "smoke-ctp",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "balanced",
+      "transport": "CTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "CTP completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ctp-adaptive",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ctp-ingress-stripe",
+      "block_id": "smoke-ctp",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "balanced",
+      "transport": "CTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "CTP completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ctp-ingress-stripe",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ldst-flow-hash",
+      "block_id": "smoke-ldst",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "LDST",
+      "op_type": "MEM_STORE",
+      "changed_variable": "routing strategy",
+      "prediction": "LDST completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ldst-flow-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ldst-packet-hash",
+      "block_id": "smoke-ldst",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "balanced",
+      "transport": "LDST",
+      "op_type": "MEM_STORE",
+      "changed_variable": "routing strategy",
+      "prediction": "LDST completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ldst-packet-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ldst-round-robin",
+      "block_id": "smoke-ldst",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "observability": "balanced",
+      "transport": "LDST",
+      "op_type": "MEM_STORE",
+      "changed_variable": "routing strategy",
+      "prediction": "LDST completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ldst-round-robin",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ldst-adaptive",
+      "block_id": "smoke-ldst",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "observability": "balanced",
+      "transport": "LDST",
+      "op_type": "MEM_STORE",
+      "changed_variable": "routing strategy",
+      "prediction": "LDST completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ldst-adaptive",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "smoke-ldst-ingress-stripe",
+      "block_id": "smoke-ldst",
+      "role": "smoke",
+      "topology": "micro-equal",
+      "workload": "smoke",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "INGRESS_PORT_STRIPE",
+      "observability": "balanced",
+      "transport": "LDST",
+      "op_type": "MEM_STORE",
+      "changed_variable": "routing strategy",
+      "prediction": "LDST completes with the representative legal strategy.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/smoke-ldst-ingress-stripe",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "flow_affinity",
+        "task_completion",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    }
+  ]
+}

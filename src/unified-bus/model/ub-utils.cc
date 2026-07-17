@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "ub-utils.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -9,8 +10,10 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string_view>
+#include <unordered_map>
 #ifdef NS3_MPI
 #include "ub-remote-link.h"
 #include "ns3/mpi-interface.h"
@@ -28,7 +31,7 @@ struct LegacyNetworkAttributeKey
     const char* note;
 };
 
-constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys = {{
+constexpr std::array<LegacyNetworkAttributeKey, 6> kLegacyNetworkAttributeKeys = {{
     {"ns3::UbQueueManager::ResumeOffset",
      "ns3::UbQueueManager::DynamicPfcResumeGapBytes",
      "DynamicPfcResumeGapBytes is the current dynamic-PFC XON/XOFF resume gap."},
@@ -41,6 +44,12 @@ constexpr std::array<LegacyNetworkAttributeKey, 4> kLegacyNetworkAttributeKeys =
     {"ns3::UbApiThread::",
      "ns3::UbLdstThread::",
      "LD/ST thread attributes moved to the UbLdstThread TypeId."},
+    {"ns3::UbJetty::UbInflightMax",
+     "ns3::UbJetty::UbJettyInflightMax",
+     "Jetty inflight control was renamed."},
+    {"ns3::UbCtpTransportService::MaxOutstandingTransactions",
+     "ns3::UbJetty::UbJettyInflightMax",
+     "CTP no longer owns a separate send-admission window; outstanding back-pressure belongs to Jetty."},
 }};
 
 struct NetworkAttributeAlias
@@ -55,10 +64,137 @@ constexpr std::array<NetworkAttributeAlias, 2> kNetworkAttributeAliases = {{
      "ns3::UbTransportChannel::EnableFastRetrans"},
 }};
 
+struct LegacyRoutingAttributes
+{
+    const char* typeName;
+    const char* packetSpray;
+    const char* shortestPaths;
+};
+
+constexpr std::array<LegacyRoutingAttributes, 3> kLegacyRoutingAttributes = {{
+    {"ns3::UbApp", "ns3::UbApp::UsePacketSpray", "ns3::UbApp::UseShortestPaths"},
+    {"ns3::UbTransportChannel",
+     "ns3::UbTransportChannel::UsePacketSpray",
+     "ns3::UbTransportChannel::UseShortestPaths"},
+    {"ns3::UbLdstApi",
+     "ns3::UbLdstApi::UsePacketSpray",
+     "ns3::UbLdstApi::UseShortestPaths"},
+}};
+
+struct ParsedDefaultAttribute
+{
+    std::string name;
+    std::string value;
+};
+
+std::optional<ParsedDefaultAttribute>
+ParseDefaultAttribute(const std::string& line)
+{
+    const auto firstNonSpace = line.find_first_not_of(" \t");
+    if (firstNonSpace == std::string::npos || line[firstNonSpace] == '#')
+    {
+        return std::nullopt;
+    }
+
+    std::istringstream tokens(line.substr(firstNonSpace));
+    std::string directive;
+    ParsedDefaultAttribute attribute;
+    tokens >> directive >> attribute.name >> attribute.value;
+    if (directive != "default" || attribute.name.empty() || attribute.value.empty())
+    {
+        return std::nullopt;
+    }
+    if (attribute.value.size() >= 2 && attribute.value.front() == '"' &&
+        attribute.value.back() == '"')
+    {
+        attribute.value = attribute.value.substr(1, attribute.value.size() - 2);
+    }
+    return attribute;
+}
+
+bool
+ParseLegacyRoutingBool(const std::string& value,
+                       const std::string& filename,
+                       uint32_t lineNumber)
+{
+    if (value == "true" || value == "1")
+    {
+        return true;
+    }
+    if (value == "false" || value == "0")
+    {
+        return false;
+    }
+    NS_FATAL_ERROR("Invalid legacy routing boolean at "
+                   << filename << ":" << lineNumber << ": " << value
+                   << ". Use true or false.");
+    return false;
+}
+
+template <typename T>
+T
+GetConfiguredDefaultEnum(TypeId typeId, const char* attributeName)
+{
+    TypeId::AttributeInformation info;
+    NS_ABORT_MSG_IF(!typeId.LookupAttributeByName(attributeName, &info),
+                    "Missing routing attribute " << typeId.GetName() << "::" << attributeName);
+    const auto* value = dynamic_cast<const EnumValue<T>*>(PeekPointer(info.initialValue));
+    NS_ABORT_MSG_IF(value == nullptr,
+                    "Routing attribute " << typeId.GetName() << "::" << attributeName
+                                         << " is not an enum");
+    return value->Get();
+}
+
+void
+ValidateConfiguredRoutingDefaults(const std::string& filename)
+{
+    const MultipathSelector selector = GetConfiguredDefaultEnum<MultipathSelector>(
+        UbRoutingProcess::GetTypeId(),
+        "MultipathSelector");
+    const std::array<std::pair<TypeId, const char*>, 3> routingOwners = {{
+        {UbApp::GetTypeId(), "ns3::UbApp"},
+        {UbTransportChannel::GetTypeId(), "ns3::UbTransportChannel"},
+        {UbLdstApi::GetTypeId(), "ns3::UbLdstApi"},
+    }};
+
+    for (const auto& [typeId, typeName] : routingOwners)
+    {
+        const RoutingType routingType =
+            GetConfiguredDefaultEnum<RoutingType>(typeId, "RoutingType");
+        if (MultipathSelectorIsValidForRoutingType(selector, routingType))
+        {
+            continue;
+        }
+
+        const RoutingType compatibleRoutingType =
+            MakeRoutingType(selector != MultipathSelector::INGRESS_PORT_STRIPE,
+                            RoutingTypeUsesShortestPaths(routingType));
+        NS_ABORT_MSG("Invalid routing configuration in "
+                     << filename << ": default " << typeName << "::RoutingType \""
+                     << RoutingTypeToString(routingType)
+                     << "\" cannot be combined with default "
+                        "ns3::UbRoutingProcess::MultipathSelector \""
+                     << MultipathSelectorToString(selector)
+                     << "\". Replace one line with either:\n"
+                     << "  default " << typeName << "::RoutingType \""
+                     << RoutingTypeToString(compatibleRoutingType) << "\"\n"
+                     << "  default ns3::UbRoutingProcess::MultipathSelector \"HASH64\"");
+    }
+}
+
 std::string
 DisplayFilename(const std::string& filename)
 {
     return std::filesystem::path(filename).filename().string();
+}
+
+uint64_t
+MixLinkDelayOffsetHash(uint64_t value)
+{
+    value += 0x9e3779b97f4a7c15ULL;
+    value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
+    return value ^ (value >> 31);
 }
 
 uint32_t
@@ -108,15 +244,88 @@ ParseTrafficPriorityField(std::string_view field)
 std::string_view
 TrimField(std::string_view field)
 {
-    while (!field.empty() && (field.front() == ' ' || field.front() == '\t'))
+    while (!field.empty() &&
+           (field.front() == ' ' || field.front() == '\t' || field.front() == '\r' ||
+            field.front() == '\n'))
     {
         field.remove_prefix(1);
     }
-    while (!field.empty() && (field.back() == ' ' || field.back() == '\t'))
+    while (!field.empty() &&
+           (field.back() == ' ' || field.back() == '\t' || field.back() == '\r' ||
+            field.back() == '\n'))
     {
         field.remove_suffix(1);
     }
     return field;
+}
+
+std::string
+TrimFieldCopy(std::string_view field)
+{
+    field = TrimField(field);
+    return std::string(field.data(), field.size());
+}
+
+std::vector<std::string>
+SplitCsvRow(const std::string& line)
+{
+    std::vector<std::string> fields;
+    std::stringstream ss(line);
+    std::string field;
+    while (std::getline(ss, field, ','))
+    {
+        fields.push_back(TrimFieldCopy(field));
+    }
+    if (!line.empty() && line.back() == ',')
+    {
+        fields.emplace_back();
+    }
+    return fields;
+}
+
+std::map<std::string, std::size_t>
+BuildCsvHeaderIndex(const std::vector<std::string>& header)
+{
+    std::map<std::string, std::size_t> index;
+    for (std::size_t i = 0; i < header.size(); ++i)
+    {
+        index.emplace(header[i], i);
+    }
+    return index;
+}
+
+std::string
+GetRequiredCsvField(const std::vector<std::string>& fields,
+                    const std::map<std::string, std::size_t>& headerIndex,
+                    const std::string& column,
+                    const std::string& filename)
+{
+    const auto it = headerIndex.find(column);
+    NS_ABORT_MSG_IF(it == headerIndex.end(),
+                    DisplayFilename(filename) << " missing required column: " << column);
+    NS_ABORT_MSG_IF(it->second >= fields.size(),
+                    DisplayFilename(filename) << " row missing required field: " << column);
+    return fields[it->second];
+}
+
+std::string
+GetOptionalCsvField(const std::vector<std::string>& fields,
+                    const std::map<std::string, std::size_t>& headerIndex,
+                    const std::string& column)
+{
+    const auto it = headerIndex.find(column);
+    if (it == headerIndex.end() || it->second >= fields.size())
+    {
+        return "";
+    }
+    return fields[it->second];
+}
+
+bool
+IsLegacyNodeForwardDelayHeader(const std::vector<std::string>& header)
+{
+    return header.size() == 4 && header[0] == "nodeId" && header[1] == "nodeType" &&
+           header[2] == "portNum" && header[3] == "forwardDelay";
 }
 
 void
@@ -178,6 +387,14 @@ SetTrafficRecordField(int fieldCount, std::string_view rawField, TrafficRecord& 
         break;
     case 8:
         AppendDependencyPhases(field, record);
+        break;
+    case 9:
+        record.srcEntityId = field.empty() ? 0 : ParseUint32Field(field);
+        record.hasSrcEntityId = true;
+        break;
+    case 10:
+        record.dstEntityId = field.empty() ? 0 : ParseUint32Field(field);
+        record.hasDstEntityId = true;
         break;
     }
 }
@@ -346,28 +563,237 @@ RewriteDefaultAttributeLine(std::string& line, const NetworkAttributeAlias& alia
 }
 
 std::string
-CreateConfigStoreInput(const std::string& filename, uint32_t& rewrittenAliasLines)
+CreateConfigStoreInput(const std::string& filename, uint32_t& rewrittenLines)
 {
     std::ifstream input(filename.c_str());
     NS_ASSERT_MSG(input.good(), "Can not open File: " << filename);
 
-    rewrittenAliasLines = 0;
-    std::ostringstream rewritten;
+    rewrittenLines = 0;
+    std::vector<std::string> lines;
     std::string line;
     while (std::getline(input, line))
     {
+        lines.push_back(line);
+    }
+
+    struct LegacyValue
+    {
+        std::string value;
+        uint32_t lineNumber;
+        std::vector<uint32_t> sourceLines;
+    };
+    struct RoutingState
+    {
+        std::optional<LegacyValue> packetSpray;
+        std::optional<LegacyValue> shortestPaths;
+        std::optional<uint32_t> canonicalLine;
+    };
+
+    std::array<RoutingState, kLegacyRoutingAttributes.size()> routingStates;
+    std::optional<LegacyValue> legacySelector;
+    std::optional<uint32_t> canonicalSelectorLine;
+    auto recordLegacyValue = [](std::optional<LegacyValue>& target,
+                                const std::string& value,
+                                uint32_t lineNumber) {
+        if (!target.has_value())
+        {
+            target = LegacyValue{value, lineNumber, {lineNumber}};
+            return;
+        }
+        target->value = value;
+        target->lineNumber = lineNumber;
+        target->sourceLines.push_back(lineNumber);
+    };
+
+    for (std::size_t index = 0; index < lines.size(); ++index)
+    {
+        const auto attribute = ParseDefaultAttribute(lines[index]);
+        if (!attribute.has_value())
+        {
+            continue;
+        }
+        const uint32_t lineNumber = static_cast<uint32_t>(index + 1);
+        for (std::size_t owner = 0; owner < kLegacyRoutingAttributes.size(); ++owner)
+        {
+            const auto& legacy = kLegacyRoutingAttributes[owner];
+            if (attribute->name == legacy.packetSpray)
+            {
+                recordLegacyValue(routingStates[owner].packetSpray,
+                                  attribute->value,
+                                  lineNumber);
+            }
+            else if (attribute->name == legacy.shortestPaths)
+            {
+                recordLegacyValue(routingStates[owner].shortestPaths,
+                                  attribute->value,
+                                  lineNumber);
+            }
+            else if (attribute->name == std::string(legacy.typeName) + "::RoutingType")
+            {
+                routingStates[owner].canonicalLine = lineNumber;
+            }
+        }
+        if (attribute->name == "ns3::UbRoutingProcess::RoutingAlgorithm")
+        {
+            recordLegacyValue(legacySelector, attribute->value, lineNumber);
+        }
+        else if (attribute->name == "ns3::UbRoutingProcess::MultipathSelector")
+        {
+            canonicalSelectorLine = lineNumber;
+        }
+    }
+
+    std::map<uint32_t, std::string> replacements;
+    std::set<uint32_t> removedLines;
+    std::vector<std::string> warningEntries;
+    for (std::size_t owner = 0; owner < kLegacyRoutingAttributes.size(); ++owner)
+    {
+        const auto& legacy = kLegacyRoutingAttributes[owner];
+        const auto& state = routingStates[owner];
+        if (!state.packetSpray.has_value() && !state.shortestPaths.has_value())
+        {
+            continue;
+        }
+        NS_ABORT_MSG_IF(state.canonicalLine.has_value(),
+                        "Conflicting routing configuration in "
+                            << filename << ": legacy " << legacy.packetSpray << "/"
+                            << legacy.shortestPaths << " cannot be combined with "
+                            << legacy.typeName << "::RoutingType at line "
+                            << *state.canonicalLine << ". Remove the legacy lines.");
+
+        const bool packetSpray =
+            state.packetSpray.has_value()
+                ? ParseLegacyRoutingBool(state.packetSpray->value,
+                                         filename,
+                                         state.packetSpray->lineNumber)
+                : false;
+        const bool shortestPaths =
+            state.shortestPaths.has_value()
+                ? ParseLegacyRoutingBool(state.shortestPaths->value,
+                                         filename,
+                                         state.shortestPaths->lineNumber)
+                : true;
+        const RoutingType routingType = MakeRoutingType(packetSpray, shortestPaths);
+        const std::string replacement = std::string("default ") + legacy.typeName +
+                                        "::RoutingType \"" + RoutingTypeToString(routingType) + "\"";
+
+        std::vector<uint32_t> sourceLines;
+        if (state.packetSpray.has_value())
+        {
+            sourceLines.insert(sourceLines.end(),
+                               state.packetSpray->sourceLines.begin(),
+                               state.packetSpray->sourceLines.end());
+            removedLines.insert(state.packetSpray->sourceLines.begin(),
+                                state.packetSpray->sourceLines.end());
+        }
+        if (state.shortestPaths.has_value())
+        {
+            sourceLines.insert(sourceLines.end(),
+                               state.shortestPaths->sourceLines.begin(),
+                               state.shortestPaths->sourceLines.end());
+            removedLines.insert(state.shortestPaths->sourceLines.begin(),
+                                state.shortestPaths->sourceLines.end());
+        }
+        std::sort(sourceLines.begin(), sourceLines.end());
+        replacements[sourceLines.front()] = replacement;
+
+        std::ostringstream entry;
+        entry << filename << ":";
+        for (std::size_t index = 0; index < sourceLines.size(); ++index)
+        {
+            if (index > 0)
+            {
+                entry << ",";
+            }
+            entry << sourceLines[index];
+        }
+        entry << " -> " << replacement;
+        warningEntries.push_back(entry.str());
+    }
+
+    if (legacySelector.has_value())
+    {
+        NS_ABORT_MSG_IF(canonicalSelectorLine.has_value(),
+                        "Conflicting routing configuration in "
+                            << filename
+                            << ": legacy ns3::UbRoutingProcess::RoutingAlgorithm at line "
+                            << legacySelector->lineNumber
+                            << " cannot be combined with "
+                               "ns3::UbRoutingProcess::MultipathSelector at line "
+                            << *canonicalSelectorLine << ". Remove the legacy line.");
+        std::string selector;
+        if (legacySelector->value == "HASH")
+        {
+            selector = "HASH64";
+        }
+        else if (legacySelector->value == "ADAPTIVE")
+        {
+            selector = "ADAPTIVE";
+        }
+        else
+        {
+            NS_FATAL_ERROR("Unsupported legacy routing algorithm at "
+                           << filename << ":" << legacySelector->lineNumber << ": "
+                           << legacySelector->value << ". Use MultipathSelector instead.");
+        }
+        const std::string replacement =
+            "default ns3::UbRoutingProcess::MultipathSelector \"" + selector + "\"";
+        replacements[legacySelector->sourceLines.front()] = replacement;
+        removedLines.insert(legacySelector->sourceLines.begin(),
+                            legacySelector->sourceLines.end());
+        std::ostringstream entry;
+        entry << filename << ":";
+        for (std::size_t index = 0; index < legacySelector->sourceLines.size(); ++index)
+        {
+            if (index > 0)
+            {
+                entry << ",";
+            }
+            entry << legacySelector->sourceLines[index];
+        }
+        entry << " -> " << replacement;
+        warningEntries.push_back(entry.str());
+    }
+
+    std::ostringstream rewritten;
+    for (std::size_t index = 0; index < lines.size(); ++index)
+    {
+        const uint32_t lineNumber = static_cast<uint32_t>(index + 1);
+        auto replacement = replacements.find(lineNumber);
+        if (replacement != replacements.end())
+        {
+            rewritten << replacement->second << '\n';
+            ++rewrittenLines;
+            continue;
+        }
+        if (removedLines.find(lineNumber) != removedLines.end())
+        {
+            ++rewrittenLines;
+            continue;
+        }
+        line = lines[index];
         for (const auto& alias : kNetworkAttributeAliases)
         {
             if (RewriteDefaultAttributeLine(line, alias))
             {
-                ++rewrittenAliasLines;
+                ++rewrittenLines;
                 break;
             }
         }
         rewritten << line << '\n';
     }
 
-    if (rewrittenAliasLines == 0)
+    if (!warningEntries.empty())
+    {
+        std::cerr << "WARNING: Legacy routing attributes are deprecated and may stop working in a "
+                     "future release. Replace them with:\n";
+        for (const auto& entry : warningEntries)
+        {
+            std::cerr << "  " << entry << '\n';
+        }
+    }
+
+    if (rewrittenLines == 0)
     {
         return filename;
     }
@@ -416,6 +842,14 @@ SetTrafficRecordViewField(int fieldCount, std::string_view rawField, TrafficReco
         break;
     case 8:
         record.dependOnPhases = field;
+        break;
+    case 9:
+        record.srcEntityId = field.empty() ? 0 : ParseUint32Field(field);
+        record.hasSrcEntityId = true;
+        break;
+    case 10:
+        record.dstEntityId = field.empty() ? 0 : ParseUint32Field(field);
+        record.hasDstEntityId = true;
         break;
     }
 }
@@ -492,7 +926,7 @@ PreloadLocalTpIfOwned(Ptr<Node> node,
 }
 
 Ptr<UbLink>
-CreateUbChannelBetween(Ptr<UbPort> p1, Ptr<UbPort> p2, const string& delay)
+CreateUbChannelBetween(Ptr<UbPort> p1, Ptr<UbPort> p2, Time delay)
 {
     Ptr<UbLink> channel;
 #ifdef NS3_MPI
@@ -509,7 +943,7 @@ CreateUbChannelBetween(Ptr<UbPort> p1, Ptr<UbPort> p2, const string& delay)
         channel = CreateObject<UbLink>();
     }
 
-    channel->SetAttribute("Delay", StringValue(delay));
+    channel->SetAttribute("Delay", TimeValue(delay));
     p1->Attach(channel);
     p2->Attach(channel);
     return channel;
@@ -960,6 +1394,58 @@ inline void UbUtils::TpLastPacketReceivesNotify(
     std::ostringstream oss;
     oss << "Last Packet Receives,srcTpn: " << srcTpn << " destTpn: " << dstTpn << " tpMsn: " << tpMsn
         << " psn: " << psn << " inportId: " << dPort << " lastPacket: 1";
+    string info = oss.str();
+    string fileName = trace_path + "runlog/PacketTrace_node_" + to_string(nodeId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+inline void
+UbUtils::CtpFirstPacketSendsNotify(uint32_t nodeId,
+                                   uint32_t taskId,
+                                   uint32_t srcNodeId,
+                                   uint32_t dstNodeId,
+                                   uint32_t srcEntityId,
+                                   uint32_t dstEntityId,
+                                   uint32_t vl,
+                                   uint32_t taSsn,
+                                   uint32_t outPort,
+                                   uint32_t payloadBytes,
+                                   uint32_t opcode)
+{
+    std::ostringstream oss;
+    oss << "First Packet Sends, taskId: " << taskId << " transport: CTP"
+        << " srcNode: " << srcNodeId << " dstNode: " << dstNodeId
+        << " srcEntity: " << srcEntityId << " dstEntity: " << dstEntityId
+        << " vl: " << vl << " taSsn: " << taSsn << " outPort: " << outPort
+        << " payloadBytes: " << payloadBytes << " taOpcode: " << opcode << " lastPacket: 0";
+    string info = oss.str();
+    string fileName = trace_path + "runlog/PacketTrace_node_" + to_string(nodeId) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
+inline void
+UbUtils::CtpLastPacketACKsNotify(uint32_t nodeId,
+                                 uint32_t taskId,
+                                 uint32_t srcNodeId,
+                                 uint32_t dstNodeId,
+                                 uint32_t srcEntityId,
+                                 uint32_t dstEntityId,
+                                 uint32_t vl,
+                                 uint32_t taSsn,
+                                 uint32_t outPort,
+                                 uint32_t payloadBytes,
+                                 uint32_t opcode)
+{
+    std::ostringstream oss;
+    oss << "Last Packet ACKs, taskId: " << taskId << " transport: CTP"
+        << " srcNode: " << srcNodeId << " dstNode: " << dstNodeId
+        << " srcEntity: " << srcEntityId << " dstEntity: " << dstEntityId
+        << " vl: " << vl << " taSsn: " << taSsn;
+    if (outPort != UINT32_MAX)
+    {
+        oss << " outPort: " << outPort;
+    }
+    oss << " payloadBytes: " << payloadBytes << " taOpcode: " << opcode << " lastPacket: 1";
     string info = oss.str();
     string fileName = trace_path + "runlog/PacketTrace_node_" + to_string(nodeId) + ".tr";
     PrintTraceInfo(fileName, info);
@@ -1542,6 +2028,23 @@ inline void UbUtils::QueueVoqNotify(uint32_t nodeId, uint32_t portId, uint64_t v
     PrintTraceInfo(fileName, info);
 }
 
+inline void
+UbUtils::QueueIngressOccupancyNotify(uint32_t nodeId,
+                                     uint32_t inPort,
+                                     uint32_t priority,
+                                     uint64_t bytes)
+{
+    std::ostringstream oss;
+    oss << "Queue Update, source: ingress"
+        << " inPort: " << inPort
+        << " priority: " << priority
+        << " bytes: " << bytes;
+    string info = oss.str();
+    string fileName =
+        trace_path + "runlog/QueueTrace_node_" + to_string(nodeId) + "_port_" + to_string(inPort) + ".tr";
+    PrintTraceInfo(fileName, info);
+}
+
 inline void UbUtils::QueueEgressEnqueueNotify(uint32_t nodeId,
                                               uint32_t portId,
                                               Ptr<const Packet> packet,
@@ -1641,9 +2144,56 @@ inline void UbUtils::SwitchLastPacketTraversesNotify(uint32_t nodeId, UbTranspor
     }
 }
 
-// 读取拓扑文件
-void UbUtils::CreateTopo(const string &filename)
+Time
+UbUtils::ResolveLinkDelayWithOffset(Time baseDelay,
+                                    Time offsetWindow,
+                                    uint32_t offsetSeed,
+                                    uint32_t node1,
+                                    uint32_t port1,
+                                    uint32_t node2,
+                                    uint32_t port2)
 {
+    NS_ABORT_MSG_IF(baseDelay.IsStrictlyNegative(), "link delay must be non-negative");
+    NS_ABORT_MSG_IF(offsetWindow.IsStrictlyNegative(),
+                    "link delay offset window must be non-negative");
+    if (baseDelay.IsZero() || offsetWindow.IsZero())
+    {
+        return baseDelay;
+    }
+
+    std::pair<uint32_t, uint32_t> endpoint1{node1, port1};
+    std::pair<uint32_t, uint32_t> endpoint2{node2, port2};
+    if (endpoint2 < endpoint1)
+    {
+        std::swap(endpoint1, endpoint2);
+    }
+
+    uint64_t hash =
+        MixLinkDelayOffsetHash(static_cast<uint64_t>(offsetSeed) ^ 0x6c696e6b2d646c79ULL);
+    hash = MixLinkDelayOffsetHash(hash ^ endpoint1.first);
+    hash = MixLinkDelayOffsetHash(hash ^ endpoint1.second);
+    hash = MixLinkDelayOffsetHash(hash ^ endpoint2.first);
+    hash = MixLinkDelayOffsetHash(hash ^ endpoint2.second);
+
+    const auto slotCount = static_cast<uint64_t>(offsetWindow.GetTimeStep());
+    return baseDelay + TimeStep(static_cast<int64_t>(hash % slotCount));
+}
+
+// 读取拓扑文件
+void
+UbUtils::CreateTopo(const string& filename)
+{
+    (void)CreateTopo(filename, Time(0), 1);
+}
+
+UbUtils::LinkDelayOffsetStats
+UbUtils::CreateTopo(const string& filename, Time offsetWindow, uint32_t offsetSeed)
+{
+    NS_ABORT_MSG_IF(offsetWindow.IsStrictlyNegative(),
+                    "link delay offset window must be non-negative");
+    LinkDelayOffsetStats offsetStats;
+    std::unordered_map<int64_t, uint64_t> slotOccupancy;
+
     PrintTimestamp("[setup] Load " + DisplayFilename(filename));
     ifstream file(filename);
     if (!file.is_open())
@@ -1666,17 +2216,17 @@ void UbUtils::CreateTopo(const string &filename)
         string delay;
         string bandwidth;
         getline(ss, cell, ',');
-        node1 = static_cast<uint32_t>(stoi(cell));
+        node1 = static_cast<uint32_t>(stoi(TrimFieldCopy(cell)));
         getline(ss, cell, ',');
-        port1 = static_cast<uint32_t>(stoi(cell));
+        port1 = static_cast<uint32_t>(stoi(TrimFieldCopy(cell)));
         getline(ss, cell, ',');
-        node2 = static_cast<uint32_t>(stoi(cell));
+        node2 = static_cast<uint32_t>(stoi(TrimFieldCopy(cell)));
         getline(ss, cell, ',');
-        port2 = static_cast<uint32_t>(stoi(cell));
+        port2 = static_cast<uint32_t>(stoi(TrimFieldCopy(cell)));
         getline(ss, cell, ',');
-        bandwidth = cell;
+        bandwidth = TrimFieldCopy(cell);
         getline(ss, cell, ',');
-        delay = cell;
+        delay = TrimFieldCopy(cell);
         Ptr<Node> n1 = NodeList::GetNode(node1);
         Ptr<Node> n2 = NodeList::GetNode(node2);
 
@@ -1684,7 +2234,29 @@ void UbUtils::CreateTopo(const string &filename)
         Ptr<UbPort> p2 = DynamicCast<UbPort>(n2->GetDevice(port2));
         p1->SetDataRate(DataRate(bandwidth));
         p2->SetDataRate(DataRate(bandwidth));
-        CreateUbChannelBetween(p1, p2, delay);
+        const Time baseDelay(delay);
+        const Time effectiveDelay = ResolveLinkDelayWithOffset(baseDelay,
+                                                               offsetWindow,
+                                                               offsetSeed,
+                                                               node1,
+                                                               port1,
+                                                               node2,
+                                                               port2);
+        if (baseDelay.IsZero())
+        {
+            ++offsetStats.zeroDelayLinkCount;
+        }
+        else
+        {
+            ++offsetStats.positiveLinkCount;
+            if (offsetWindow.IsStrictlyPositive())
+            {
+                const int64_t slot = (effectiveDelay - baseDelay).GetTimeStep();
+                offsetStats.maxLinksPerOffset =
+                    std::max(offsetStats.maxLinksPerOffset, ++slotOccupancy[slot]);
+            }
+        }
+        CreateUbChannelBetween(p1, p2, effectiveDelay);
     }
 
     for (auto it = NodeList::Begin(); it != NodeList::End(); ++it) {
@@ -1696,6 +2268,14 @@ void UbUtils::CreateTopo(const string &filename)
         }
     }
     file.close();
+
+    if (offsetWindow.IsStrictlyPositive())
+    {
+        offsetStats.distinctOffsetCount = slotOccupancy.size();
+        offsetStats.offsetReuseCount =
+            offsetStats.positiveLinkCount - offsetStats.distinctOffsetCount;
+    }
+    return offsetStats;
 }
 
 // 解析节点范围（如 "1..4"）
@@ -1725,35 +2305,35 @@ void UbUtils::CreateNode(const string &filename)
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
     string line;
-    // 跳过标题行
-    getline(file, line);
+    NS_ABORT_MSG_IF(!getline(file, line), "node.csv must include a header");
+    const std::vector<std::string> header = SplitCsvRow(line);
+    const std::map<std::string, std::size_t> headerIndex = BuildCsvHeaderIndex(header);
+    const bool legacyForwardDelayIsAllocationDelay = IsLegacyNodeForwardDelayHeader(header);
     while (getline(file, line)) {
         // 跳过空行、#开头行、纯空格行
         if (line.empty() || line[0] == '#' || line.find_first_not_of(" \t") == string::npos) {
             continue;
         }
-        stringstream ss(line);
-        string nodeIdStr;
-        string nodeTypeStr;
-        string portNumStr;
-        string forwardDelay;
-        string systemIdStr;
-        // 解析CSV行
-        getline(ss, nodeIdStr, ',');
-        getline(ss, nodeTypeStr, ',');
-        getline(ss, portNumStr, ',');
-        getline(ss, forwardDelay, ',');
-        getline(ss, systemIdStr);
+        const std::vector<std::string> fields = SplitCsvRow(line);
 
         NodeEle nodeEle = {};
-        nodeEle.nodeIdStr = nodeIdStr;
-        nodeEle.nodeTypeStr = nodeTypeStr;
-        nodeEle.portNumStr = portNumStr;
-        nodeEle.forwardDelay = forwardDelay;
-        nodeEle.systemIdStr = systemIdStr;
+        nodeEle.nodeIdStr = GetRequiredCsvField(fields, headerIndex, "nodeId", filename);
+        nodeEle.nodeTypeStr = GetRequiredCsvField(fields, headerIndex, "nodeType", filename);
+        nodeEle.portNumStr = GetRequiredCsvField(fields, headerIndex, "portNum", filename);
+        if (legacyForwardDelayIsAllocationDelay)
+        {
+            nodeEle.forwardDelay = "";
+            nodeEle.allocationDelay = GetOptionalCsvField(fields, headerIndex, "forwardDelay");
+        }
+        else
+        {
+            nodeEle.forwardDelay = GetOptionalCsvField(fields, headerIndex, "forwardDelay");
+            nodeEle.allocationDelay = GetOptionalCsvField(fields, headerIndex, "allocationDelay");
+        }
+        nodeEle.systemIdStr = GetOptionalCsvField(fields, headerIndex, "systemId");
 
         // 解析节点ID（范围 or 单个节点）
-        ParseNodeRange(nodeIdStr, nodeEle);
+        ParseNodeRange(nodeEle.nodeIdStr, nodeEle);
     }
     file.close();
     // 创建节点
@@ -1762,6 +2342,7 @@ void UbUtils::CreateNode(const string &filename)
         string nodeTypeStr = it.second.nodeTypeStr;
         string portNumStr = it.second.portNumStr;
         string forwardDelay = it.second.forwardDelay;
+        string allocationDelay = it.second.allocationDelay;
         string systemIdStr = it.second.systemIdStr;
         int portNum = stoi(portNumStr);
         uint32_t systemId = systemIdStr.empty() ? 0 : static_cast<uint32_t>(stoul(systemIdStr));
@@ -1791,8 +2372,11 @@ void UbUtils::CreateNode(const string &filename)
         auto cc = UbCongestionControl::Create(UB_SWITCH);
         cc->OnSwitchAttached(sw);
         if (!forwardDelay.empty()) {
+            sw->SetAttribute("InPortProcessingDelay", StringValue(forwardDelay));
+        }
+        if (!allocationDelay.empty()) {
             auto allocator = sw->GetAllocator();
-            allocator->SetAttribute("AllocationTime", StringValue(forwardDelay));
+            allocator->SetAttribute("AllocationTime", StringValue(allocationDelay));
         }
     }
 }
@@ -1968,7 +2552,8 @@ void UbUtils::CreateTp(const string &filename)
     ifstream file(filename);
     if (!file.is_open()) { // 没有TP文件则使用实时创建TP模式
         PrintTimestamp("[setup] Skip " + DisplayFilename(filename) +
-                       " (not found; TP channels will be created on demand).");
+                       " (not found; traffic will reserve TP connections before endpoints "
+                       "materialize on demand).");
         return ;
     }
     PrintTimestamp("[setup] Load " + DisplayFilename(filename));
@@ -2192,6 +2777,10 @@ UbUtils::ForEachTrafficRecordInternal(const string& filename,
         record.delay.clear();
         record.phaseId = 0;
         record.dependOnPhases.clear();
+        record.srcEntityId = 0;
+        record.dstEntityId = 0;
+        record.hasSrcEntityId = false;
+        record.hasDstEntityId = false;
 
         int fieldCount = 0;
         size_t fieldStart = 0;
@@ -2212,6 +2801,9 @@ UbUtils::ForEachTrafficRecordInternal(const string& filename,
             }
             fieldStart = fieldEnd + 1;
         }
+        NS_ABORT_MSG_IF(
+            fieldCount != 9 && fieldCount != 11,
+            "traffic.csv row must have 9 base fields or 11 fields with srcEntityId,dstEntityId");
         callback(record);
     }
     file.close();
@@ -2256,6 +2848,9 @@ UbUtils::ForEachTrafficRecordViewInternal(
             }
             fieldStart = fieldEnd + 1;
         }
+        NS_ABORT_MSG_IF(
+            fieldCount != 9 && fieldCount != 11,
+            "traffic.csv row must have 9 base fields or 11 fields with srcEntityId,dstEntityId");
         callback(record);
     }
     file.close();
@@ -2271,18 +2866,19 @@ void UbUtils::SetComponentsAttribute(const string &filename)
         NS_ASSERT_MSG(0, "Can not open File: " << filename);
     }
     ValidateLegacyNetworkAttributeKeys(filename);
-    uint32_t rewrittenAliasLines = 0;
-    const std::string configStoreFilename = CreateConfigStoreInput(filename, rewrittenAliasLines);
-    if (rewrittenAliasLines > 0)
+    uint32_t rewrittenLines = 0;
+    const std::string configStoreFilename = CreateConfigStoreInput(filename, rewrittenLines);
+    if (rewrittenLines > 0)
     {
-        PrintTimestamp("[setup] Rewrite legacy network attribute aliases: " +
-                       std::to_string(rewrittenAliasLines));
+        PrintTimestamp("[setup] Adapt legacy network attributes: " +
+                       std::to_string(rewrittenLines) + " line(s)");
     }
     Config::SetDefault("ns3::ConfigStore::Filename", StringValue(configStoreFilename));
     Config::SetDefault("ns3::ConfigStore::FileFormat", StringValue("RawText"));
     Config::SetDefault("ns3::ConfigStore::Mode", StringValue("Load"));
     ConfigStore config;
     config.ConfigureDefaults();
+    ValidateConfiguredRoutingDefaults(filename);
     if (configStoreFilename != filename)
     {
         Config::SetDefault("ns3::ConfigStore::Filename", StringValue(filename));
@@ -2303,9 +2899,6 @@ void UbUtils::TopoTraceConnect()
 
     g_task_trace_enable.GetValue(val);
     TaskTraceEnable = val.Get();
-
-    g_task_segment_trace_enable.GetValue(val);
-    TaskSegmentTraceEnable = val.Get();
 
     g_packet_trace_enable.GetValue(val);
     PacketTraceEnable = val.Get();
@@ -2338,9 +2931,6 @@ void UbUtils::TopoTraceConnect()
     NS_LOG_UNCOND("UB_TRACE_ENABLE: " << (TraceEnable ? "ON" : "OFF"));
     if (TraceEnable) {
         NS_LOG_UNCOND("  UB_TASK_TRACE_ENABLE:   " << (TaskTraceEnable ? "ON" : "OFF") << "  (Task level events)");
-        NS_LOG_UNCOND("  UB_TASK_SEGMENT_TRACE_ENABLE: "
-                      << (TaskSegmentTraceEnable ? "ON" : "OFF")
-                      << "  (High-volume WQE segment events)");
         NS_LOG_UNCOND("  UB_PACKET_TRACE_ENABLE: " << (PacketTraceEnable ? "ON" : "OFF") << "  (Packet Send/ACK timestamps, essential for detailed task latency breakdown)");
         NS_LOG_UNCOND("  UB_PORT_TRACE_ENABLE:   " << (PortTraceEnable ? "ON" : "OFF") << "  (All port traffic, high volume, for throughput)");
         NS_LOG_UNCOND("  UB_RECORD_PKT_TRACE:    " << (RecordTraceEnabled ? "ON" : "OFF") << "  (Per-hop packet path tracking)");
@@ -2377,7 +2967,7 @@ void UbUtils::TopoTraceConnect()
                         tp->TraceConnectWithoutContext("LastPacketACKsNotify", MakeCallback(TpLastPacketACKsNotify));
                         tp->TraceConnectWithoutContext("LastPacketReceivesNotify", MakeCallback(TpLastPacketReceivesNotify));
                     }
-                    if (TaskTraceEnable && TaskSegmentTraceEnable) {
+                    if (TaskTraceEnable) {
                         tp->TraceConnectWithoutContext("WqeSegmentSendsNotify", MakeCallback(TpWqeSegmentSendsNotify));
                         tp->TraceConnectWithoutContext("WqeSegmentCompletesNotify", MakeCallback(TpWqeSegmentCompletesNotify));
                     }
@@ -2400,6 +2990,27 @@ void UbUtils::TopoTraceConnect()
                 auto ldstApi = ubCtrl->GetUbFunction()->GetUbLdstApi();
                 ldstApi->TraceConnectWithoutContext("LdstRecvNotify", MakeCallback(LdstRecvNotify));
             }
+            if (PacketTraceEnable) {
+                ubCtrl->SetCtpPacketTimingTraceCallbacks(MakeCallback(CtpFirstPacketSendsNotify),
+                                                         MakeCallback(CtpLastPacketACKsNotify));
+            }
+        }
+
+        if (queueTraceEnabled) {
+            uint32_t DevicesNum = node->GetNDevices();
+            for (uint32_t i = 0; i < DevicesNum; i++) {
+                Ptr<UbPort> port = DynamicCast<UbPort>(node->GetDevice(i));
+                if (port) {
+                    port->GetUbQueue()->TraceConnectWithoutContext(
+                        "UbEnqueue",
+                        MakeBoundCallback(&UbUtils::QueueEgressEnqueueNotify, node->GetId(), i));
+                    port->GetUbQueue()->TraceConnectWithoutContext(
+                        "UbDequeue",
+                        MakeBoundCallback(&UbUtils::QueueEgressDequeueNotify, node->GetId(), i));
+                } else {
+                    NS_ASSERT_MSG(0, "port is null");
+                }
+            }
         }
 
         if (PortTraceEnable) {
@@ -2409,14 +3020,6 @@ void UbUtils::TopoTraceConnect()
                 if (port) {
                     port->TraceConnectWithoutContext("PortTxNotify", MakeCallback(PortTxNotify));
                     port->TraceConnectWithoutContext("PortRxNotify", MakeCallback(PortRxNotify));
-                    if (queueTraceEnabled) {
-                        port->GetUbQueue()->TraceConnectWithoutContext(
-                            "UbEnqueue",
-                            MakeBoundCallback(&UbUtils::QueueEgressEnqueueNotify, node->GetId(), i));
-                        port->GetUbQueue()->TraceConnectWithoutContext(
-                            "UbDequeue",
-                            MakeBoundCallback(&UbUtils::QueueEgressDequeueNotify, node->GetId(), i));
-                    }
                 } else {
                     NS_ASSERT_MSG(0, "port is null");
                 }
@@ -2427,6 +3030,9 @@ void UbUtils::TopoTraceConnect()
             sw->GetQueueManager()->TraceConnectWithoutContext(
                 "OutPortBufferBytes",
                 MakeBoundCallback(&UbUtils::QueueVoqNotify, node->GetId()));
+            sw->GetQueueManager()->TraceConnectWithoutContext(
+                "IngressQueueOccupancyBytes",
+                MakeBoundCallback(&UbUtils::QueueIngressOccupancyNotify, node->GetId()));
         }
     }
 
@@ -2446,9 +3052,6 @@ void UbUtils::SingleTpTraceConnect(uint32_t nodeId, uint32_t tpn)
     g_task_trace_enable.GetValue(val);
     TaskTraceEnable = val.Get();
 
-    g_task_segment_trace_enable.GetValue(val);
-    TaskSegmentTraceEnable = val.Get();
-
     g_packet_trace_enable.GetValue(val);
     PacketTraceEnable = val.Get();
 
@@ -2465,7 +3068,7 @@ void UbUtils::SingleTpTraceConnect(uint32_t nodeId, uint32_t tpn)
             tp->TraceConnectWithoutContext("LastPacketACKsNotify", MakeCallback(TpLastPacketACKsNotify));
             tp->TraceConnectWithoutContext("LastPacketReceivesNotify", MakeCallback(TpLastPacketReceivesNotify));
         }
-        if (TaskTraceEnable && TaskSegmentTraceEnable) {
+        if (TaskTraceEnable) {
             tp->TraceConnectWithoutContext("WqeSegmentSendsNotify", MakeCallback(TpWqeSegmentSendsNotify));
             tp->TraceConnectWithoutContext("WqeSegmentCompletesNotify", MakeCallback(TpWqeSegmentCompletesNotify));
         }
@@ -2492,6 +3095,7 @@ bool UbUtils::QueryAttributeInfo(int argc, char *argv[])
     std::string className;
     std::string attrName;
     std::string globalName;
+    std::string ignoredCasePath;
     bool printUbGlobals = false;
 
     CommandLine cmd;
@@ -2499,6 +3103,8 @@ bool UbUtils::QueryAttributeInfo(int argc, char *argv[])
     cmd.AddValue("AttributeName", "Target attribute name (optional)", attrName);
     cmd.AddValue("GlobalName", "Target Unified Bus global value name (optional)", globalName);
     cmd.AddValue("PrintUbGlobals", "Print Unified Bus global values with type metadata", printUbGlobals);
+    cmd.AddValue("case-path", "Ignored case path for metadata-only queries", ignoredCasePath);
+    cmd.AddNonOption("casePath", "Ignored case path for metadata-only queries", ignoredCasePath);
     cmd.Parse(argc, argv);
 
     auto isUbGlobal = [](const std::string& name) {
@@ -2507,10 +3113,10 @@ bool UbUtils::QueryAttributeInfo(int argc, char *argv[])
     auto renderGlobalInfo = [](const GlobalValue& globalValue) {
         StringValue value;
         globalValue.GetValue(value);
-        NS_LOG_UNCOND("Global: " << globalValue.GetName() << "\n"
-                                 << "Description: " << globalValue.GetHelp() << "\n"
-                                 << "DataType: " << globalValue.GetChecker()->GetValueTypeName() << "\n"
-                                 << "Default: " << value.Get());
+        std::cout << "Global: " << globalValue.GetName() << '\n'
+                  << "Description: " << globalValue.GetHelp() << '\n'
+                  << "DataType: " << globalValue.GetChecker()->GetValueTypeName() << '\n'
+                  << "Default: " << value.Get() << std::endl;
     };
 
     if (!globalName.empty()) {
@@ -2520,7 +3126,7 @@ bool UbUtils::QueryAttributeInfo(int argc, char *argv[])
                 return true;
             }
         }
-        NS_LOG_UNCOND("Global not found!");
+        std::cout << "Global not found!" << std::endl;
         return true;
     }
 
@@ -2553,21 +3159,22 @@ bool UbUtils::QueryAttributeInfo(int argc, char *argv[])
     if (!attrName.empty()) {  // attrName not empty
         struct TypeId::AttributeInformation info;
         if (tid.LookupAttributeByName(attrName, &info)) {  // 输出单个属性值
-            NS_LOG_UNCOND("Attribute: " << info.name << "\n"
-                                        << "Description: " << info.help << "\n"
-                                        << "DataType: " << info.checker->GetValueTypeName() << "\n"
-                                        << "Default: " << info.initialValue->SerializeToString(info.checker));
+            std::cout << "Attribute: " << info.name << '\n'
+                      << "Description: " << info.help << '\n'
+                      << "DataType: " << info.checker->GetValueTypeName() << '\n'
+                      << "Default: " << info.initialValue->SerializeToString(info.checker)
+                      << std::endl;
         } else {
-            NS_LOG_UNCOND("Attribute not found!");
+            std::cout << "Attribute not found!" << std::endl;
         }
     } else {  // 输出所有属性
         for (uint32_t i = 0; i < tid.GetAttributeN(); ++i) {
             TypeId::AttributeInformation info = tid.GetAttribute(i);
-            NS_LOG_UNCOND(
-                "Attribute: " << info.name << "\n"
-                              << "Description: " << info.help << "\n"
-                              << "DataType: " << info.checker->GetValueTypeName() << "\n"
-                              << "Default: " << info.initialValue->SerializeToString(info.checker));  // 输出属性信息
+            std::cout << "Attribute: " << info.name << '\n'
+                      << "Description: " << info.help << '\n'
+                      << "DataType: " << info.checker->GetValueTypeName() << '\n'
+                      << "Default: " << info.initialValue->SerializeToString(info.checker)
+                      << std::endl;
         }
     }
     return true;  // 执行完后退出程序

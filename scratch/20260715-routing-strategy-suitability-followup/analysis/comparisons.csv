@@ -1,0 +1,46 @@
+case_id,control_id,comparison_status,comparison_reason,p95_fct_delta_vs_control_pct,goodput_delta_vs_control_pct
+as-r100-g1u-hash64,as-r100-g1u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r100-g1u-rr,as-r100-g1u-hash64,matched,Round robin was checked for deterministic three-path spreading.,0.0,0.0
+as-r100-g1u-adaptive,as-r100-g1u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,0.0,0.0
+as-r100-g10u-hash64,as-r100-g10u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r100-g10u-rr,as-r100-g10u-hash64,matched,Round robin was checked for deterministic three-path spreading.,0.0,0.0
+as-r100-g10u-adaptive,as-r100-g10u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,0.0,0.0
+as-r100-g100u-hash64,as-r100-g100u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r100-g100u-rr,as-r100-g100u-hash64,matched,Round robin was checked for deterministic three-path spreading.,0.0,0.0
+as-r100-g100u-adaptive,as-r100-g100u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,0.0,0.0
+as-r50-g1u-hash64,as-r50-g1u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r50-g1u-rr,as-r50-g1u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-1.2566198849573724,-0.07249703794744373
+as-r50-g1u-adaptive,as-r50-g1u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,1.2661402876756229e-12,-0.07806500678547604
+as-r50-g10u-hash64,as-r50-g10u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r50-g10u-rr,as-r50-g10u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-1.2566198849560586,-0.007278386336605478
+as-r50-g10u-adaptive,as-r50-g10u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,2.0258244602809197e-11,-0.007837778994052014
+as-r50-g100u-hash64,as-r50-g100u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r50-g100u-rr,as-r50-g100u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-1.2566198849061767,-0.0007281267078298682
+as-r50-g100u-adaptive,as-r50-g100u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,8.103297841128604e-11,-0.0007840920616574203
+as-r25-g1u-hash64,as-r25-g1u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r25-g1u-rr,as-r25-g1u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-3.4374884011928,-0.20995126777208767
+as-r25-g1u-adaptive,as-r25-g1u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,9.418796902391095e-13,-0.23036677830828947
+as-r25-g10u-hash64,as-r25-g10u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r25-g10u-rr,as-r25-g10u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-3.4374884011953344,-0.021104306699340332
+as-r25-g10u-adaptive,as-r25-g10u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,0.0,-0.02316073636383925
+as-r25-g100u-hash64,as-r25-g100u-hash64,matched,Static-hash control completed with path and queue evidence.,0.0,0.0
+as-r25-g100u-rr,as-r25-g100u-hash64,matched,Round robin was checked for deterministic three-path spreading.,-3.4374884011147917,-0.002111528717776761
+as-r25-g100u-adaptive,as-r25-g100u-hash64,matched,Adaptive tie behavior was checked only after branch queues drained.,9.042045026302861e-11,-0.0023173215746361614
+pf-neutral-s11-short,pf-neutral-s11-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-neutral-s11-all,pf-neutral-s11-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-59.28313752297319,145.42458775977397
+pf-neutral-s29-short,pf-neutral-s29-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-neutral-s29-all,pf-neutral-s29-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-59.27553195746417,145.37878772705045
+pf-neutral-s47-short,pf-neutral-s47-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-neutral-s47-all,pf-neutral-s47-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-56.164768833344326,127.98484401827037
+pf-capacity-s11-short,pf-capacity-s11-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-capacity-s11-all,pf-capacity-s11-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-62.45365467667964,166.1254810862907
+pf-capacity-s29-short,pf-capacity-s29-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-capacity-s29-all,pf-capacity-s29-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-71.79737572119296,254.11272646407593
+pf-capacity-s47-short,pf-capacity-s47-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-capacity-s47-all,pf-capacity-s47-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,-81.16593993632662,429.8400818761986
+pf-latency-s11-short,pf-latency-s11-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-latency-s11-all,pf-latency-s11-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,27.623404854712653,-21.63621169875713
+pf-latency-s29-short,pf-latency-s29-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-latency-s29-all,pf-latency-s29-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,27.614911877181868,-21.63099749695916
+pf-latency-s47-short,pf-latency-s47-short,matched,Shortest-only control stayed on the sole minimum-metric branch.,0.0,0.0
+pf-latency-s47-all,pf-latency-s47-short,matched,Distinct flow keys were checked for detour use and regime-dependent FCT sign.,34.148646339251286,-25.44659016034338

@@ -22,8 +22,13 @@ public:
     static UbDatalinkControlCreditHeader ParseCreditHeader(Ptr<Packet> p, Ptr<UbPort> port);
     static UbDatalinkPacketHeader ParsePacketHeader(Ptr<Packet> p);
     static Ptr<Packet> GenControlCreditPacket(const uint8_t credits[16]);
-    static void GenPacketHeader(Ptr<Packet> p, bool credit, bool ack, uint8_t vlIndex, uint8_t vl, bool mode,
-                                bool policy, UbDatalinkHeaderConfig config);
+    static void GenPacketHeader(Ptr<Packet> p,
+                                bool credit,
+                                bool ack,
+                                uint8_t vlIndex,
+                                uint8_t vl,
+                                RoutingType routingType,
+                                UbDatalinkHeaderConfig config);
 };
 
 } // namespace ns3

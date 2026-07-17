@@ -35,6 +35,8 @@
 #include "ns3/enum.h"
 #include "ns3/ub-fault.h"
 
+class UbLinkDelayOffsetTest;
+
 namespace utils {
 class UbTraceFileConcurrencyTest;
 class UbQueueSamplerEventRetentionTest;
@@ -88,7 +90,20 @@ public:
 
     TrafficLoadStats RegisterTrafficPhaseDependenciesAndGetStats(const std::string& filename);
 
-    void CreateTopo(const std::string &filename);
+    struct LinkDelayOffsetStats
+    {
+        uint64_t positiveLinkCount{0};
+        uint64_t zeroDelayLinkCount{0};
+        uint64_t distinctOffsetCount{0};
+        uint64_t offsetReuseCount{0};
+        uint64_t maxLinksPerOffset{0};
+    };
+
+    void CreateTopo(const std::string& filename);
+
+    LinkDelayOffsetStats CreateTopo(const std::string& filename,
+                                    ns3::Time offsetWindow,
+                                    uint32_t offsetSeed);
 
     void AddRoutingTable(const std::string &filename);
 
@@ -228,6 +243,15 @@ public:
 private:
     friend class ::utils::UbTraceFileConcurrencyTest;
     friend class ::utils::UbQueueSamplerEventRetentionTest;
+    friend class ::UbLinkDelayOffsetTest;
+
+    static ns3::Time ResolveLinkDelayWithOffset(ns3::Time baseDelay,
+                                                ns3::Time offsetWindow,
+                                                uint32_t offsetSeed,
+                                                uint32_t node1,
+                                                uint32_t port1,
+                                                uint32_t node2,
+                                                uint32_t port2);
 
     struct TraceFileState
     {
@@ -274,6 +298,8 @@ private:
 
         std::string forwardDelay;
 
+        std::string allocationDelay;
+
         std::string systemIdStr;
     };
 
@@ -283,7 +309,6 @@ private:
 
     bool TraceEnable = false;
     bool TaskTraceEnable = true;
-    bool TaskSegmentTraceEnable = false;
     bool PacketTraceEnable = true;
     bool PortTraceEnable = true;
     bool RecordTraceEnabled = false;
@@ -295,15 +320,9 @@ private:
                                                        ns3::MakeBooleanChecker());
 
     ns3::GlobalValue g_task_trace_enable = ns3::GlobalValue("UB_TASK_TRACE_ENABLE",
-                                                            "Enable task start/complete traces used by task_statistics.csv",
+                                                            "Enable task and WQE level traces",
                                                             ns3::BooleanValue(true),
                                                             ns3::MakeBooleanChecker());
-
-    ns3::GlobalValue g_task_segment_trace_enable =
-    ns3::GlobalValue("UB_TASK_SEGMENT_TRACE_ENABLE",
-                     "Enable high-volume WQE segment send/complete traces.",
-                     ns3::BooleanValue(false),
-                     ns3::MakeBooleanChecker());
 
     ns3::GlobalValue g_packet_trace_enable = ns3::GlobalValue("UB_PACKET_TRACE_ENABLE",
                                                               "Enable packet send/ack/receive traces",
@@ -432,6 +451,30 @@ private:
                              uint32_t dstTpn, ns3::PacketType type, uint32_t size, uint32_t taskId,
                              std::string ackInfo, ns3::UbPacketTraceTag traceTag);
 
+    static void CtpFirstPacketSendsNotify(uint32_t nodeId,
+                                          uint32_t taskId,
+                                          uint32_t srcNodeId,
+                                          uint32_t dstNodeId,
+                                          uint32_t srcEntityId,
+                                          uint32_t dstEntityId,
+                                          uint32_t vl,
+                                          uint32_t taSsn,
+                                          uint32_t outPort,
+                                          uint32_t payloadBytes,
+                                          uint32_t opcode);
+
+    static void CtpLastPacketACKsNotify(uint32_t nodeId,
+                                        uint32_t taskId,
+                                        uint32_t srcNodeId,
+                                        uint32_t dstNodeId,
+                                        uint32_t srcEntityId,
+                                        uint32_t dstEntityId,
+                                        uint32_t vl,
+                                        uint32_t taSsn,
+                                        uint32_t outPort,
+                                        uint32_t payloadBytes,
+                                        uint32_t opcode);
+
     static void LdstRecvNotify(uint32_t packetUid,
                                uint32_t src,
                                uint32_t dst,
@@ -455,6 +498,11 @@ private:
     static void PortRxNotify(uint32_t nodeId, uint32_t portId, uint32_t size);
 
     static void QueueVoqNotify(uint32_t nodeId, uint32_t portId, uint64_t voqBytes);
+
+    static void QueueIngressOccupancyNotify(uint32_t nodeId,
+                                            uint32_t inPort,
+                                            uint32_t priority,
+                                            uint64_t bytes);
 
     static void QueueEgressEnqueueNotify(uint32_t nodeId,
                                          uint32_t portId,

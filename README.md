@@ -241,9 +241,15 @@ UB 模块是基于灵衢基础规范实现的仿真组件：
 #### 协议算法支持
 - **流量控制**：实现基于信用的流量控制（CBFC 独占/共享信用）和基于优先级的流量控制（PFC 固定阈值/动态阈值）
 - **拥塞控制**：实现拥塞控制算法常用的网侧标记、接收端回复、发送端响应框架，支持 C-AQM 与 DCQCN 算法
-- **路由策略**：支持最短路由、绕路策略，支持包喷洒、ECMP 等负载均衡策略
+- **路由策略**：支持最短路由、绕路策略，以及逐流/逐包的 Hash、Round Robin、自适应和入端口条带选择
 - **QoS 支持**：提供端到端 QoS 支持，当前支持 SP 与 DWRR 调度策略
 - **交换仲裁**：模块化实现 UB Switch 的交换仲裁机制建模，当前支持 SP 与 DWRR 调度
+
+`network_attribute.txt` 使用 `RoutingType` 表达 UB RT 域：`PER_FLOW_ALL_PATHS`、
+`PER_PACKET_ALL_PATHS`、`PER_FLOW_SHORTEST_PATHS`、`PER_PACKET_SHORTEST_PATHS`。
+路径选择算法由 `ns3::UbRoutingProcess::MultipathSelector` 配置。逐流模式支持
+`HASH64`、`CRC32`、`TOEPLITZ`、`INGRESS_PORT_STRIPE`；逐包模式支持
+`HASH64`、`CRC32`、`TOEPLITZ`、`ROUND_ROBIN`、`ADAPTIVE`。
 
 ### 3. 脚本工具集
 

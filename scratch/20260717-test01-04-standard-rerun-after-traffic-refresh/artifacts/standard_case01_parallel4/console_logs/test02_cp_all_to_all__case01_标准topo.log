@@ -1,0 +1,27 @@
+[10:48:02] [case] Run case: /home/a81257/gitcode0519/ns-3-ub-next/scratch/pod1d/test02_cp_all_to_all/case01_标准topo
+[10:48:02] [case] node.csv delay fields: allocationDelay -> AllocationTime; forwardDelay -> InPortProcessingDelay; legacy 4-column forwardDelay -> AllocationTime.
+[10:48:02] [setup] Load network_attribute.txt
+[10:48:02] [setup] Prepare runlog directory: /home/a81257/gitcode0519/ns-3-ub-next/scratch/pod1d/test02_cp_all_to_all/case01_标准topo/runlog
+[10:48:02] [setup] Load node.csv
+[10:48:03] [setup] Load topology.csv
+[10:48:03] [setup] Load routing_table.csv
+[10:48:03] [setup] Skip transport_channel.csv (not found; traffic will reserve TP connections before endpoints materialize on demand).
+[10:48:03] [traffic] Index phase dependencies from traffic.csv
+[10:48:03] [traffic] Activate clients and enqueue tasks.
+[10:48:03] [traffic] Load traffic.csv
+[10:48:03] [traffic] Scheduled local tasks: 216
+[10:48:03] Simulation time progress: 0 us[10:48:37] Simulation time progress: 100 us[10:49:13] Simulation time progress: 200 us[10:49:45] Simulation time progress: 300 us[10:49:46] Simulation time progress: 400 us
+[10:49:46] [run] Simulation finished.
+[10:49:46] [trace] Parse runlog into output artifacts.
+Stats: Processed 216 tasks.
+Note: 216/216 tasks missing packet timestamps (First Packet Sends / Last Packet ACKs).
+      This is expected if UB_PACKET_TRACE_ENABLE is set to 'false'.
+Saved traffic tasks throughput results to /home/a81257/gitcode0519/ns-3-ub-next/scratch/pod1d/test02_cp_all_to_all/case01_标准topo/output/task_statistics.csv
+Stats: Generated throughput metrics for 0 port-directions.
+Note: No port throughput data found. This is expected if UB_PORT_TRACE_ENABLE is set to 'false'.
+[10:49:46] [summary] Program finished.
+[10:49:46] [summary] Wall-clock:
+[10:49:46] [summary]   config : 68 us
+[10:49:46] [summary]   run    : 103.152450 s
+[10:49:46] [summary]   trace  : 473.513 ms
+[10:49:46] [summary]   total  : 103.845777 s

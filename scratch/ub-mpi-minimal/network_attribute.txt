@@ -1,11 +1,10 @@
 default ns3::UbApp::EnableMultiPath "false"
-default ns3::UbApp::UseShortestPaths "true"
+default ns3::UbApp::RoutingType "PER_FLOW_SHORTEST_PATHS"
 default ns3::UbPort::UbDataRate "400Gbps"
 default ns3::UbPort::UbInterframeGap "+0ns"
 default ns3::UbSwitch::FlowControl "NONE"
 default ns3::UbTransportChannel::EnableRetrans "false"
-default ns3::UbTransportChannel::UsePacketSpray "false"
-default ns3::UbTransportChannel::UseShortestPaths "true"
+default ns3::UbTransportChannel::RoutingType "PER_FLOW_SHORTEST_PATHS"
 default ns3::UbSwitchAllocator::AllocationTime "+1ns"
 
 global UB_FAULT_ENABLE "false"

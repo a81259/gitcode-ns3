@@ -1,0 +1,174 @@
+# Routing Strategy Suitability Analysis
+
+- completed runs: 152/152
+- evidence: measured task statistics plus trace-derived path, queue, and ordering metrics
+- throughput.csv is treated as per-port evidence; aggregate task goodput is derived from task completion span
+- PSN inversions are ordering evidence, not an exact retransmission count
+
+## Block Summary
+
+| block | cases | matched | partial | mismatch | inconclusive | Pareto rows |
+|---|---:|---:|---:|---:|---:|---:|
+| adaptive-signal | 27 | 23 | 4 | 0 | 0 | 12 |
+| hash-robustness | 36 | 36 | 0 | 0 | 0 | 14 |
+| ingress-entropy | 24 | 24 | 0 | 0 | 0 | 17 |
+| path-scope-region | 24 | 24 | 0 | 0 | 0 | 10 |
+| spray-crossover | 27 | 27 | 0 | 0 | 0 | 12 |
+| transport-transfer | 14 | 14 | 0 | 0 | 0 | 0 |
+
+## Row Classification
+
+| case | status | Pareto | p95 us | goodput Gbps | Jain | inversions/1000 |
+|---|---:|---:|---:|---:|---:|---:|
+| h-many-w3-s11-hash64 | matched | False | 406.05134 | 329.730269 | 0.906596 | None |
+| h-many-w3-s11-crc32 | matched | True | 319.13294 | 417.434671 | 0.990808 | None |
+| h-many-w3-s11-toeplitz | matched | False | 341.52542 | 391.463855 | 0.986513 | None |
+| h-many-w3-s29-hash64 | matched | False | 318.81886 | 416.620736 | 0.976633 | None |
+| h-many-w3-s29-crc32 | matched | True | 299.0283 | 417.492634 | 0.996594 | None |
+| h-many-w3-s29-toeplitz | matched | False | 383.88366 | 348.103783 | 0.965582 | None |
+| h-many-w3-s47-hash64 | matched | False | 352.88862 | 368.45002 | 0.904194 | None |
+| h-many-w3-s47-crc32 | matched | True | 297.42814 | 447.244091 | 0.986513 | None |
+| h-many-w3-s47-toeplitz | matched | True | 302.02366 | 417.518401 | 0.996594 | None |
+| h-many-w5-s11-hash64 | matched | False | 256.29646 | 521.64266 | 0.950348 | None |
+| h-many-w5-s11-crc32 | matched | True | 192.79214 | 694.903324 | 0.991768 | None |
+| h-many-w5-s11-toeplitz | matched | False | 298.37038 | 447.332812 | 0.959251 | None |
+| h-many-w5-s29-hash64 | matched | False | 255.63358 | 521.62255 | 0.928798 | None |
+| h-many-w5-s29-crc32 | matched | True | 213.87374 | 625.58794 | 0.968322 | None |
+| h-many-w5-s29-toeplitz | matched | False | 234.92558 | 568.894338 | 0.93945 | None |
+| h-many-w5-s47-hash64 | matched | True | 193.1711 | 625.58794 | 0.968322 | None |
+| h-many-w5-s47-crc32 | matched | False | 213.85886 | 625.573478 | 0.88086 | None |
+| h-many-w5-s47-toeplitz | matched | False | 234.55694 | 568.930221 | 0.954779 | None |
+| h-many-w8-s11-hash64 | matched | False | 150.38926 | 781.447919 | 0.958801 | None |
+| h-many-w8-s11-crc32 | matched | True | 107.69626 | 1039.826349 | 0.977099 | None |
+| h-many-w8-s11-toeplitz | matched | False | 181.75294 | 694.903324 | 0.895105 | None |
+| h-many-w8-s29-hash64 | matched | False | 150.3843 | 890.403711 | 0.904594 | None |
+| h-many-w8-s29-crc32 | matched | True | 128.66958 | 1040.419275 | 0.944649 | None |
+| h-many-w8-s29-toeplitz | matched | False | 149.71646 | 892.356098 | 0.847682 | None |
+| h-many-w8-s47-hash64 | matched | False | 171.40142 | 781.068288 | 0.901408 | None |
+| h-many-w8-s47-crc32 | matched | False | 149.99086 | 891.743532 | 0.966038 | None |
+| h-many-w8-s47-toeplitz | matched | True | 148.34606 | 892.616034 | 0.973384 | None |
+| h-elephant-w8-s11-hash64 | matched | False | 2738.43326 | 196.050391 | 0.333333 | None |
+| h-elephant-w8-s11-crc32 | matched | True | 1369.74378 | 391.949881 | 0.333333 | None |
+| h-elephant-w8-s11-toeplitz | matched | False | 2738.62828 | 196.03643 | 0.2 | None |
+| h-elephant-w8-s29-hash64 | matched | True | 1369.74378 | 391.949881 | 0.5 | None |
+| h-elephant-w8-s29-crc32 | matched | False | 2738.5523 | 196.041869 | 0.333333 | None |
+| h-elephant-w8-s29-toeplitz | matched | True | 1369.74378 | 391.949881 | 0.5 | None |
+| h-elephant-w8-s47-hash64 | matched | False | 2738.5523 | 196.041869 | 0.333333 | None |
+| h-elephant-w8-s47-crc32 | matched | True | 1369.62062 | 391.985127 | 0.333333 | None |
+| h-elephant-w8-s47-toeplitz | matched | False | 4107.48398 | 130.70554 | 0.2 | None |
+| s-16k-d20n-flow-hash64 | matched | False | 0.645474 | 203.063175 | 0.333333 | 0.0 |
+| s-16k-d20n-packet-hash64 | matched | False | 0.506342 | 258.860612 | 0.888889 | 200.0 |
+| s-16k-d20n-packet-rr | matched | True | 0.478515 | 273.914088 | 0.888889 | 0.0 |
+| s-16k-d2u-flow-hash64 | matched | True | 0.645474 | 203.063175 | 0.333333 | 0.0 |
+| s-16k-d2u-packet-hash64 | matched | False | 4.439515 | 29.523946 | 0.888889 | 200.0 |
+| s-16k-d2u-packet-rr | matched | False | 4.411482 | 29.711557 | 0.888889 | 200.0 |
+| s-16k-d20u-flow-hash64 | matched | True | 0.645474 | 203.063175 | 0.333333 | 0.0 |
+| s-16k-d20u-packet-hash64 | matched | False | 40.439515 | 3.241186 | 0.888889 | 200.0 |
+| s-16k-d20u-packet-rr | matched | False | 40.411482 | 3.243435 | 0.888889 | 200.0 |
+| s-256k-d20n-flow-hash64 | matched | True | 5.655514 | 370.815456 | 0.333333 | 0.0 |
+| s-256k-d20n-packet-hash64 | matched | False | 2.818434 | 744.084126 | 0.923771 | 397.058824 |
+| s-256k-d20n-packet-rr | matched | True | 2.204782 | 951.183382 | 0.998051 | 73.529412 |
+| s-256k-d2u-flow-hash64 | matched | True | 5.655514 | 370.815456 | 0.333333 | 0.0 |
+| s-256k-d2u-packet-hash64 | matched | False | 9.623696 | 217.915445 | 0.923771 | 264.705882 |
+| s-256k-d2u-packet-rr | matched | False | 10.041102 | 208.856757 | 0.999512 | 14.705882 |
+| s-256k-d20u-flow-hash64 | matched | True | 5.655514 | 370.815456 | 0.333333 | 0.0 |
+| s-256k-d20u-packet-hash64 | matched | False | 81.623696 | 25.692931 | 0.923771 | 264.705882 |
+| s-256k-d20u-packet-rr | matched | False | 82.041102 | 25.562211 | 0.999512 | 14.705882 |
+| s-8m-d20n-flow-hash64 | matched | True | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| s-8m-d20n-packet-hash64 | matched | False | 59.920031 | 1119.973786 | 0.999964 | 487.132353 |
+| s-8m-d20n-packet-rr | matched | True | 57.696847 | 1163.128793 | 0.999992 | 436.580882 |
+| s-8m-d2u-flow-hash64 | matched | True | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| s-8m-d2u-packet-hash64 | matched | False | 63.449618 | 1057.671679 | 0.999964 | 405.790441 |
+| s-8m-d2u-packet-rr | matched | True | 63.059906 | 1064.20812 | 1.0 | 298.713235 |
+| s-8m-d20u-flow-hash64 | matched | True | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| s-8m-d20u-packet-hash64 | matched | False | 181.305206 | 370.143061 | 0.999964 | 382.8125 |
+| s-8m-d20u-packet-rr | matched | False | 183.338981 | 366.037073 | 1.0 | 169.117647 |
+| a-screen-r100-g0-hash64 | matched | True | 30.415046 | 1103.21819 | 0.997453 | 213.235294 |
+| a-screen-r100-g0-rr | matched | True | 29.106657 | 1152.809545 | 0.999964 | 313.419118 |
+| a-screen-r100-g0-adaptive | partially_matched | True | 28.999993 | 1157.049659 | 0.999952 | 289.522059 |
+| a-screen-r100-g10u-hash64 | matched | True | 3.067634 | 219.574142 | 0.997453 | 375.0 |
+| a-screen-r100-g10u-rr | matched | True | 2.205782 | 220.455833 | 0.999992 | 73.529412 |
+| a-screen-r100-g10u-adaptive | partially_matched | False | 2.207789 | 220.452926 | 0.998051 | 308.823529 |
+| a-screen-r50-g0-hash64 | matched | False | 53.513118 | 627.031899 | 0.997453 | 153.492647 |
+| a-screen-r50-g0-rr | matched | False | 59.004428 | 568.676507 | 0.999483 | 133.272059 |
+| a-screen-r50-g0-adaptive | matched | True | 38.511874 | 871.274974 | 0.947757 | 210.477941 |
+| a-screen-r50-g10u-hash64 | matched | False | 5.075234 | 218.694491 | 0.997453 | 350.183824 |
+| a-screen-r50-g10u-rr | matched | False | 4.099935 | 217.789537 | 0.999541 | 161.764706 |
+| a-screen-r50-g10u-adaptive | partially_matched | True | 2.907234 | 219.443064 | 0.957457 | 338.235294 |
+| a-screen-r25-g0-hash64 | matched | False | 106.495088 | 315.079621 | 0.997453 | 137.867647 |
+| a-screen-r25-g0-rr | matched | False | 114.145188 | 293.962738 | 0.999941 | 72.610294 |
+| a-screen-r25-g0-adaptive | matched | True | 54.685674 | 613.587244 | 0.878717 | 193.933824 |
+| a-screen-r25-g10u-hash64 | matched | False | 9.925514 | 214.267882 | 0.997453 | 292.279412 |
+| a-screen-r25-g10u-rr | matched | False | 7.918508 | 212.479414 | 0.999998 | 73.529412 |
+| a-screen-r25-g10u-adaptive | partially_matched | True | 4.582794 | 217.064468 | 0.911437 | 323.529412 |
+| a-confirm-s11-hash64 | matched | False | 52.756118 | 627.031899 | 0.997453 | 154.411765 |
+| a-confirm-s11-rr | matched | False | 58.247428 | 568.676507 | 0.999483 | 134.191176 |
+| a-confirm-s11-adaptive | matched | True | 37.754874 | 871.274974 | 0.947757 | 215.073529 |
+| a-confirm-s29-hash64 | matched | False | 52.535118 | 627.031899 | 0.997453 | 154.411765 |
+| a-confirm-s29-rr | matched | False | 58.026428 | 568.676507 | 0.999483 | 134.191176 |
+| a-confirm-s29-adaptive | matched | True | 37.533874 | 871.274974 | 0.947757 | 215.073529 |
+| a-confirm-s47-hash64 | matched | False | 52.740118 | 627.031899 | 0.997453 | 154.411765 |
+| a-confirm-s47-rr | matched | False | 58.231428 | 568.676507 | 0.999483 | 134.191176 |
+| a-confirm-s47-adaptive | matched | True | 37.738874 | 871.274974 | 0.947757 | 215.073529 |
+| i-n1-s11-hash64 | matched | True | 457.35782 | 283.521104 | 0.442907 | None |
+| i-n1-s11-stripe | matched | False | 1357.58958 | 97.996991 | 0.125 | None |
+| i-n1-s29-hash64 | matched | True | 518.1759 | 251.245717 | 0.461261 | None |
+| i-n1-s29-stripe | matched | False | 1353.57758 | 97.996282 | 0.125 | None |
+| i-n1-s47-hash64 | matched | True | 433.8601 | 298.322542 | 0.462094 | None |
+| i-n1-s47-stripe | matched | False | 1353.57262 | 97.996637 | 0.125 | None |
+| i-n2-s11-hash64 | matched | True | 348.22366 | 368.465071 | 0.682667 | None |
+| i-n2-s11-stripe | matched | False | 679.75998 | 195.903244 | 0.25 | None |
+| i-n2-s29-hash64 | matched | True | 373.9793 | 348.006051 | 0.709141 | None |
+| i-n2-s29-stripe | matched | True | 679.76494 | 195.903244 | 0.25 | None |
+| i-n2-s47-hash64 | matched | True | 326.94122 | 391.328946 | 0.699454 | None |
+| i-n2-s47-stripe | matched | True | 679.76494 | 195.903244 | 0.25 | None |
+| i-n4-s11-hash64 | matched | True | 294.7667 | 447.024942 | 0.782875 | None |
+| i-n4-s11-stripe | matched | True | 342.8611 | 391.451114 | 0.5 | None |
+| i-n4-s29-hash64 | matched | True | 326.82302 | 391.452529 | 0.815287 | None |
+| i-n4-s29-stripe | matched | True | 342.85614 | 391.37281 | 0.5 | None |
+| i-n4-s47-hash64 | matched | True | 252.03402 | 521.244138 | 0.853333 | None |
+| i-n4-s47-stripe | matched | True | 342.85614 | 391.452529 | 0.5 | None |
+| i-n8-s11-hash64 | matched | False | 251.98526 | 521.552174 | 0.864865 | None |
+| i-n8-s11-stripe | matched | True | 171.79898 | 781.226135 | 1.0 | None |
+| i-n8-s29-hash64 | matched | False | 300.1433 | 417.384252 | 0.853333 | None |
+| i-n8-s29-stripe | matched | True | 171.79898 | 781.181029 | 1.0 | None |
+| i-n8-s47-hash64 | matched | False | 267.73322 | 481.494119 | 0.895105 | None |
+| i-n8-s47-stripe | matched | True | 171.73038 | 781.175391 | 1.0 | None |
+| p-neutral-long-flow-short | matched | False | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| p-neutral-long-flow-all | matched | True | 171.278594 | 391.811157 | 0.333333 | 0.0 |
+| p-neutral-long-packet-short | matched | False | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| p-neutral-long-packet-all | matched | True | 59.980204 | 1118.850213 | 0.999964 | 471.047794 |
+| p-neutral-many-flow-short | matched | False | 170.081794 | 391.488053 | 0.333333 | 0.0 |
+| p-neutral-many-flow-all | matched | True | 169.942914 | 391.811157 | 0.333333 | 0.0 |
+| p-neutral-many-packet-short | matched | False | 170.081794 | 391.488053 | 0.333333 | 0.0 |
+| p-neutral-many-packet-all | matched | True | 59.561564 | 1118.850213 | 0.999964 | 190.716912 |
+| p-capacity-long-flow-short | matched | False | 685.009354 | 97.967807 | 0.333333 | 0.0 |
+| p-capacity-long-flow-all | matched | True | 171.279388 | 391.80934 | 0.333333 | 0.0 |
+| p-capacity-long-packet-short | matched | False | 685.009354 | 97.967807 | 0.333333 | 0.0 |
+| p-capacity-long-packet-all | matched | False | 227.362608 | 295.162272 | 0.999964 | 308.823529 |
+| p-capacity-many-flow-short | matched | False | 679.656714 | 97.967807 | 0.333333 | 0.0 |
+| p-capacity-many-flow-all | matched | True | 169.943708 | 391.80934 | 0.333333 | 0.0 |
+| p-capacity-many-packet-short | matched | False | 679.656714 | 97.967807 | 0.333333 | 0.0 |
+| p-capacity-many-packet-all | matched | False | 225.703282 | 295.162272 | 0.999964 | 162.224265 |
+| p-latency-long-flow-short | matched | True | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| p-latency-long-flow-all | matched | False | 435.324348 | 154.158306 | 0.333333 | 0.0 |
+| p-latency-long-packet-short | matched | True | 171.419954 | 391.488053 | 0.333333 | 0.0 |
+| p-latency-long-packet-all | matched | False | 184.226579 | 364.273518 | 0.999964 | 374.080882 |
+| p-latency-many-flow-short | matched | True | 170.081794 | 391.488053 | 0.333333 | 0.0 |
+| p-latency-many-flow-all | matched | False | 433.988668 | 154.158306 | 0.333333 | 0.0 |
+| p-latency-many-packet-short | matched | True | 170.081794 | 391.488053 | 0.333333 | 0.0 |
+| p-latency-many-packet-all | matched | False | 183.391779 | 364.273518 | 0.999964 | 141.084559 |
+| t-ctp-flow-hash64 | matched | None | 21.462854 | 390.843082 | 0.333333 | None |
+| t-ctp-flow-crc32 | matched | None | 21.462854 | 390.843082 | 0.333333 | None |
+| t-ctp-flow-toeplitz | matched | None | 21.462854 | 390.843082 | 0.333333 | None |
+| t-ctp-packet-rr | matched | None | 7.414139 | 1131.433872 | 0.999969 | None |
+| t-ctp-packet-adaptive | matched | None | 7.469232 | 1123.088425 | 0.999878 | None |
+| t-ctp-flow-stripe | matched | None | 21.462854 | 390.843082 | 0.333333 | None |
+| t-ctp-packet-all-hash64 | matched | None | 7.854873 | 1067.949539 | 0.999055 | None |
+| t-ldst-flow-hash64 | matched | None | 22.305254 | 376.082155 | 0.333333 | None |
+| t-ldst-flow-crc32 | matched | None | 22.305254 | 376.082155 | 0.333333 | None |
+| t-ldst-flow-toeplitz | matched | None | 22.305254 | 376.082155 | 0.333333 | None |
+| t-ldst-packet-rr | matched | None | 7.566854 | 1108.599162 | 1.0 | None |
+| t-ldst-packet-adaptive | matched | None | 7.574054 | 1107.545312 | 0.999997 | None |
+| t-ldst-flow-stripe | matched | None | 22.305254 | 376.082155 | 0.333333 | None |
+| t-ldst-packet-all-hash64 | matched | None | 7.908854 | 1060.660369 | 0.999055 | None |

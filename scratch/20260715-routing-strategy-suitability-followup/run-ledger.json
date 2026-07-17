@@ -1,0 +1,828 @@
+{
+  "run_meta": {
+    "branch": "next",
+    "commit": "d369f91df7d3ee78993ff812e1be3efbb2c02af9",
+    "dirty_at_start": true,
+    "runtime": "/Users/ytxing/workspace/ns-3-ub-routing-modes/.openusim/venv/bin/python",
+    "runner": "scratch/ub-quick-example",
+    "started_at": "2026-07-15T19:41:42+0800",
+    "package_size_limit_bytes": 1073741824,
+    "finished_at": "2026-07-15T19:42:00+0800"
+  },
+  "checkpoints": {
+    "adaptive-single-packet-sparse": "passed",
+    "per-flow-all-distinct-keys": "passed"
+  },
+  "results": [
+    {
+      "case_id": "as-r100-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.192,
+      "started_at": "2026-07-15T19:41:42+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.199,
+      "started_at": "2026-07-15T19:41:42+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.204,
+      "started_at": "2026-07-15T19:41:42+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.21,
+      "started_at": "2026-07-15T19:41:43+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.218,
+      "started_at": "2026-07-15T19:41:43+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.209,
+      "started_at": "2026-07-15T19:41:43+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.22,
+      "started_at": "2026-07-15T19:41:43+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.217,
+      "started_at": "2026-07-15T19:41:43+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r100-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.208,
+      "started_at": "2026-07-15T19:41:44+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.212,
+      "started_at": "2026-07-15T19:41:44+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.218,
+      "started_at": "2026-07-15T19:41:44+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.204,
+      "started_at": "2026-07-15T19:41:44+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.21,
+      "started_at": "2026-07-15T19:41:45+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.207,
+      "started_at": "2026-07-15T19:41:45+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.199,
+      "started_at": "2026-07-15T19:41:45+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.206,
+      "started_at": "2026-07-15T19:41:45+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.211,
+      "started_at": "2026-07-15T19:41:46+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r50-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.199,
+      "started_at": "2026-07-15T19:41:46+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.198,
+      "started_at": "2026-07-15T19:41:46+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.211,
+      "started_at": "2026-07-15T19:41:46+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.198,
+      "started_at": "2026-07-15T19:41:46+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.2,
+      "started_at": "2026-07-15T19:41:47+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.206,
+      "started_at": "2026-07-15T19:41:47+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.203,
+      "started_at": "2026-07-15T19:41:47+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.202,
+      "started_at": "2026-07-15T19:41:47+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-hash64'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.211,
+      "started_at": "2026-07-15T19:41:48+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-rr'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "as-r25-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.199,
+      "started_at": "2026-07-15T19:41:48+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-adaptive'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=64/64",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.579,
+      "started_at": "2026-07-15T19:41:48+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s11-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.61,
+      "started_at": "2026-07-15T19:41:49+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s11-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.585,
+      "started_at": "2026-07-15T19:41:49+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s29-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.585,
+      "started_at": "2026-07-15T19:41:50+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s29-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.583,
+      "started_at": "2026-07-15T19:41:51+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s47-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-neutral-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.587,
+      "started_at": "2026-07-15T19:41:51+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s47-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.59,
+      "started_at": "2026-07-15T19:41:52+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s11-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.624,
+      "started_at": "2026-07-15T19:41:52+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s11-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.585,
+      "started_at": "2026-07-15T19:41:53+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s29-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.603,
+      "started_at": "2026-07-15T19:41:54+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s29-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.596,
+      "started_at": "2026-07-15T19:41:54+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s47-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-capacity-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.582,
+      "started_at": "2026-07-15T19:41:55+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s47-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.584,
+      "started_at": "2026-07-15T19:41:56+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s11-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.597,
+      "started_at": "2026-07-15T19:41:56+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s11-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.579,
+      "started_at": "2026-07-15T19:41:57+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s29-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.583,
+      "started_at": "2026-07-15T19:41:58+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s29-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.578,
+      "started_at": "2026-07-15T19:41:58+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s47-short'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    },
+    {
+      "case_id": "pf-latency-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.595,
+      "started_at": "2026-07-15T19:41:59+0800",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s47-all'",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ],
+      "artifact_gate": "completed_tasks=32/32",
+      "failure_category": "",
+      "retryable": false
+    }
+  ]
+}

@@ -30,7 +30,7 @@ const uint8_t UB_PRIORITY_MAX = UB_PRIORITY_LOW;    // 最大优先级值
 const uint32_t UB_JETTY_TASSN_OOO_THRESHOLD = 2048; // Jetty分段乱序阈值（用于乱序缓存等）
 
 // WQE相关常量
-const uint32_t UB_WQE_TA_SEGMENT_BYTE = 16 * 1024;  // TA层分段大小 (16KB)
+const uint32_t UB_WQE_TA_SEGMENT_BYTE = 64 * 1024;  // TA层分段大小 (64KB)
 const uint32_t UB_MTU_BYTE = 4 * 1024;              // 最大传输单元（TP层）
 
 // Credit相关常量
@@ -108,6 +108,96 @@ enum class UbDatalinkHeaderConfig : uint8_t {
     PACKET_UB_MEM = 0x09    // Config value for UB memory packet header
 };
 
+enum class RoutingType : uint8_t {
+    PER_FLOW_ALL_PATHS = 0b00,
+    PER_PACKET_ALL_PATHS = 0b01,
+    PER_FLOW_SHORTEST_PATHS = 0b10,
+    PER_PACKET_SHORTEST_PATHS = 0b11,
+};
+
+enum class MultipathSelector : uint8_t {
+    HASH64 = 0,
+    CRC32 = 1,
+    TOEPLITZ = 2,
+    ROUND_ROBIN = 3,
+    ADAPTIVE = 4,
+    INGRESS_PORT_STRIPE = 5,
+};
+
+constexpr const char*
+RoutingTypeToString(RoutingType routingType)
+{
+    switch (routingType)
+    {
+    case RoutingType::PER_FLOW_ALL_PATHS:
+        return "PER_FLOW_ALL_PATHS";
+    case RoutingType::PER_PACKET_ALL_PATHS:
+        return "PER_PACKET_ALL_PATHS";
+    case RoutingType::PER_FLOW_SHORTEST_PATHS:
+        return "PER_FLOW_SHORTEST_PATHS";
+    case RoutingType::PER_PACKET_SHORTEST_PATHS:
+        return "PER_PACKET_SHORTEST_PATHS";
+    }
+    return "UNKNOWN";
+}
+
+constexpr const char*
+MultipathSelectorToString(MultipathSelector selector)
+{
+    switch (selector)
+    {
+    case MultipathSelector::HASH64:
+        return "HASH64";
+    case MultipathSelector::CRC32:
+        return "CRC32";
+    case MultipathSelector::TOEPLITZ:
+        return "TOEPLITZ";
+    case MultipathSelector::ROUND_ROBIN:
+        return "ROUND_ROBIN";
+    case MultipathSelector::ADAPTIVE:
+        return "ADAPTIVE";
+    case MultipathSelector::INGRESS_PORT_STRIPE:
+        return "INGRESS_PORT_STRIPE";
+    }
+    return "UNKNOWN";
+}
+
+constexpr bool
+RoutingTypeIsPerPacket(RoutingType routingType)
+{
+    return (static_cast<uint8_t>(routingType) & 0b01) != 0;
+}
+
+constexpr bool
+RoutingTypeUsesShortestPaths(RoutingType routingType)
+{
+    return (static_cast<uint8_t>(routingType) & 0b10) != 0;
+}
+
+constexpr RoutingType
+MakeRoutingType(bool perPacket, bool shortestPaths)
+{
+    return static_cast<RoutingType>((shortestPaths ? 0b10 : 0) | (perPacket ? 0b01 : 0));
+}
+
+constexpr bool
+MultipathSelectorIsValidForRoutingType(MultipathSelector selector, RoutingType routingType)
+{
+    switch (selector)
+    {
+    case MultipathSelector::HASH64:
+    case MultipathSelector::CRC32:
+    case MultipathSelector::TOEPLITZ:
+        return true;
+    case MultipathSelector::ROUND_ROBIN:
+    case MultipathSelector::ADAPTIVE:
+        return RoutingTypeIsPerPacket(routingType);
+    case MultipathSelector::INGRESS_PORT_STRIPE:
+        return !RoutingTypeIsPerPacket(routingType);
+    }
+    return false;
+}
+
 // 定义Order枚举
 enum class OrderType : uint8_t {
     ORDER_NO = 0x00,      // No Order: 与其它报文无保序要求
@@ -147,6 +237,24 @@ enum class UbRetransTimeoutMode : uint8_t {
     STATIC = 0,
     DYNAMIC = 1,
 };
+
+enum class TransportMode : uint8_t {
+    RTP = 0,
+    CTP = 1,
+};
+
+enum class CtpOpcode : uint8_t {
+    CTP_DATA = 0x0,
+    CTP_CNP = 0x1,
+};
+
+constexpr uint8_t UB_CNA_NLP_CTPH = 0x0;
+constexpr uint8_t UB_CNA_NLP_RTPH = 0x2;
+constexpr uint8_t UB_CTPH_NLP_COMPACT_TAH = 0x0;
+constexpr uint8_t UB_CTPH_NLP_UPI32_EID128_TAH = 0x1;
+constexpr uint8_t UB_CTPH_NLP_UPI16_EID40_TAH = 0x2;
+constexpr uint32_t UB_COMPACT_EID_MAX = 0xFFFFF;
+constexpr uint16_t UB_COMPACT_UPI_MAX = 0x7FFF;
 
 // 定义NLP常量，便于使用
 enum class NextLayerProtocol : uint8_t {
@@ -469,6 +577,26 @@ public:
         return m_dest;
     }
 
+    bool HasSrcEntityId() const
+    {
+        return m_hasSrcEntityId;
+    }
+
+    bool HasDstEntityId() const
+    {
+        return m_hasDstEntityId;
+    }
+
+    uint32_t GetSrcEntityId() const
+    {
+        return m_srcEntityId;
+    }
+
+    uint32_t GetDstEntityId() const
+    {
+        return m_dstEntityId;
+    }
+
     uint8_t GetSport() const
     {
         return m_sport;
@@ -502,6 +630,18 @@ public:
     void SetDest(uint32_t dest)
     {
         m_dest = dest;
+    }
+
+    void SetSrcEntityId(uint32_t srcEntityId)
+    {
+        m_srcEntityId = srcEntityId;
+        m_hasSrcEntityId = true;
+    }
+
+    void SetDstEntityId(uint32_t dstEntityId)
+    {
+        m_dstEntityId = dstEntityId;
+        m_hasDstEntityId = true;
     }
 
     void SetSport(uint8_t sport)
@@ -755,6 +895,16 @@ public:
         return m_resLenBytes;
     }
 
+    void SetLogicalBytes(uint32_t logicalBytes)
+    {
+        SetResLenBytes(logicalBytes);
+    }
+
+    uint32_t GetLogicalBytes() const
+    {
+        return GetResLenBytes();
+    }
+
     void SetPayloadBytes(uint32_t payloadBytes)
     {
         m_payloadBytes = payloadBytes;
@@ -780,6 +930,10 @@ private:
     // ========== 任务描述信息 ==========
     uint32_t m_src;     // 源节点标识符
     uint32_t m_dest;    // 目的节点标识符
+    bool m_hasSrcEntityId{false};
+    bool m_hasDstEntityId{false};
+    uint32_t m_srcEntityId{0};
+    uint32_t m_dstEntityId{0};
     uint8_t m_sport;    // 源端口号
     uint8_t m_dport;    //< 目的端口号
     TaOpcode m_type = TaOpcode::TA_OPCODE_WRITE;           // 操作类型 (READ/WRITE)
@@ -864,6 +1018,26 @@ public:
         return m_dest;
     }
 
+    bool HasSrcEntityId() const
+    {
+        return m_hasSrcEntityId;
+    }
+
+    bool HasDstEntityId() const
+    {
+        return m_hasDstEntityId;
+    }
+
+    uint32_t GetSrcEntityId() const
+    {
+        return m_srcEntityId;
+    }
+
+    uint32_t GetDstEntityId() const
+    {
+        return m_dstEntityId;
+    }
+
     uint8_t GetSport() const
     {
         return m_sport;
@@ -907,6 +1081,18 @@ public:
     void SetDest(uint32_t dest)
     {
         m_dest = dest;
+    }
+
+    void SetSrcEntityId(uint32_t srcEntityId)
+    {
+        m_srcEntityId = srcEntityId;
+        m_hasSrcEntityId = true;
+    }
+
+    void SetDstEntityId(uint32_t dstEntityId)
+    {
+        m_dstEntityId = dstEntityId;
+        m_hasDstEntityId = true;
     }
 
     void SetSport(uint8_t sport)
@@ -1201,6 +1387,16 @@ public:
         return m_resLenBytes;
     }
 
+    void SetLogicalBytes(uint32_t logicalBytes)
+    {
+        SetResLenBytes(logicalBytes);
+    }
+
+    uint32_t GetLogicalBytes() const
+    {
+        return GetResLenBytes();
+    }
+
     void SetPayloadBytes(uint32_t payloadBytes)
     {
         m_payloadBytes = payloadBytes;
@@ -1226,6 +1422,10 @@ private:
     // ========== 任务描述信息 ==========
     uint32_t m_src{0};                              // 源节点标识符
     uint32_t m_dest{0};                             // 目的节点标识符
+    bool m_hasSrcEntityId{false};
+    bool m_hasDstEntityId{false};
+    uint32_t m_srcEntityId{0};
+    uint32_t m_dstEntityId{0};
     uint8_t m_sport{0};                             // 源端口号
     uint8_t m_dport{0};                             // 目的端口号
     TaOpcode m_type{TaOpcode::TA_OPCODE_WRITE};     // 操作类型 (READ/WRITE)

@@ -1,0 +1,120 @@
+{
+  "cases": [
+    {
+      "case_id": "spray-latency-flow-hash",
+      "block_id": "spray-latency",
+      "role": "control",
+      "topology": "micro-extreme-equal",
+      "workload": "latency-small",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Short flows remain on one low-delay path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-latency-flow-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "task_completion",
+        "psn_order"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "spray-latency-packet-hash",
+      "block_id": "spray-latency",
+      "role": "treatment",
+      "topology": "micro-extreme-equal",
+      "workload": "latency-small",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Packet spray uses the 20 us path and increases short-flow tail latency.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/spray-latency-packet-hash",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "task_completion",
+        "psn_order"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-latency-short",
+      "block_id": "all-latency",
+      "role": "control",
+      "topology": "micro-extreme-mixed",
+      "workload": "latency-small",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "Short flows use only the low-delay shortest path.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-latency-short",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "task_completion",
+        "psn_order"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    },
+    {
+      "case_id": "all-latency-all",
+      "block_id": "all-latency",
+      "role": "treatment",
+      "topology": "micro-extreme-mixed",
+      "workload": "latency-small",
+      "routing_type": "PER_PACKET_ALL_PATHS",
+      "selector": "HASH64",
+      "observability": "detailed",
+      "transport": "RTP",
+      "op_type": "URMA_WRITE",
+      "changed_variable": "routing strategy",
+      "prediction": "All-path routing uses 20 us detours and increases short-flow tail latency.",
+      "falsification_signal": "Observed routing behavior contradicts the pre-registered block claim.",
+      "case_dir": "cases/all-latency-all",
+      "fixed_controls": "See experiment-plan.md",
+      "metric_checks": [
+        "path_usage",
+        "task_completion",
+        "psn_order"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": []
+    }
+  ]
+}

@@ -29,12 +29,11 @@ A fabric can satisfy `1` and still fail at `2` to `4`.
   - `src/unified-bus/model/ub-switch-allocator.cc`
 - `CBFC` implements credit consume/restore and can block sending before downstream space is overrun:
   - `src/unified-bus/model/protocol/ub-flow-control.cc`
-- Routing default is `HASH`, not queue-aware adaptive balancing:
+- Routing selector default is `HASH64`, not queue-aware adaptive balancing:
   - `src/unified-bus/model/protocol/ub-routing-process.cc`
 - Transport defaults include:
   - `EnableRetrans = false`
-  - `UsePacketSpray = false`
-  - `UseShortestPaths = true`
+  - `RoutingType = PER_FLOW_SHORTEST_PATHS`
   - `src/unified-bus/model/protocol/ub-transport.cc`
 
 ## What This Means
@@ -66,8 +65,8 @@ When a user reports `理论上无收敛却丢包/挂住`, check in this order:
 
 1. `network_attribute.txt`:
    - `ns3::UbSwitch::FlowControl`
-   - `ns3::UbRoutingProcess::RoutingAlgorithm`
-   - `ns3::UbTransportChannel::UsePacketSpray`
+   - `ns3::UbRoutingProcess::MultipathSelector`
+   - `ns3::UbTransportChannel::RoutingType`
    - `ns3::UbTransportChannel::EnableRetrans`
 2. run log symptoms:
    - `buffer full`

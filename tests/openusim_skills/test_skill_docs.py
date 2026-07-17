@@ -47,6 +47,11 @@ class OpenUSimStageSkillDocsTest(unittest.TestCase):
         ):
             self.assertTrue((repo_root / relative_path).is_file(), msg=relative_path)
 
+    def test_timing_offset_demo_uses_runtime_parameter_catalog(self):
+        generator = self.read_text("scratch/ub_parallel_timing_offset_demo/generate_case.py")
+        self.assertIn("network_attribute_writer.write_network_attributes", generator)
+        self.assertNotIn("NETWORK_ATTRIBUTES =", generator)
+
     def test_stage_skill_descriptions_are_trigger_only(self):
         for path in self.skill_files():
             text = path.read_text(encoding="utf-8")
@@ -241,6 +246,31 @@ class OpenUSimStageSkillDocsTest(unittest.TestCase):
         self.assertIn("Plan owns the matrix", method_text)
         self.assertIn("Run must not invent cases", method_text)
         self.assertIn("Plan owns the matrix", run_text)
+
+    def test_routing_strategy_selection_is_integrated(self):
+        card_text = self.read_text(
+            ".codex/skills/openusim-references/routing-strategy-selection.md"
+        )
+        plan_text = self.read_text(".codex/skills/openusim-plan-experiment/SKILL.md")
+        spec_rules_text = self.read_text(
+            ".codex/skills/openusim-references/spec-rules.md"
+        )
+        toolchain_text = self.read_text(
+            ".codex/skills/openusim-references/spec-to-toolchain.md"
+        )
+        skills_readme_text = self.read_text(".codex/skills/README.md")
+
+        for marker in (
+            "<reference-hint>",
+            "## Core Judgment",
+            "## Profile Selection",
+            "## Selector Guidance",
+            "## Candidate Scope",
+            "## Evidence Contract",
+        ):
+            self.assertIn(marker, card_text)
+        for text in (plan_text, spec_rules_text, toolchain_text, skills_readme_text):
+            self.assertIn("routing-strategy-selection.md", text)
 
     def test_reference_cards_expose_reference_hint_block(self):
         for path in self.reference_files():

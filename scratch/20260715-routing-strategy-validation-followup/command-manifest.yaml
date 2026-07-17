@@ -1,0 +1,21 @@
+{
+  "execution_policy": "sequential-only",
+  "cases": [
+    {
+      "case_id": "spray-latency-flow-hash",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/spray-latency-flow-hash'"
+    },
+    {
+      "case_id": "spray-latency-packet-hash",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/spray-latency-packet-hash'"
+    },
+    {
+      "case_id": "all-latency-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/all-latency-short'"
+    },
+    {
+      "case_id": "all-latency-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/all-latency-all'"
+    }
+  ]
+}

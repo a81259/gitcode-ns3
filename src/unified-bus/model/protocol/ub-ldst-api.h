@@ -21,18 +21,18 @@ public:
 public:
     void SetNodeId(uint32_t nodeId);
     void RecvResponse(Ptr<Packet> packet);
-    void SetUsePacketSpray(bool usePacketSpray);
-    void SetUseShortestPaths(bool useShortestPaths);
+    void SetRoutingType(RoutingType routingType);
+    void ValidateRoutingConfiguration() const;
     void RecvDataPacket(Ptr<Packet> packet);
     void LdstProcess(Ptr<UbLdstTaskSegment> taskSegment);
 
 private:
+    void ValidateRoutingType(RoutingType routingType) const;
     void SendPacket(Ptr<UbLdstTaskSegment> taskSegment, Ptr<Packet> packet);
     Ptr<Packet> GenDataPacket(Ptr<UbLdstTaskSegment> taskSegment);
-    uint32_t m_nodeId = 0;
+    uint32_t m_nodeId{UINT32_MAX};
     uint32_t m_lbHashSalt = 0;
-    bool m_usePacketSpray = false;
-    bool m_useShortestPaths = true;
+    RoutingType m_routingType{RoutingType::PER_FLOW_SHORTEST_PATHS};
     bool m_pktTraceEnabled = false;
     void LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst,
                         PacketType type, uint32_t size, uint32_t taskId, UbPacketTraceTag traceTag);

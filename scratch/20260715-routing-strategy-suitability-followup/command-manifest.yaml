@@ -1,0 +1,185 @@
+{
+  "execution_policy": "sequential-only",
+  "cases": [
+    {
+      "case_id": "as-r100-g1u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-hash64'"
+    },
+    {
+      "case_id": "as-r100-g1u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-rr'"
+    },
+    {
+      "case_id": "as-r100-g1u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g1u-adaptive'"
+    },
+    {
+      "case_id": "as-r100-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-hash64'"
+    },
+    {
+      "case_id": "as-r100-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-rr'"
+    },
+    {
+      "case_id": "as-r100-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g10u-adaptive'"
+    },
+    {
+      "case_id": "as-r100-g100u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-hash64'"
+    },
+    {
+      "case_id": "as-r100-g100u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-rr'"
+    },
+    {
+      "case_id": "as-r100-g100u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r100-g100u-adaptive'"
+    },
+    {
+      "case_id": "as-r50-g1u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-hash64'"
+    },
+    {
+      "case_id": "as-r50-g1u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-rr'"
+    },
+    {
+      "case_id": "as-r50-g1u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g1u-adaptive'"
+    },
+    {
+      "case_id": "as-r50-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-hash64'"
+    },
+    {
+      "case_id": "as-r50-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-rr'"
+    },
+    {
+      "case_id": "as-r50-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g10u-adaptive'"
+    },
+    {
+      "case_id": "as-r50-g100u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-hash64'"
+    },
+    {
+      "case_id": "as-r50-g100u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-rr'"
+    },
+    {
+      "case_id": "as-r50-g100u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r50-g100u-adaptive'"
+    },
+    {
+      "case_id": "as-r25-g1u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-hash64'"
+    },
+    {
+      "case_id": "as-r25-g1u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-rr'"
+    },
+    {
+      "case_id": "as-r25-g1u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g1u-adaptive'"
+    },
+    {
+      "case_id": "as-r25-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-hash64'"
+    },
+    {
+      "case_id": "as-r25-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-rr'"
+    },
+    {
+      "case_id": "as-r25-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g10u-adaptive'"
+    },
+    {
+      "case_id": "as-r25-g100u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-hash64'"
+    },
+    {
+      "case_id": "as-r25-g100u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-rr'"
+    },
+    {
+      "case_id": "as-r25-g100u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/as-r25-g100u-adaptive'"
+    },
+    {
+      "case_id": "pf-neutral-s11-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s11-short'"
+    },
+    {
+      "case_id": "pf-neutral-s11-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s11-all'"
+    },
+    {
+      "case_id": "pf-neutral-s29-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s29-short'"
+    },
+    {
+      "case_id": "pf-neutral-s29-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s29-all'"
+    },
+    {
+      "case_id": "pf-neutral-s47-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s47-short'"
+    },
+    {
+      "case_id": "pf-neutral-s47-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-neutral-s47-all'"
+    },
+    {
+      "case_id": "pf-capacity-s11-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s11-short'"
+    },
+    {
+      "case_id": "pf-capacity-s11-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s11-all'"
+    },
+    {
+      "case_id": "pf-capacity-s29-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s29-short'"
+    },
+    {
+      "case_id": "pf-capacity-s29-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s29-all'"
+    },
+    {
+      "case_id": "pf-capacity-s47-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s47-short'"
+    },
+    {
+      "case_id": "pf-capacity-s47-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-capacity-s47-all'"
+    },
+    {
+      "case_id": "pf-latency-s11-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s11-short'"
+    },
+    {
+      "case_id": "pf-latency-s11-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s11-all'"
+    },
+    {
+      "case_id": "pf-latency-s29-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s29-short'"
+    },
+    {
+      "case_id": "pf-latency-s29-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s29-all'"
+    },
+    {
+      "case_id": "pf-latency-s47-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s47-short'"
+    },
+    {
+      "case_id": "pf-latency-s47-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability-followup/cases/pf-latency-s47-all'"
+    }
+  ]
+}

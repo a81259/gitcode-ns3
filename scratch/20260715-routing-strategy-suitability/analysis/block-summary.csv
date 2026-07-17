@@ -1,0 +1,7 @@
+block_id,cases,success,matched,partially_matched,mismatched,inconclusive,pareto_rows
+adaptive-signal,27,27,23,4,0,0,12
+hash-robustness,36,36,36,0,0,0,14
+ingress-entropy,24,24,24,0,0,0,17
+path-scope-region,24,24,24,0,0,0,10
+spray-crossover,27,27,27,0,0,0,12
+transport-transfer,14,14,14,0,0,0,0

@@ -1,0 +1,61 @@
+{
+  "semantic_checkpoint": "not-applicable",
+  "results": [
+    {
+      "case_id": "spray-latency-flow-hash",
+      "block_id": "spray-latency",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.349,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/spray-latency-flow-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-latency-packet-hash",
+      "block_id": "spray-latency",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.397,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/spray-latency-packet-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-latency-short",
+      "block_id": "all-latency",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.387,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/all-latency-short",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-latency-all",
+      "block_id": "all-latency",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.357,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation-followup/cases/all-latency-all",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    }
+  ]
+}

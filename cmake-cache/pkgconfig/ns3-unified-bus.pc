@@ -1,0 +1,13 @@
+exec_prefix="/usr/local/bin"
+libdir="/usr/local/lib"
+includedir="/usr/local/include"
+
+Name: ns3-unified-bus
+Description: 
+URL: 
+Version: 3.44
+Requires:  ns3-network ns3-internet ns3-applications ns3-point-to-point ns3-config-store
+Requires.private: 
+Cflags: -I"${includedir}" 
+Libs: -L"${libdir}" -lns3.44-unified-bus  -lns3.44-network -lns3.44-internet -lns3.44-applications -lns3.44-point-to-point -lns3.44-config-store
+Libs.private: -L"${libdir}" 

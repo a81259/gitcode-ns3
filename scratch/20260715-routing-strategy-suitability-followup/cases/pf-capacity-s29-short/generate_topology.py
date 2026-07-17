@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+import networkx as nx
+
+CASE_DIR = Path(__file__).resolve().parent
+TOOLS_DIR = CASE_DIR.parents[2] / 'ns-3-ub-tools'
+sys.path.insert(0, str(TOOLS_DIR))
+import net_sim_builder as netsim
+
+def paths(graph, source, target):
+    try:
+        return nx.all_shortest_paths(graph, source, target)
+    except nx.NetworkXNoPath:
+        return []
+
+graph = netsim.NetworkSimulationGraph()
+graph.output_dir = str(CASE_DIR) + '/'
+for host in range(16):
+    graph.add_netisim_host(host, forward_delay='1ns')
+for switch in range(16, 21):
+    graph.add_netisim_node(switch, forward_delay='1ns')
+for host in range(8):
+    graph.add_netisim_edge(host, 16, bandwidth='400Gbps', delay='20ns')
+for host in range(8, 16):
+    graph.add_netisim_edge(host, 17, bandwidth='400Gbps', delay='20ns')
+graph.add_netisim_edge(16, 18, bandwidth='100Gbps', delay='20ns')
+graph.add_netisim_edge(17, 18, bandwidth='100Gbps', delay='20ns')
+graph.add_netisim_edge(16, 19, bandwidth='400Gbps', delay='20ns')
+graph.add_netisim_edge(17, 19, bandwidth='400Gbps', delay='20ns')
+graph.add_netisim_edge(16, 20, bandwidth='400Gbps', delay='20ns')
+graph.add_netisim_edge(17, 20, bandwidth='400Gbps', delay='20ns')
+graph.build_graph_config()
+graph.gen_compressed_route_table(path_finding_algo=paths, multiple_workers=1)
+graph.write_config(include_transport=False)
+(CASE_DIR / 'routing_table.csv').write_text('''nodeId,dstNodeId,dstPortId,outPorts,metrics
+0..15,0..15,0,0,4
+16,0,0,0,1
+16,1,0,1,1
+16,2,0,2,1
+16,3,0,3,1
+16,4,0,4,1
+16,5,0,5,1
+16,6,0,6,1
+16,7,0,7,1
+16,8..15,0,8 9 10,3 4 4
+17,0..7,0,8 9 10,3 4 4
+17,8,0,0,1
+17,9,0,1,1
+17,10,0,2,1
+17,11,0,3,1
+17,12,0,4,1
+17,13,0,5,1
+17,14,0,6,1
+17,15,0,7,1
+18,0..7,0,0,2
+18,8..15,0,1,2
+19,0..7,0,0,2
+19,8..15,0,1,2
+20,0..7,0,0,2
+20,8..15,0,1,2
+''', encoding='utf-8')

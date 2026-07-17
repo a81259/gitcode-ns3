@@ -1,0 +1,789 @@
+{
+  "semantic_checkpoint": "passed: {\"sem-packet-all\": [1, 2, 3], \"sem-flow-short\": [1], \"sem-flow-all\": [2], \"sem-packet-short\": [1]}",
+  "results": [
+    {
+      "case_id": "sem-flow-short",
+      "block_id": "semantic",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.392,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/sem-flow-short",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "sem-packet-short",
+      "block_id": "semantic",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.359,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/sem-packet-short",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "sem-flow-all",
+      "block_id": "semantic",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.378,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/sem-flow-all",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "sem-packet-all",
+      "block_id": "semantic",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.45,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/sem-packet-all",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-many-hash64",
+      "block_id": "hash-many",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.228,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-many-hash64",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-elephant-hash64",
+      "block_id": "hash-elephant",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 3.886,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-elephant-hash64",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-many-crc32",
+      "block_id": "hash-many",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.003,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-many-crc32",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-elephant-crc32",
+      "block_id": "hash-elephant",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 3.588,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-elephant-crc32",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-many-toeplitz",
+      "block_id": "hash-many",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.359,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-many-toeplitz",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "hash-elephant-toeplitz",
+      "block_id": "hash-elephant",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 5.401,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/hash-elephant-toeplitz",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-equal-flow-hash",
+      "block_id": "spray-equal",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.96,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-equal-flow-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-equal-packet-hash",
+      "block_id": "spray-equal",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.759,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-equal-packet-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-equal-round-robin",
+      "block_id": "spray-equal",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.771,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-equal-round-robin",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-delay-flow-hash",
+      "block_id": "spray-delay",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.06,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-delay-flow-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-delay-packet-hash",
+      "block_id": "spray-delay",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.732,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-delay-packet-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "spray-delay-round-robin",
+      "block_id": "spray-delay",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.738,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/spray-delay-round-robin",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "adaptive-hot-hash",
+      "block_id": "adaptive-hot",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.802,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/adaptive-hot-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "adaptive-hot-adaptive",
+      "block_id": "adaptive-hot",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.701,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/adaptive-hot-adaptive",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "adaptive-sparse-rr",
+      "block_id": "adaptive-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.356,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/adaptive-sparse-rr",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "adaptive-sparse-adaptive",
+      "block_id": "adaptive-sparse",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.352,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/adaptive-sparse-adaptive",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "stripe-multi-hash",
+      "block_id": "stripe-multi",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 3.118,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/stripe-multi-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "stripe-multi-stripe",
+      "block_id": "stripe-multi",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 2.973,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/stripe-multi-stripe",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "stripe-single-hash",
+      "block_id": "stripe-single",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.69,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/stripe-single-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "stripe-single-stripe",
+      "block_id": "stripe-single",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 1.693,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/stripe-single-stripe",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-hot-short",
+      "block_id": "all-hot",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.945,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/all-hot-short",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-hot-all",
+      "block_id": "all-hot",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.761,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/all-hot-all",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-delay-short",
+      "block_id": "all-delay",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.941,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/all-delay-short",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "all-delay-all",
+      "block_id": "all-delay",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.733,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/all-delay-all",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-hash64-per-flow-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.339,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-hash64-per-flow-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-hash64-per-packet-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.348,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-hash64-per-packet-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-hash64-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.381,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-hash64-per-flow-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-hash64-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.38,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-hash64-per-packet-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-crc32-per-flow-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.351,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-crc32-per-flow-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-crc32-per-packet-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.348,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-crc32-per-packet-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-crc32-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.368,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-crc32-per-flow-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-crc32-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.391,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-crc32-per-packet-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-toeplitz-per-flow-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.399,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-toeplitz-per-flow-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-toeplitz-per-packet-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.363,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-toeplitz-per-packet-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-toeplitz-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.371,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-toeplitz-per-flow-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-toeplitz-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.37,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-toeplitz-per-packet-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-round-robin-per-packet-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.365,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-round-robin-per-packet-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-round-robin-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.36,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-round-robin-per-packet-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-adaptive-per-packet-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.346,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-adaptive-per-packet-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-adaptive-per-packet-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.331,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-adaptive-per-packet-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-ingress-port-stripe-per-flow-all-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.345,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-ingress-port-stripe-per-flow-all-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "cover-ingress-port-stripe-per-flow-shortest-paths",
+      "block_id": "coverage",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.389,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/cover-ingress-port-stripe-per-flow-shortest-paths",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ctp-flow-hash",
+      "block_id": "smoke-ctp",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.396,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ctp-flow-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ctp-packet-hash",
+      "block_id": "smoke-ctp",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.378,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ctp-packet-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ctp-round-robin",
+      "block_id": "smoke-ctp",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.158,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ctp-round-robin",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ctp-adaptive",
+      "block_id": "smoke-ctp",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.152,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ctp-adaptive",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ctp-ingress-stripe",
+      "block_id": "smoke-ctp",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.377,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ctp-ingress-stripe",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ldst-flow-hash",
+      "block_id": "smoke-ldst",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.789,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ldst-flow-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ldst-packet-hash",
+      "block_id": "smoke-ldst",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.815,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ldst-packet-hash",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ldst-round-robin",
+      "block_id": "smoke-ldst",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.799,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ldst-round-robin",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ldst-adaptive",
+      "block_id": "smoke-ldst",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.757,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ldst-adaptive",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    },
+    {
+      "case_id": "smoke-ldst-ingress-stripe",
+      "block_id": "smoke-ldst",
+      "status": "success",
+      "return_code": 0,
+      "duration_s": 0.773,
+      "command": "python3.12 ./ns3 run --no-build scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-validation/cases/smoke-ldst-ingress-stripe",
+      "artifacts": [
+        "console.log",
+        "runlog",
+        "output/task_statistics.csv",
+        "output/throughput.csv"
+      ]
+    }
+  ]
+}

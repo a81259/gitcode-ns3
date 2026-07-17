@@ -215,7 +215,7 @@ Affected mappings:
 - `src/unified-bus/model/ub-utils.h` + `src/unified-bus/model/ub-datatype.cc` + `src/unified-bus/model/protocol/ub-congestion-control.cc` UB GlobalValue definitions → `network_attribute_writer.py` `_FALLBACK_UB_GLOBAL_KEYS`
 - `src/unified-bus/model/ub-app.h` + `src/unified-bus/model/ub-traffic-gen.h` `TaOpcodeMap` → `workload-options.md` valid opType table
 - `src/unified-bus/model/ub-switch.cc` `MakeEnumChecker` (FlowControl, VlScheduler) → `spec-to-toolchain.md` parameter value source-of-truth table
-- `src/unified-bus/model/protocol/ub-routing-process.cc` `MakeEnumChecker` (RoutingAlgorithm) → `spec-to-toolchain.md` parameter value source-of-truth table
+- `src/unified-bus/model/protocol/ub-routing-process.cc` `MakeEnumChecker` (MultipathSelector) → `spec-to-toolchain.md` parameter value source-of-truth table
 - `SKILL.md` Required references changes → `test_skill_docs.py` assertions
 
 ---

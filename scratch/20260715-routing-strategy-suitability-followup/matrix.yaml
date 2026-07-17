@@ -1,0 +1,1534 @@
+{
+  "cases": [
+    {
+      "case_id": "as-r100-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r100-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g1u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g1u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g1u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r100-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g10u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g10u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g10u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r100-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g100u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g100u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r100-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r100-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r100-g100u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r50-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g1u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g1u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g1u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r50-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g10u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g10u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g10u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r50-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g100u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g100u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r50-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r50-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.5,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r50-g100u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g1u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r25-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g1u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g1u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g1u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g1u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g1u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 1000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g1u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g10u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r25-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g10u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g10u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g10u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g10u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g10u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 10000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g10u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g100u-hash64",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "control",
+      "control_id": "as-r25-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g100u-hash64",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g100u-rr",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ROUND_ROBIN",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g100u-rr",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "as-r25-g100u-adaptive",
+      "block_id": "adaptive-single-packet-sparse",
+      "role": "treatment",
+      "control_id": "as-r25-g100u-hash64",
+      "topology_profile": "micro-sparse",
+      "routing_type": "PER_PACKET_SHORTEST_PATHS",
+      "selector": "ADAPTIVE",
+      "changed_variable": "selector under one-packet sparse arrivals",
+      "prediction": "As the interarrival gap drains every queue, adaptive loses congestion signal and concentrates on the first tied candidate.",
+      "falsification_signal": "Queues are empty before each task but adaptive remains evenly spread.",
+      "path_rate_ratio": 0.25,
+      "interarrival_gap_ns": 100000,
+      "pairing_seed": 0,
+      "observability": "detailed",
+      "case_dir": "cases/as-r25-g100u-adaptive",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-adaptive-single-packet-sparse"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-neutral-s11-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s11-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-neutral-s11-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s11-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-neutral-s29-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s29-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-neutral-s29-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s29-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-neutral-s47-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s47-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-neutral-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-neutral-s47-short",
+      "topology_profile": "clos-distinct-neutral",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-neutral-s47-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-capacity-s11-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s11-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-capacity-s11-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s11-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-capacity-s29-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s29-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-capacity-s29-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s29-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-capacity-s47-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s47-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-capacity-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-capacity-s47-short",
+      "topology_profile": "clos-distinct-capacity",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-capacity-s47-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s11-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-latency-s11-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s11-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s11-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-latency-s11-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 11,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s11-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s29-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-latency-s29-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s29-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s29-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-latency-s29-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 29,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s29-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s47-short",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "control",
+      "control_id": "pf-latency-s47-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_SHORTEST_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s47-short",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    },
+    {
+      "case_id": "pf-latency-s47-all",
+      "block_id": "per-flow-all-distinct-keys",
+      "role": "treatment",
+      "control_id": "pf-latency-s47-short",
+      "topology_profile": "clos-distinct-latency",
+      "routing_type": "PER_FLOW_ALL_PATHS",
+      "selector": "HASH64",
+      "changed_variable": "shortest-only versus all-path scope across distinct flow keys",
+      "prediction": "Distinct per-flow keys spread across the full candidate set; capacity detours help and high-delay detours hurt relative to shortest-only routing.",
+      "falsification_signal": "All-path traffic uses no detour across three pairing seeds, or no regime-dependent performance sign change appears despite detour use.",
+      "path_rate_ratio": 1.0,
+      "interarrival_gap_ns": 0,
+      "pairing_seed": 47,
+      "observability": "balanced",
+      "case_dir": "cases/pf-latency-s47-all",
+      "fixed_controls": "See experiment-plan.md and control_id row.",
+      "reason": "This row directly closes a named comparison-validity gap.",
+      "metric_checks": [
+        "task_fct",
+        "aggregate_goodput",
+        "path_usage",
+        "queue_evidence"
+      ],
+      "expected_artifacts": [
+        "console.log",
+        "runlog/",
+        "output/task_statistics.csv"
+      ],
+      "parallel_group": "sequential-only",
+      "checkpoint_ids": [
+        "pilot-per-flow-all-distinct-keys"
+      ]
+    }
+  ]
+}

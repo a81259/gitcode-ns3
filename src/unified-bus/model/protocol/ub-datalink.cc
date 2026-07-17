@@ -50,8 +50,14 @@ Ptr<Packet> UbDataLink::GenControlCreditPacket(const uint8_t credits[16])
     return p;
 }
 
-void UbDataLink::GenPacketHeader(Ptr<Packet> p, bool credit, bool ack, uint8_t crdVl, uint8_t pktVl, bool mode,
-                                 bool policy, UbDatalinkHeaderConfig config)
+void
+UbDataLink::GenPacketHeader(Ptr<Packet> p,
+                            bool credit,
+                            bool ack,
+                            uint8_t crdVl,
+                            uint8_t pktVl,
+                            RoutingType routingType,
+                            UbDatalinkHeaderConfig config)
 {
     NS_ABORT_MSG_IF(config != UbDatalinkHeaderConfig::CONTROL && pktVl == 0,
                     "Unified-bus reserves priority 0 for locally generated control frames in the "
@@ -62,8 +68,7 @@ void UbDataLink::GenPacketHeader(Ptr<Packet> p, bool credit, bool ack, uint8_t c
     linkPacketHeader.SetACK(ack);                   // 报文是否释放retry buffer空间
     linkPacketHeader.SetCreditTargetVL(crdVl);      // 4 bits: 指定接收credit的VL
     linkPacketHeader.SetPacketVL(pktVl);            // 4 bits: 数据包的VL
-    linkPacketHeader.SetLoadBalanceMode(mode);      // 1 bit: 0=per flow, 1=per packet
-    linkPacketHeader.SetRoutingPolicy(policy);      // 1 bit: 0=all paths, 1=shortest paths
+    linkPacketHeader.SetRoutingType(routingType);
     linkPacketHeader.SetConfig(static_cast<uint8_t>(config));
     p->AddHeader(linkPacketHeader);
 }

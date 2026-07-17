@@ -169,6 +169,15 @@ public:
     uint32_t GetTpn() const { return m_tpn; }
 
     /**
+     * @brief Get the destination transport path number.
+     * @return Destination TPN carried by this transport endpoint.
+     */
+    uint32_t GetDestTpn() const
+    {
+        return m_dstTpn;
+    }
+
+    /**
      * @brief Get size parameter
      * @return Size parameter
      */
@@ -209,12 +218,6 @@ public:
      * @return Destination port
      */
     uint16_t GetDport() const { return m_dport; }
-
-    uint64_t GetSchedulingWeight() const { return m_schedulingWeight; }
-    void SetSchedulingWeight(uint64_t weight)
-    {
-        m_schedulingWeight = weight == 0 ? 1 : weight;
-    }
 
     /**
     * @brief Move right Bitset
@@ -263,6 +266,8 @@ public:
 
     uint32_t GetWqeSegmentVecSize() { return m_wqeSegmentVector.size(); }
     uint32_t GetActiveSendSegmentCount() const;
+    uint32_t GetOutstandingUnackedSegmentCount() const;
+    bool CanScheduleAnotherSegment() const;
 
     Ptr<UbCongestionControl> GetCongestionCtrlForTest() const { return m_congestionCtrl; }
     void SetCongestionControlForTest(Ptr<UbCongestionControl> cc) { m_congestionCtrl = cc; }
@@ -495,7 +500,6 @@ private:
     uint16_t m_priority;      // Process group identifier
     uint16_t m_sport;
     uint16_t m_dport;
-    uint64_t m_schedulingWeight {1};
 
     // IP addresses
     Ipv4Address m_sip;        // Source IP address
@@ -533,8 +537,7 @@ private:
     bool m_sendWindowLimited = false; // 记录发送窗口是否满
     uint64_t m_defaultMaxWqeSegNum;
     uint64_t m_defaultMaxInflightPacketSize;
-    bool m_usePacketSpray;
-    bool m_useShortestPaths;
+    RoutingType m_routingType{RoutingType::PER_FLOW_SHORTEST_PATHS};
     uint16_t m_lbHashSalt = 0; // load balance salt for ECMP/packet-spray hashing, increases per packet
 
     std::unique_ptr<UbRetransController> m_retrans;

@@ -1,0 +1,38 @@
+---- Summary of ns-3 settings:
+Build profile                 : release
+Build directory               : /home/a81257/gitcode0519/ns-3-ub-next/build
+Build with runtime asserts    : OFF (not requested)
+Build with runtime logging    : OFF (not requested)
+Build version embedding       : OFF (not requested)
+BRITE Integration             : [31mOFF (missing dependency)[0m
+DES Metrics event collection  : OFF (not requested)
+DPDK NetDevice                : OFF (not requested)
+Emulation FdNetDevice         : [31mOFF (missing dependency)[0m
+Examples                      : OFF (not requested)
+File descriptor NetDevice     : [31mOFF (missing dependency)[0m
+GNU Scientific Library (GSL)  : [31mOFF (GSL was not found)[0m
+GtkConfigStore                : [31mOFF (Harfbuzz is required by GTK3 and was not found)[0m
+LibXml2 support               : [31mOFF (LibXML2 was not found)[0m
+MPI Support                   : OFF (not requested)
+Multithreaded Simulation      : OFF (not requested)
+ns-3 Click Integration        : [31mOFF (missing dependency)[0m
+ns-3 OpenFlow Integration     : [31mOFF (missing dependency)[0m
+Netmap emulation FdNetDevice  : [31mOFF (missing dependency)[0m
+PyViz visualizer              : [31mOFF (Python Bindings are disabled)[0m
+Python Bindings               : OFF (not requested)
+SQLite support                : [31mOFF (Missing headers: "sqlite3.h" and missing libraries: "sqlite3")[0m
+Eigen3 support                : [31mOFF (Eigen was not found)[0m
+Tap Bridge                    : [32mON[0m
+Tap FdNetDevice               : [31mOFF (missing dependency)[0m
+Tests                         : OFF (not requested)
+
+
+Modules configured to be built:
+applications              bridge                    config-store              
+core                      internet                  network                   
+point-to-point            stats                     traffic-control           
+unified-bus               
+
+Modules that cannot be built:
+mpi                       mtp                       
+

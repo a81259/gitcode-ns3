@@ -1,0 +1,615 @@
+{
+  "execution_policy": "sequential-only",
+  "checkpoint_policy": "continue_full_matrix with per-block safety pilots",
+  "runner": "python3.12 ./ns3 run --no-build",
+  "cases": [
+    {
+      "case_id": "h-many-w3-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s11-hash64'"
+    },
+    {
+      "case_id": "h-many-w3-s11-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s11-crc32'"
+    },
+    {
+      "case_id": "h-many-w3-s11-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s11-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w3-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s29-hash64'"
+    },
+    {
+      "case_id": "h-many-w3-s29-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s29-crc32'"
+    },
+    {
+      "case_id": "h-many-w3-s29-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s29-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w3-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s47-hash64'"
+    },
+    {
+      "case_id": "h-many-w3-s47-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s47-crc32'"
+    },
+    {
+      "case_id": "h-many-w3-s47-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w3-s47-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w5-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s11-hash64'"
+    },
+    {
+      "case_id": "h-many-w5-s11-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s11-crc32'"
+    },
+    {
+      "case_id": "h-many-w5-s11-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s11-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w5-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s29-hash64'"
+    },
+    {
+      "case_id": "h-many-w5-s29-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s29-crc32'"
+    },
+    {
+      "case_id": "h-many-w5-s29-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s29-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w5-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s47-hash64'"
+    },
+    {
+      "case_id": "h-many-w5-s47-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s47-crc32'"
+    },
+    {
+      "case_id": "h-many-w5-s47-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w5-s47-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w8-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s11-hash64'"
+    },
+    {
+      "case_id": "h-many-w8-s11-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s11-crc32'"
+    },
+    {
+      "case_id": "h-many-w8-s11-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s11-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w8-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s29-hash64'"
+    },
+    {
+      "case_id": "h-many-w8-s29-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s29-crc32'"
+    },
+    {
+      "case_id": "h-many-w8-s29-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s29-toeplitz'"
+    },
+    {
+      "case_id": "h-many-w8-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s47-hash64'"
+    },
+    {
+      "case_id": "h-many-w8-s47-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s47-crc32'"
+    },
+    {
+      "case_id": "h-many-w8-s47-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-many-w8-s47-toeplitz'"
+    },
+    {
+      "case_id": "h-elephant-w8-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s11-hash64'"
+    },
+    {
+      "case_id": "h-elephant-w8-s11-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s11-crc32'"
+    },
+    {
+      "case_id": "h-elephant-w8-s11-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s11-toeplitz'"
+    },
+    {
+      "case_id": "h-elephant-w8-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s29-hash64'"
+    },
+    {
+      "case_id": "h-elephant-w8-s29-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s29-crc32'"
+    },
+    {
+      "case_id": "h-elephant-w8-s29-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s29-toeplitz'"
+    },
+    {
+      "case_id": "h-elephant-w8-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s47-hash64'"
+    },
+    {
+      "case_id": "h-elephant-w8-s47-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s47-crc32'"
+    },
+    {
+      "case_id": "h-elephant-w8-s47-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/h-elephant-w8-s47-toeplitz'"
+    },
+    {
+      "case_id": "s-16k-d20n-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20n-flow-hash64'"
+    },
+    {
+      "case_id": "s-16k-d20n-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20n-packet-hash64'"
+    },
+    {
+      "case_id": "s-16k-d20n-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20n-packet-rr'"
+    },
+    {
+      "case_id": "s-16k-d2u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d2u-flow-hash64'"
+    },
+    {
+      "case_id": "s-16k-d2u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d2u-packet-hash64'"
+    },
+    {
+      "case_id": "s-16k-d2u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d2u-packet-rr'"
+    },
+    {
+      "case_id": "s-16k-d20u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20u-flow-hash64'"
+    },
+    {
+      "case_id": "s-16k-d20u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20u-packet-hash64'"
+    },
+    {
+      "case_id": "s-16k-d20u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-16k-d20u-packet-rr'"
+    },
+    {
+      "case_id": "s-256k-d20n-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20n-flow-hash64'"
+    },
+    {
+      "case_id": "s-256k-d20n-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20n-packet-hash64'"
+    },
+    {
+      "case_id": "s-256k-d20n-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20n-packet-rr'"
+    },
+    {
+      "case_id": "s-256k-d2u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d2u-flow-hash64'"
+    },
+    {
+      "case_id": "s-256k-d2u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d2u-packet-hash64'"
+    },
+    {
+      "case_id": "s-256k-d2u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d2u-packet-rr'"
+    },
+    {
+      "case_id": "s-256k-d20u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20u-flow-hash64'"
+    },
+    {
+      "case_id": "s-256k-d20u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20u-packet-hash64'"
+    },
+    {
+      "case_id": "s-256k-d20u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-256k-d20u-packet-rr'"
+    },
+    {
+      "case_id": "s-8m-d20n-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20n-flow-hash64'"
+    },
+    {
+      "case_id": "s-8m-d20n-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20n-packet-hash64'"
+    },
+    {
+      "case_id": "s-8m-d20n-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20n-packet-rr'"
+    },
+    {
+      "case_id": "s-8m-d2u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d2u-flow-hash64'"
+    },
+    {
+      "case_id": "s-8m-d2u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d2u-packet-hash64'"
+    },
+    {
+      "case_id": "s-8m-d2u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d2u-packet-rr'"
+    },
+    {
+      "case_id": "s-8m-d20u-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20u-flow-hash64'"
+    },
+    {
+      "case_id": "s-8m-d20u-packet-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20u-packet-hash64'"
+    },
+    {
+      "case_id": "s-8m-d20u-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/s-8m-d20u-packet-rr'"
+    },
+    {
+      "case_id": "a-screen-r100-g0-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g0-hash64'"
+    },
+    {
+      "case_id": "a-screen-r100-g0-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g0-rr'"
+    },
+    {
+      "case_id": "a-screen-r100-g0-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g0-adaptive'"
+    },
+    {
+      "case_id": "a-screen-r100-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g10u-hash64'"
+    },
+    {
+      "case_id": "a-screen-r100-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g10u-rr'"
+    },
+    {
+      "case_id": "a-screen-r100-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r100-g10u-adaptive'"
+    },
+    {
+      "case_id": "a-screen-r50-g0-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g0-hash64'"
+    },
+    {
+      "case_id": "a-screen-r50-g0-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g0-rr'"
+    },
+    {
+      "case_id": "a-screen-r50-g0-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g0-adaptive'"
+    },
+    {
+      "case_id": "a-screen-r50-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g10u-hash64'"
+    },
+    {
+      "case_id": "a-screen-r50-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g10u-rr'"
+    },
+    {
+      "case_id": "a-screen-r50-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r50-g10u-adaptive'"
+    },
+    {
+      "case_id": "a-screen-r25-g0-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g0-hash64'"
+    },
+    {
+      "case_id": "a-screen-r25-g0-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g0-rr'"
+    },
+    {
+      "case_id": "a-screen-r25-g0-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g0-adaptive'"
+    },
+    {
+      "case_id": "a-screen-r25-g10u-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g10u-hash64'"
+    },
+    {
+      "case_id": "a-screen-r25-g10u-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g10u-rr'"
+    },
+    {
+      "case_id": "a-screen-r25-g10u-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-screen-r25-g10u-adaptive'"
+    },
+    {
+      "case_id": "a-confirm-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s11-hash64'"
+    },
+    {
+      "case_id": "a-confirm-s11-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s11-rr'"
+    },
+    {
+      "case_id": "a-confirm-s11-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s11-adaptive'"
+    },
+    {
+      "case_id": "a-confirm-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s29-hash64'"
+    },
+    {
+      "case_id": "a-confirm-s29-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s29-rr'"
+    },
+    {
+      "case_id": "a-confirm-s29-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s29-adaptive'"
+    },
+    {
+      "case_id": "a-confirm-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s47-hash64'"
+    },
+    {
+      "case_id": "a-confirm-s47-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s47-rr'"
+    },
+    {
+      "case_id": "a-confirm-s47-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/a-confirm-s47-adaptive'"
+    },
+    {
+      "case_id": "i-n1-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s11-hash64'"
+    },
+    {
+      "case_id": "i-n1-s11-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s11-stripe'"
+    },
+    {
+      "case_id": "i-n1-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s29-hash64'"
+    },
+    {
+      "case_id": "i-n1-s29-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s29-stripe'"
+    },
+    {
+      "case_id": "i-n1-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s47-hash64'"
+    },
+    {
+      "case_id": "i-n1-s47-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n1-s47-stripe'"
+    },
+    {
+      "case_id": "i-n2-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s11-hash64'"
+    },
+    {
+      "case_id": "i-n2-s11-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s11-stripe'"
+    },
+    {
+      "case_id": "i-n2-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s29-hash64'"
+    },
+    {
+      "case_id": "i-n2-s29-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s29-stripe'"
+    },
+    {
+      "case_id": "i-n2-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s47-hash64'"
+    },
+    {
+      "case_id": "i-n2-s47-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n2-s47-stripe'"
+    },
+    {
+      "case_id": "i-n4-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s11-hash64'"
+    },
+    {
+      "case_id": "i-n4-s11-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s11-stripe'"
+    },
+    {
+      "case_id": "i-n4-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s29-hash64'"
+    },
+    {
+      "case_id": "i-n4-s29-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s29-stripe'"
+    },
+    {
+      "case_id": "i-n4-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s47-hash64'"
+    },
+    {
+      "case_id": "i-n4-s47-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n4-s47-stripe'"
+    },
+    {
+      "case_id": "i-n8-s11-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s11-hash64'"
+    },
+    {
+      "case_id": "i-n8-s11-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s11-stripe'"
+    },
+    {
+      "case_id": "i-n8-s29-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s29-hash64'"
+    },
+    {
+      "case_id": "i-n8-s29-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s29-stripe'"
+    },
+    {
+      "case_id": "i-n8-s47-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s47-hash64'"
+    },
+    {
+      "case_id": "i-n8-s47-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/i-n8-s47-stripe'"
+    },
+    {
+      "case_id": "p-neutral-long-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-long-flow-short'"
+    },
+    {
+      "case_id": "p-neutral-long-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-long-flow-all'"
+    },
+    {
+      "case_id": "p-neutral-long-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-long-packet-short'"
+    },
+    {
+      "case_id": "p-neutral-long-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-long-packet-all'"
+    },
+    {
+      "case_id": "p-neutral-many-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-many-flow-short'"
+    },
+    {
+      "case_id": "p-neutral-many-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-many-flow-all'"
+    },
+    {
+      "case_id": "p-neutral-many-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-many-packet-short'"
+    },
+    {
+      "case_id": "p-neutral-many-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-neutral-many-packet-all'"
+    },
+    {
+      "case_id": "p-capacity-long-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-long-flow-short'"
+    },
+    {
+      "case_id": "p-capacity-long-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-long-flow-all'"
+    },
+    {
+      "case_id": "p-capacity-long-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-long-packet-short'"
+    },
+    {
+      "case_id": "p-capacity-long-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-long-packet-all'"
+    },
+    {
+      "case_id": "p-capacity-many-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-many-flow-short'"
+    },
+    {
+      "case_id": "p-capacity-many-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-many-flow-all'"
+    },
+    {
+      "case_id": "p-capacity-many-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-many-packet-short'"
+    },
+    {
+      "case_id": "p-capacity-many-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-capacity-many-packet-all'"
+    },
+    {
+      "case_id": "p-latency-long-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-long-flow-short'"
+    },
+    {
+      "case_id": "p-latency-long-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-long-flow-all'"
+    },
+    {
+      "case_id": "p-latency-long-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-long-packet-short'"
+    },
+    {
+      "case_id": "p-latency-long-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-long-packet-all'"
+    },
+    {
+      "case_id": "p-latency-many-flow-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-many-flow-short'"
+    },
+    {
+      "case_id": "p-latency-many-flow-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-many-flow-all'"
+    },
+    {
+      "case_id": "p-latency-many-packet-short",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-many-packet-short'"
+    },
+    {
+      "case_id": "p-latency-many-packet-all",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/p-latency-many-packet-all'"
+    },
+    {
+      "case_id": "t-ctp-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-flow-hash64'"
+    },
+    {
+      "case_id": "t-ctp-flow-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-flow-crc32'"
+    },
+    {
+      "case_id": "t-ctp-flow-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-flow-toeplitz'"
+    },
+    {
+      "case_id": "t-ctp-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-packet-rr'"
+    },
+    {
+      "case_id": "t-ctp-packet-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-packet-adaptive'"
+    },
+    {
+      "case_id": "t-ctp-flow-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-flow-stripe'"
+    },
+    {
+      "case_id": "t-ctp-packet-all-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ctp-packet-all-hash64'"
+    },
+    {
+      "case_id": "t-ldst-flow-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-flow-hash64'"
+    },
+    {
+      "case_id": "t-ldst-flow-crc32",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-flow-crc32'"
+    },
+    {
+      "case_id": "t-ldst-flow-toeplitz",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-flow-toeplitz'"
+    },
+    {
+      "case_id": "t-ldst-packet-rr",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-packet-rr'"
+    },
+    {
+      "case_id": "t-ldst-packet-adaptive",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-packet-adaptive'"
+    },
+    {
+      "case_id": "t-ldst-flow-stripe",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-flow-stripe'"
+    },
+    {
+      "case_id": "t-ldst-packet-all-hash64",
+      "command": "python3.12 ./ns3 run --no-build 'scratch/ub-quick-example --case-path=scratch/20260715-routing-strategy-suitability/cases/t-ldst-packet-all-hash64'"
+    }
+  ]
+}

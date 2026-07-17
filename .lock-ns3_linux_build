@@ -1,0 +1,32 @@
+#! /usr/bin/env python3
+
+launch_dir = '/home/a81257/gitcode0519/ns-3-ub-next'
+run_dir = '/home/a81257/gitcode0519/ns-3-ub-next'
+top_dir = '/home/a81257/gitcode0519/ns-3-ub-next'
+out_dir = '/home/a81257/gitcode0519/ns-3-ub-next/build'
+
+
+NS3_ENABLED_MODULES = ['ns3-config-store', 'ns3-point-to-point', 'ns3-applications', 'ns3-traffic-control', 'ns3-bridge', 'ns3-internet', 'ns3-core', 'ns3-stats', 'ns3-network', 'ns3-unified-bus', ]
+NS3_ENABLED_CONTRIBUTED_MODULES = []
+NS3_MODULE_PATH = ['/home/a81257/.codex/tmp/arg0/codex-arg0c59g5c', '/home/a81257/.vscode-server/cli/servers/Stable-fc3def6774c76082adf699d366f31a557ce5573f/server/bin/remote-cli', '/home/a81257/miniconda3/bin', '/home/a81257/miniconda3/condabin', '/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/usr/games', '/usr/local/games', '/snap/bin', '/home/a81257/.vscode-server/extensions/openai.chatgpt-26.707.41301-linux-x64/bin/linux-x86_64', '/home/a81257/gitcode0519/ns-3-ub-next/build', '/home/a81257/gitcode0519/ns-3-ub-next/build/lib']
+ENABLE_EXAMPLES = False
+ENABLE_TESTS = False
+ENABLE_OPENFLOW = False
+NSCLICK = False
+ENABLE_BRITE = False
+ENABLE_SUDO = False
+ENABLE_PYTHON_BINDINGS = False
+FETCH_NETANIM_VISUALIZER = False
+EXAMPLE_DIRECTORIES = []
+APPNAME = 'ns'
+BUILD_PROFILE = 'release'
+VERSION = '3.44' 
+BUILD_VERSION_STRING = '' 
+PYTHON = ['/usr/bin/python3']
+VALGRIND_FOUND = False 
+
+
+ns3_runnable_programs = ['/home/a81257/gitcode0519/ns-3-ub-next/build/utils/perf/ns3.44-perf-io', '/home/a81257/gitcode0519/ns-3-ub-next/build/utils/ns3.44-print-introspected-doxygen', '/home/a81257/gitcode0519/ns-3-ub-next/build/utils/ns3.44-bench-packets', '/home/a81257/gitcode0519/ns-3-ub-next/build/utils/ns3.44-bench-scheduler', '/home/a81257/gitcode0519/ns-3-ub-next/build/scratch/subdir/ns3.44-scratch-subdir', '/home/a81257/gitcode0519/ns-3-ub-next/build/scratch/nested-subdir/ns3.44-scratch-nested-subdir-executable', '/home/a81257/gitcode0519/ns-3-ub-next/build/scratch/ns3.44-scratch-simulator', '/home/a81257/gitcode0519/ns-3-ub-next/build/scratch/ns3.44-ub-quick-example', ]
+
+ns3_runnable_scripts = []
+

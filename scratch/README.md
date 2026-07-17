@@ -47,10 +47,10 @@ If you need to reset old configure choices, use the explicit reset form above. I
 Each case directory under `scratch/` usually contains:
 
 - `network_attribute.txt` — Global defaults and feature toggles set via ns-3 Attributes and project-level globals.
-- `node.csv` — Node inventory: devices and switches with port counts and (optional) forwarding delay.
+- `node.csv` — Node inventory: devices and switches with port counts and optional per-node delay fields.
 - `topology.csv` — L2 links between ports, with bandwidth and propagation delay.
 - `routing_table.csv` — Per-node forwarding rules for a given destination and destination-port.
-- `transport_channel.csv` — Transport Path Numbers (TPNs) and priorities between endpoints and ports.
+- `transport_channel.csv` — Optional explicit Transport Path Numbers (TPNs) and priorities between endpoints and ports.
 - `traffic.csv` — Application-level tasks (ops, size, priority, dependency, timing).
 - `fault.csv` — Optional, only if faults are enabled (see `UB_FAULT_ENABLE`).
 
@@ -63,8 +63,8 @@ The entry program (`scratch/ub-quick-example`, or `src/unified-bus/examples/ub-q
 2) `node.csv` → `UbUtils::CreateNode`
 3) `topology.csv` → `UbUtils::CreateTopo`
 4) `routing_table.csv` → `UbUtils::AddRoutingTable`
-5) `transport_channel.csv` → `UbUtils::CreateTp`
-6) `traffic.csv` → `UbUtils::LoadTrafficConfig` → schedule tasks
+5) optional `transport_channel.csv` → `UbUtils::CreateTp`
+6) `traffic.csv` → reserve missing RTP connection records on every process → schedule tasks
 
 ---
 
@@ -127,20 +127,22 @@ Common UB attributes you’ll see (all names below come from `GetTypeId().AddAtt
   - `ns3::UbQueueManager::DynamicPfcResumeGapBytes`
   - `ns3::UbQueueManager::PaperDynamicPfcBeta`
 - Transport behavior (`ns3::UbTransportChannel`):
-  - `UsePacketSpray` (bool)
-  - `UseShortestPaths` (bool)
-  - `EnableRetrans`, `InitialRTO`, `MaxRetransAttempts`, `RetransExponentFactor`, `DefaultMaxWqeSegNum`, `DefaultMaxInflightPacketSize`
-  - `RetransmissionMode`, `TpOooThreshold`, `SelectiveAckBitmapBits`, `EnableFastSelectiveRetrans`, `EnableSelectiveMarkPsn`
+  - `RoutingType` (`PER_FLOW_ALL_PATHS`, `PER_PACKET_ALL_PATHS`, `PER_FLOW_SHORTEST_PATHS`, `PER_PACKET_SHORTEST_PATHS`)
+  - `EnableRetrans`, `BaseRTO`, `MaxRetransAttempts`, `RetransExponentFactor`, `DefaultMaxWqeSegNum`, `DefaultMaxInflightPacketSize`
+  - `RetransmissionMode`, `TpOooThreshold`, `SelectiveAckBitmapBits`, `EnableFastRetrans`, `EnableSelectiveMarkPsn`
+- Routing selector (`ns3::UbRoutingProcess`):
+  - `MultipathSelector` (`HASH64`, `CRC32`, `TOEPLITZ`, `ROUND_ROBIN`, `ADAPTIVE`, `INGRESS_PORT_STRIPE`)
 - Allocator:
   - `ns3::UbSwitchAllocator::AllocationTime` (Time)
 - App & API LD/ST knobs:
-  - `ns3::UbApp::EnableMultiPath` (bool)
+  - `ns3::UbApp::EnableMultiPath` (bool), `ns3::UbApp::RoutingType`
+  - `ns3::UbLdstApi::RoutingType`
   - `ns3::UbApiLdst::*` (ThreadNum, LoadResponseSize, StoreRequestSize, QueuePriority)
-  - `ns3::UbApiLdstThread::*` (StoreOutstanding, LoadOutstanding, LoadRequestSize, QueuePriority, UsePacketSpray, UseShortestPaths)
+  - `ns3::UbApiLdstThread::*` (StoreOutstanding, LoadOutstanding, LoadRequestSize, QueuePriority)
 
 ### Upgrading copied cases
 
-If you copied an older `scratch/` case into your own workspace, check `network_attribute.txt` before running it against a newer build. Known legacy keys are rejected before ns-3 `ConfigStore` loads the file so the error points at the migration instead of a generic attribute failure.
+If you copied an older `scratch/` case into your own workspace, check `network_attribute.txt` before running it against a newer build. Recognized transport aliases are translated to current names. Unsupported legacy keys are rejected before ns-3 `ConfigStore` loads the file so the error points at the migration instead of a generic attribute failure.
 
 | Old key or behavior | Current form |
 |---------------------|--------------|
@@ -148,10 +150,20 @@ If you copied an older `scratch/` case into your own workspace, check `network_a
 | `default ns3::UbSwitch::EnableCBFC "true"` | `default ns3::UbSwitch::FlowControl "CBFC"` |
 | `default ns3::UbSwitch::EnablePFC "true"` | Choose `default ns3::UbSwitch::FlowControl "PFC_FIXED"` or `"PFC_DYNAMIC"` |
 | `default ns3::UbApiThread::*` | `default ns3::UbLdstThread::*` |
+| `UsePacketSpray` + `UseShortestPaths` on `UbApp`, `UbTransportChannel`, or `UbLdstApi` | One `RoutingType` line on the same TypeId |
+| `default ns3::UbRoutingProcess::RoutingAlgorithm "HASH"` | `default ns3::UbRoutingProcess::MultipathSelector "HASH64"` |
+| `default ns3::UbRoutingProcess::RoutingAlgorithm "ADAPTIVE"` | `default ns3::UbRoutingProcess::MultipathSelector "ADAPTIVE"` with a `PER_PACKET_*` routing type |
+| `default ns3::UbTransportChannel::InitialRTO "..."` | `default ns3::UbTransportChannel::BaseRTO "..."` |
+| `default ns3::UbTransportChannel::EnableFastSelectiveRetrans "..."` | `default ns3::UbTransportChannel::EnableFastRetrans "..."` |
 | Depend on old `CbfcRetCellGrainControlPacket` default | Set `default ns3::UbPort::CbfcRetCellGrainControlPacket "1"` explicitly to reproduce older behavior; current repo default is `32` |
 | Need `QueueTrace_*` files | Set `global UB_QUEUE_TRACE_ENABLE "true"` |
 | Need `PfcTrace_*` or `CbfcTrace_*` files | Set `global UB_FLOW_CONTROL_TRACE_ENABLE "true"` |
 | Need `Dcqcn*` or `Caqm*` algorithm traces | Set `global UB_CONGESTION_CONTROL_TRACE_ENABLE "true"` |
+
+Legacy routing fields are accepted only while loading `network_attribute.txt`. The loader emits one
+warning containing complete replacement lines, and this compatibility window may be removed in a
+future release. Model objects and programmatic APIs expose only `RoutingType` and
+`MultipathSelector`.
 
 Runs with `default ns3::UbTransportChannel::EnableRetrans "false"` now stop early when a packet is dropped. Fix the route/buffer/flow-control cause, or enable retransmission if the experiment intentionally allows loss recovery.
 
@@ -167,14 +179,14 @@ default ns3::UbTransportChannel::RetransmissionMode "SELECTIVE"
 `SelectiveAckBitmapBits` defaults to `0`, which means AUTO. AUTO chooses the
 smallest SAETPH-supported feedback width covering `min(TpOooThreshold, 1024)`.
 `TpOooThreshold` is the endpoint out-of-order receive evidence capacity in PSNs;
-it is not a private receive-buffer implementation name. `EnableFastSelectiveRetrans`
+it is not a private receive-buffer implementation name. `EnableFastRetrans`
 defaults to `false` and should generally stay disabled when packet-spray or other
 multipath routing may reorder packets. For a controlled non-reordering experiment,
 advanced settings may be written explicitly:
 
 ```text
 default ns3::UbTransportChannel::SelectiveAckBitmapBits "64"
-default ns3::UbTransportChannel::EnableFastSelectiveRetrans "true"
+default ns3::UbTransportChannel::EnableFastRetrans "true"
 default ns3::UbTransportChannel::EnableSelectiveMarkPsn "true"
 ```
 
@@ -217,27 +229,30 @@ Legal values and discovery:
 
 Schema:
 ```
-nodeId,nodeType,portNum[,forwardDelay]
+nodeId,nodeType,portNum[,forwardDelay[,allocationDelay[,systemId]]]
 ```
 - `nodeId` — integer or range `a..b`, inclusive.
 - `nodeType` — `DEVICE` (end host) or `SWITCH`.
 - `portNum` — number of ports on the node.
-- `forwardDelay` — optional per-node forwarding delay (Time). If absent, defaults from attributes apply.
+- `forwardDelay` — optional per-node in-port processing delay (Time). It maps to `InPortProcessingDelay`.
+- `allocationDelay` — optional per-node allocator arbitration delay (Time). It maps to `AllocationTime`.
+- `systemId` — optional ns-3 MPI system ID. If absent, it defaults to `0`.
 
 Examples:
 ```
-0..1,DEVICE,1,1ns
-2..3,SWITCH,4,1ns
+0..1,DEVICE,1,,1ns
+2..3,SWITCH,4,10ns,1ns
 ```
 
 Notes on `forwardDelay`:
-- **Meaning**: the optional fourth column `forwardDelay` sets the **arbitration latency** (scheduling delay) for the node's internal switch allocator.
-- **Code mapping**: when present, `UbUtils::CreateNode()` applies this value by calling `allocator->SetAttribute("AllocationTime", StringValue(forwardDelay));`.
-- **Mechanism**: In `UbRoundRobinAllocator::TriggerAllocator`, this time is used to schedule the `AllocateNextPacket` event (`Simulator::Schedule(m_allocationTime, ...)`). This simulates the hardware processing time required for the arbiter to select which ingress queue's packet gets to transmit to an egress port.
+- **Meaning**: `forwardDelay` sets fixed non-blocking in-port processing latency after route/output are known and before the packet becomes visible in VOQ to the allocator.
+- **Code mapping**: when present, `UbUtils::CreateNode()` applies this value as `UbSwitch::InPortProcessingDelay`.
+- **Mechanism**: this delay is non-serial. Bytes are visible to existing ingress/outPort/switch-total buffer queries during processing, but the allocator cannot schedule the packet until processing completes.
 - **Scope**: Applies to both `SWITCH` nodes and `DEVICE` nodes.
 - **Format**: use ns-3 Time literals (e.g. `10ns`, `1us`, `1ms`).
-- **Example**: `0,SWITCH,4,10ns` sets the switch allocator `AllocationTime` to `10ns` for node `0`.
-- **Inspecting at runtime**: run your case with `--PrintAttributes=ns3::UbSwitchAllocator` to see the attribute and its current/default value.
+- **Example**: `0,SWITCH,4,10ns,` sets `InPortProcessingDelay` to `10ns` for node `0`.
+- **Allocator delay**: use `allocationDelay`, e.g. `0,SWITCH,4,,10ns` sets allocator `AllocationTime` to `10ns`.
+- **Inspecting at runtime**: run your case with `--ClassName=ns3::UbSwitch --AttributeName=InPortProcessingDelay` or `--ClassName=ns3::UbSwitchAllocator --AttributeName=AllocationTime`.
 
 ---
 
@@ -286,7 +301,7 @@ Compressed range rows:
 - Overlapping range rows are accepted only when they describe the same outport/metric set. Conflicting overlaps fail during `routing_table.csv` loading.
 - For large generated cases, combine compressed routing rows with automatic TP generation when possible. A fully materialized `transport_channel.csv` can still dominate startup memory and time.
 
-UB stores outports per destination grouped by metric. The group with the smallest metric is installed as “shortest”; other groups are installed as “other”. If `UseShortestPaths` is `true` (see below), selection is made from the shortest group; otherwise selection may consider all outports defined for that destination.
+UB stores outports per destination grouped by metric. The group with the smallest metric is installed as “shortest”; other groups are installed as “other”. A `PER_*_SHORTEST_PATHS` routing type selects only from the shortest group; a `PER_*_ALL_PATHS` routing type may consider all outports defined for that destination.
 
 Note — destination-port aware lookup with fallback:
 - The switch `ns3::UbRoutingProcess::GetOutPort(...)` first tries to route by the exact pair `(dstNodeId, dstPortId)` encoded in the packet headers.
@@ -323,21 +338,32 @@ Constraints and tips:
 
 ### Automatic TP Generation (Optional)
 
-If `transport_channel.csv` is missing or empty, or if no matching TP is found for a specific traffic task, the simulator (specifically `UbApp`) will attempt to automatically generate TP configurations on demand.
+If `transport_channel.csv` is missing or has no matching channel for a traffic row, the config-driven runner automatically reserves RTP connection records from the routing table on every process while loading `traffic.csv`. This happens before any task is scheduled, so MPI and hybrid receiver ranks have the same reservation state before the first packet arrives.
 
 - **Mechanism**:
   1. It queries the routing table (`UbRoutingProcess`) to find all reachable paths from source to destination.
-  2. It respects the `UseShortestPaths` attribute (default `true`) to filter for shortest paths or allow non-shortest ones.
-  3. If `EnableMultiPath` (in `UbApp`) is `true`, it creates TPs for **all** discovered paths.
-  4. If `EnableMultiPath` is `false`, it **randomly selects one** path to create a single TP.
-  5. TPNs are automatically assigned.
+  2. It respects the `UbApp::RoutingType` path scope (default `PER_FLOW_SHORTEST_PATHS`) to filter for shortest paths or allow non-shortest ones.
+  3. It assigns TPN pairs and stores the same connection records on both endpoint views without creating either TP object.
+  4. When the source task starts, `EnableMultiPath=true` materializes all selected sender endpoints; otherwise the source randomly selects and materializes one sender endpoint.
+  5. The receiver validates the incoming channel key against its reservation and materializes only its local endpoint on the first valid packet.
 
 - **Usage**:
   This is useful for simple scenarios where manual TP configuration is tedious. You can simply omit this file. However, for complex scenarios requiring specific TP mappings, fixed path selection, or specific multi-path policies, providing this file is recommended.
 
 - **Performance Note**:
   - **CSV Configuration (Pre-instantiated)**: The simulator reads `transport_channel.csv` at startup and **immediately creates all TP objects** defined in it. In large-scale topologies (e.g., thousands of nodes), this file can be huge, and creating millions of TP objects upfront consumes significant memory and initialization time, even for TPs that may never carry traffic.
-  - **Automatic Generation (On-demand)**: TPs are created dynamically only when a traffic task actually requires them. This avoids the overhead of parsing a massive CSV and instantiating unused TPs, making it **highly recommended** for large-scale simulations to reduce initialization time and memory usage.
+  - **Automatic Reservation + Local Materialization**: Connection records are reserved before traffic, but TP objects are created locally only when the sender uses a path or the receiver accepts its first valid packet. This avoids a massive CSV and avoids instantiating unused TP objects, making it **highly recommended** for large-scale simulations.
+
+### TransportMode and CTP
+
+`ns3::UbApp::TransportMode` defaults to `RTP`. In `RTP` mode, `transport_channel.csv`
+uses existing TP Channel / TPG behavior.
+
+In `CTP` mode, CTP traffic does not use RTP TP mappings from `transport_channel.csv`.
+The file may still be present and loaded during setup, but CTP does not create RTP TP
+channels and does not use TPN, PSN, TPACK, TPNAK, TPSACK, or end-to-end RTP retransmission.
+Optional `traffic.csv` fields `srcEntityId` and `dstEntityId` select CTP entities; missing
+fields default to `0`.
 
 ### TPN in the code (what it does and how to set it)
 
@@ -348,7 +374,7 @@ If `transport_channel.csv` is missing or empty, or if no matching TP is found fo
 TP channel and TP group in code:
 - A TP channel is the UB transport-layer shared path that the transaction layer uses. In code it is `ns3::UbTransportChannel`, created by `UbController::CreateTp(...)` and stored in a per-port TPN map (`m_numToTp`; see `UbController::GetTp/GetTpnMap`). Endpoints are fixed at creation: source/destination node IDs and ports, priority, and the `(srcTpn,dstTpn)` pair are passed to `UbTransportChannel::SetUbTransport(...)` inside `CreateTp`.
 - A jetty (function layer context) can be bound to multiple TP channels to form a TP group for multipath. In code (`UbApp::SendTraffic`), after `UbFunction::CreateJetty(...)`, the app collects candidate TPNs from `TpConnectionManager` and calls `UbFunction::jettyBindTp(src,dest,jettyNum,multiPath,tpns)`. When `multiPath` is true, `jettyBindTp` looks up each TP by TPN (`UbController::GetTp`) and calls `UbTransportChannel::CreateTpJettyRelationship(...)` for each; the vector is recorded in `UbFunction::m_jettyTpGroup[jettyNum]`.
-- Control-plane establishment of TPs (negotiation/bring-up) is not modeled: the simulator instantiates TP channels directly from `transport_channel.csv` in `UbUtils::CreateTp(...)`. For administrative procedures, refer to the [UnifiedBus (UB) Base Specification](https://www.unifiedbus.com/zh); they are currently outside this simulator’s scope.
+- Control-plane negotiation/bring-up is not modeled. Explicit rows are loaded by `UbUtils::CreateTp(...)`; otherwise the config-driven traffic loader reserves connection records before tasks start and each endpoint materializes locally when needed. For administrative procedures, refer to the [UnifiedBus (UB) Base Specification](https://www.unifiedbus.com/zh); they are currently outside this simulator’s scope.
 
 ---
 
@@ -384,6 +410,7 @@ Examples:
 
 Current URMA read/write constraints in `traffic.csv`:
 - `URMA_WRITE` and `URMA_READ` do not require extra CSV columns for remote address, token, local address, or read offset in this iteration.
+- In `CTP` mode, `URMA_WRITE` and `URMA_READ` may use optional trailing `srcEntityId,dstEntityId` columns. Missing values default to entity `0`.
 - `URMA_WRITE` and `URMA_READ` complete on transaction responses (`TAACK` / `READ_RESPONSE`), not when the request's TP ACK arrives.
 - Only the ROI success path is modeled for URMA read/write at the transaction layer right now; other service modes are rejected explicitly.
 - `URMA_READ` is sliced at the TA layer. Each read request slice sends exactly one TP request packet with zero wire payload; the logical slice length is carried in `MAETAH.Length`.
@@ -409,7 +436,7 @@ Only required if `UB_FAULT_ENABLE` is `true` in `network_attribute.txt`. The exa
 - Node/port/link creation flows via `UbUtils::CreateNode` and `UbUtils::CreateTopo`, assembling `UbLink` between `UbPort`s. `topology.csv` bandwidth maps to `UbPort::UbDataRate`, delay to `UbLink::Delay`.
 - Routing installs per-node forwarding tables from `routing_table.csv`.
 - Transport channels (`transport_channel.csv`) build TPN mappings used by `UbApp` through `TpConnectionManager`.
-- Tasks (`traffic.csv`) are scheduled by `UbTrafficGen`, and `UbApp` sends over the selected TPs, honoring `UsePacketSpray` vs. `EnableMultiPath`.
+- Tasks (`traffic.csv`) are scheduled by `UbTrafficGen`, and `UbApp` sends over the selected TPs, honoring `RoutingType` and `EnableMultiPath`.
 
 For advanced users, search in `src/unified-bus/model/`:
 - `GetTypeId\(` and `AddAttribute\(` — discover attribute names/types and defaults.
@@ -444,9 +471,9 @@ network_attribute.txt
   global UB_PYTHON_SCRIPT_PATH "scratch/ns-3-ub-tools/trace_analysis/parse_trace.py"
 
 node.csv
-  nodeId,nodeType,portNum,forwardDelay
-  0..1,DEVICE,1,1ns
-  2..3,SWITCH,4,1ns
+  nodeId,nodeType,portNum,forwardDelay,allocationDelay
+  0..1,DEVICE,1,,1ns
+  2..3,SWITCH,4,10ns,1ns
 
 topology.csv
   nodeId1,portId1,nodeId2,portId2,bandwidth,delay
@@ -480,10 +507,11 @@ The shipped case `scratch/2nodes_single-tp` keeps `UB_QUEUE_TRACE_ENABLE`, `UB_F
 
 ## Network modeling notes (from code)
 
-- Link rate and packet size determine transmission time; `ns3::UbLink::Delay` adds propagation delay; switch arbitration is driven by `ns3::UbSwitchAllocator::AllocationTime`.
+- Link rate and packet size determine transmission time; `ns3::UbLink::Delay` adds propagation delay; `forwardDelay` maps to `ns3::UbSwitch::InPortProcessingDelay`, while `allocationDelay` drives `ns3::UbSwitchAllocator::AllocationTime`.
 - IFG: `ns3::UbPort::UbInterframeGap` (set to `0ns` to disable spacing).
 - Queue/buffer: `ns3::UbQueueManager::BufferSize` bounds ingress/egress accounting used by the switch.
-- Path choice: `UseShortestPaths` influences which outport sets are considered; `UsePacketSpray` toggles per-packet load-balance usage in headers and routing.
+- Path choice: `RoutingType` independently encodes per-flow/per-packet selection and shortest/all-path scope in the UB RT bits. `MultipathSelector` chooses the algorithm within that scope.
+- Hash selectors process one complete 17-byte key: source address, destination address, source port or `Lb`, destination port, priority, and node salt. Per-packet modes vary the existing source-port/`Lb` field; no extra entropy field is added.
 - Congestion control: `UB_CC_ALGO` and `UB_CC_ENABLED` pick and enable the algorithm. `CAQM` and RTP-only `DCQCN` are implemented.
 
 ---
@@ -498,16 +526,15 @@ Place these in `network_attribute.txt` as needed (values shown are examples take
   - `default ns3::UbPort::UbInterframeGap "0ns"`
 - Switch allocator
   - `default ns3::UbSwitchAllocator::AllocationTime "10ns"`
-- Transport toggles
-  - `default ns3::UbTransportChannel::UsePacketSpray "false"`
-  - `default ns3::UbTransportChannel::UseShortestPaths "true"`
-  - Retransmission knobs (if used): `EnableRetrans`, `InitialRTO`, `MaxRetransAttempts`, ...
+- Routing
+  - `default ns3::UbTransportChannel::RoutingType "PER_FLOW_SHORTEST_PATHS"`
+  - `default ns3::UbRoutingProcess::MultipathSelector "HASH64"`
+  - Retransmission knobs (if used): `EnableRetrans`, `BaseRTO`, `MaxRetransAttempts`, ...
 - Application multipath
   - `default ns3::UbApp::EnableMultiPath "false"`
 - LD/ST API threads
   - `default ns3::UbApiLdst::ThreadNum "10"`
-  - `default ns3::UbApiLdstThread::UsePacketSpray "true"`
-  - `default ns3::UbApiLdstThread::UseShortestPaths "true"`
+  - `default ns3::UbLdstApi::RoutingType "PER_PACKET_SHORTEST_PATHS"`
 - Flow control and buffers (as needed)
   - `default ns3::UbSwitch::FlowControl "PFC_FIXED"`
   - `default ns3::UbPort::PfcUpThld "1677721"`

@@ -16,16 +16,18 @@ TypeId UbLdstApi::GetTypeId(void)
     static TypeId tid = TypeId("ns3::UbLdstApi")
                             .SetParent<Object>()
                             .SetGroupName("UnifiedBus")
-                            .AddAttribute("UsePacketSpray",
-                                          "Enable per-packet load balancing across equal-cost paths.",
-                                          BooleanValue(false),
-                                          MakeBooleanAccessor(&UbLdstApi::m_usePacketSpray),
-                                          MakeBooleanChecker())
-                            .AddAttribute("UseShortestPaths",
-                                          "Sets a packet header flag that instructs switches to restrict forwarding to shortest paths (true) or allow non-shortest paths (false).",
-                                          BooleanValue(true),
-                                          MakeBooleanAccessor(&UbLdstApi::m_useShortestPaths),
-                                          MakeBooleanChecker())
+                            .AddAttribute("RoutingType",
+                                          "UB routing type used by LDST packets.",
+                                          EnumValue(RoutingType::PER_FLOW_SHORTEST_PATHS),
+                                          MakeEnumAccessor<RoutingType>(&UbLdstApi::m_routingType),
+                                          MakeEnumChecker(RoutingType::PER_FLOW_ALL_PATHS,
+                                                          "PER_FLOW_ALL_PATHS",
+                                                          RoutingType::PER_PACKET_ALL_PATHS,
+                                                          "PER_PACKET_ALL_PATHS",
+                                                          RoutingType::PER_FLOW_SHORTEST_PATHS,
+                                                          "PER_FLOW_SHORTEST_PATHS",
+                                                          RoutingType::PER_PACKET_SHORTEST_PATHS,
+                                                          "PER_PACKET_SHORTEST_PATHS"))
                             .AddTraceSource("LdstRecvNotify",
                                             "Fires on Ldst data or ACK reception (provides info and trace tags).",
                                             MakeTraceSourceAccessor(&UbLdstApi::m_ldstRecvNotify),
@@ -52,6 +54,28 @@ UbLdstApi::~UbLdstApi()
 void UbLdstApi::SetNodeId(uint32_t nodeId)
 {
     m_nodeId = nodeId;
+    ValidateRoutingConfiguration();
+}
+
+void
+UbLdstApi::ValidateRoutingType(RoutingType routingType) const
+{
+    if (m_nodeId >= NodeList::GetNNodes())
+    {
+        return;
+    }
+    Ptr<UbSwitch> sw = NodeList::GetNode(m_nodeId)->GetObject<UbSwitch>();
+    if (sw == nullptr || sw->GetRoutingProcess() == nullptr)
+    {
+        return;
+    }
+    sw->GetRoutingProcess()->ValidateRoutingType(routingType, "LDST routing policy");
+}
+
+void
+UbLdstApi::ValidateRoutingConfiguration() const
+{
+    ValidateRoutingType(m_routingType);
 }
 
 void UbLdstApi::LdstProcess(Ptr<UbLdstTaskSegment> taskSegment)
@@ -70,8 +94,7 @@ void UbLdstApi::SendPacket(Ptr<UbLdstTaskSegment> taskSegment, Ptr<Packet> packe
     rtKey.sport = m_lbHashSalt;
     rtKey.dport = 0;
     rtKey.priority = taskSegment->GetPriority();
-    rtKey.useShortestPath = m_useShortestPaths;
-    rtKey.usePacketSpray = m_usePacketSpray;
+    rtKey.routingType = m_routingType;
 
     auto node = NodeList::GetNode(m_nodeId);
     auto sw = node->GetObject<UbSwitch>();
@@ -105,7 +128,7 @@ Ptr<Packet> UbLdstApi::GenDataPacket(Ptr<UbLdstTaskSegment> taskSegment)
         payloadSize = taskSegment->GetPacketSize();
     }
 
-    if (m_usePacketSpray) {
+    if (RoutingTypeIsPerPacket(m_routingType)) {
         if (m_lbHashSalt == MAX_LB) {
             m_lbHashSalt = MIN_LB;
         } else {
@@ -130,7 +153,7 @@ Ptr<Packet> UbLdstApi::GenDataPacket(Ptr<UbLdstTaskSegment> taskSegment)
 
     // add dl header
     UbDataLink::GenPacketHeader(packet, false, false, taskSegment->GetPriority(), taskSegment->GetPriority(),
-                                m_usePacketSpray, m_useShortestPaths, UbDatalinkHeaderConfig::PACKET_UB_MEM);
+                                m_routingType, UbDatalinkHeaderConfig::PACKET_UB_MEM);
     UbFlowTag flowTag(taskSegment->GetTaskId(), taskSegment->GetSize());
     packet->AddPacketTag(flowTag);
     NS_LOG_DEBUG("[UbLdstApi GenDataPacket] packetUid: " << packet->GetUid() << " payload size:" << payloadSize);
@@ -182,7 +205,7 @@ void UbLdstApi::RecvDataPacket(Ptr<Packet> packet)
     ackp->AddHeader(caTaHeader);
     ackp->AddHeader(cna16NetworkHeader);
     UbDataLink::GenPacketHeader(ackp, false, true, linkPacketHeader.GetCreditTargetVL(), linkPacketHeader.GetPacketVL(),
-                                linkPacketHeader.GetLoadBalanceMode(), linkPacketHeader.GetRoutingPolicy(),
+                                linkPacketHeader.GetRoutingType(),
                                 UbDatalinkHeaderConfig::PACKET_UB_MEM);
 
     RoutingKey rtKey;
@@ -191,8 +214,7 @@ void UbLdstApi::RecvDataPacket(Ptr<Packet> packet)
     rtKey.sport = cna16NetworkHeader.GetLb();
     rtKey.dport = 0;
     rtKey.priority = linkPacketHeader.GetPacketVL();
-    rtKey.useShortestPath = linkPacketHeader.GetRoutingPolicy();
-    rtKey.usePacketSpray = linkPacketHeader.GetLoadBalanceMode();
+    rtKey.routingType = linkPacketHeader.GetRoutingType();
     
     auto node = NodeList::GetNode(m_nodeId);
     auto sw = node->GetObject<UbSwitch>();
@@ -250,14 +272,10 @@ void UbLdstApi::RecvResponse(Ptr<Packet> packet)
     Simulator::ScheduleNow(&UbLdstInstance::OnRecvAck, ldstInst, taskSegmentId);
 }
 
-void UbLdstApi::SetUsePacketSpray(bool usePacketSpray)
+void UbLdstApi::SetRoutingType(RoutingType routingType)
 {
-    m_usePacketSpray = usePacketSpray;
-}
-
-void UbLdstApi::SetUseShortestPaths(bool useShortestPaths)
-{
-    m_useShortestPaths = useShortestPaths;
+    ValidateRoutingType(routingType);
+    m_routingType = routingType;
 }
 
 void UbLdstApi::LdstRecvNotify(uint32_t packetUid, uint32_t src, uint32_t dst,

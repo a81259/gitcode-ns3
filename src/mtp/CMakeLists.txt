@@ -1,12 +1,15 @@
 set(example_as_test_suite)
 if(${ENABLE_EXAMPLES})
+  list(APPEND example_as_test_suite
+       test/mtp-runtime-test-suite.cc
+  )
   if(${ENABLE_MPI})
-    set(example_as_test_suite
-        test/hybrid-test-suite.cc
+    list(APPEND example_as_test_suite
+         test/hybrid-test-suite.cc
     )
   else()
-    set(example_as_test_suite
-        test/mtp-test-suite.cc
+    list(APPEND example_as_test_suite
+         test/mtp-test-suite.cc
     )
   endif()
 endif()
@@ -27,7 +30,5 @@ build_lib(
     model/mtp-interface.h
     model/multithreaded-simulator-impl.h
   LIBRARIES_TO_LINK ${mtp_libs}
-  TEST_SOURCES
-    test/mtp-partition-test.cc
-    ${example_as_test_suite}
+  TEST_SOURCES ${example_as_test_suite}
 )
