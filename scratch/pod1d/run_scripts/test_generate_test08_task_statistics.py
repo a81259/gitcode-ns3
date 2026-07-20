@@ -86,6 +86,29 @@ class GenerateTest08TaskStatisticsTest(unittest.TestCase):
             with self.assertRaisesRegex(FileNotFoundError, "TaskTrace_node_\\*.tr"):
                 generator.generate_case_statistics(case_dir)
 
+    def test_accepts_automatic_runner_arguments_for_one_case(self):
+        generator = load_generator_module()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            case_dir = pathlib.Path(temp_dir) / "case01"
+            runlog = case_dir / "runlog"
+            runlog.mkdir(parents=True)
+            write_traffic(case_dir)
+            (runlog / "TaskTrace_node_0.tr").write_text(
+                "[1.000000us] WQE Starts, jettyNum: 0 taskId: 0\n"
+                "[2.000000us] WQE Completes, jettyNum: 0 taskId: 0\n"
+                "[1.000000us] WQE Starts, jettyNum: 0 taskId: 1\n"
+                "[2.000000us] WQE Completes, jettyNum: 0 taskId: 1\n",
+                encoding="utf-8",
+            )
+
+            try:
+                exit_code = generator.main([str(case_dir), "false"])
+            except SystemExit as error:
+                self.fail(f"runner-style arguments were rejected: {error.code}")
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((case_dir / "output" / "task_statistics.csv").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

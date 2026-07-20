@@ -77,7 +77,7 @@ def read_traffic(traffic_path: Path) -> tuple[list[str], list[dict[str, str]]]:
         return list(reader.fieldnames), list(reader)
 
 
-def generate_case_statistics(case_dir: Path) -> CaseSummary:
+def generate_case_statistics(case_dir: Path, output_dir_name: str = "output") -> CaseSummary:
     traffic_path = case_dir / "traffic.csv"
     runlog_dir = case_dir / "runlog"
     if not traffic_path.is_file():
@@ -110,7 +110,7 @@ def generate_case_statistics(case_dir: Path) -> CaseSummary:
         row["taskThroughput(Gbps)"] = str(throughput_gbps)
         completed_tasks += 1
 
-    output_dir = case_dir / "output"
+    output_dir = case_dir / output_dir_name
     output_dir.mkdir(exist_ok=True)
     output_path = output_dir / "task_statistics.csv"
     with output_path.open("w", newline="", encoding="utf-8") as output_file:
@@ -135,12 +135,39 @@ def main(argv: list[str] | None = None) -> int:
         description="Generate task_statistics.csv for every test08 case from completed TaskTrace files."
     )
     parser.add_argument(
+        "case_dir",
+        nargs="?",
+        type=Path,
+        help="one completed case directory, as supplied by the ns-3 trace parser",
+    )
+    parser.add_argument(
+        "is_test",
+        nargs="?",
+        choices=("true", "false"),
+        default="false",
+        help="write under test/ when true; default false writes under output/",
+    )
+    parser.add_argument(
         "--test-root",
         type=Path,
         default=default_test_root(),
         help="test08 directory containing case* subdirectories",
     )
     args = parser.parse_args(argv)
+
+    if args.case_dir is not None:
+        try:
+            output_dir_name = "test" if args.is_test == "true" else "output"
+            summary = generate_case_statistics(args.case_dir, output_dir_name)
+            print(
+                f"[{args.case_dir.name}] generated {summary.output_path} "
+                f"({summary.completed_tasks}/{summary.total_traffic_tasks} tasks completed)"
+            )
+            return 0
+        except (OSError, ValueError, csv.Error) as error:
+            print(f"[{args.case_dir.name}] ERROR: {error}", file=sys.stderr)
+            return 1
+
     case_dirs = sorted(path for path in args.test_root.glob("case*") if path.is_dir())
     if not case_dirs:
         parser.error(f"no case* directories found under {args.test_root}")

@@ -61,4 +61,4 @@ global UB_CONGESTION_CONTROL_TRACE_ENABLE "false"
 global UB_RECORD_PKT_TRACE "false"
 
 global UB_PARSE_TRACE_ENABLE "true"
-global UB_PYTHON_SCRIPT_PATH "scratch/ns-3-ub-tools/trace_analysis/parse_trace.py"
+global UB_PYTHON_SCRIPT_PATH "scratch/pod1d/run_scripts/generate_test08_task_statistics.py"
