@@ -1,5 +1,5 @@
-测试,标准,,,,故障1：单链路降速,,,,故障2：单链路 down,,,,故障3：分布式18链路 down,,,,故障4：集中式18链路 down,,,
-测试,平均(us),平均增加(%),最大(us),最大增加(%),平均(us),平均增加(%),最大(us),最大增加(%),平均(us),平均增加(%),最大(us),最大增加(%),平均(us),平均增加(%),最大(us),最大增加(%),平均(us),平均增加(%),最大(us),最大增加(%)
+test,standard,,,,single_lane_down,,,,single_port_down,,,,distributed_18_port_down,,,,concentrated_18_port_down,,,
+test,mean(us),mean_increase(%),max(us),max_increase(%),mean(us),mean_increase(%),max(us),max_increase(%),mean(us),mean_increase(%),max(us),max_increase(%),mean(us),mean_increase(%),max(us),max_increase(%),mean(us),mean_increase(%),max(us),max_increase(%)
 test01_tp_all_gather,79.194680,0.00,79.209935,0.00,,,,,,,,,,,,,,,,
 test02_cp_all_to_all,301.648622,0.00,310.993163,0.00,,,,,,,,,,,,,,,,
 test03_tp_reduce_scatter,360.799144,0.00,360.814899,0.00,,,,,,,,,,,,,,,,
