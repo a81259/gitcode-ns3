@@ -36,3 +36,13 @@ scale110,110,test10_dp_reduce_scatter,case02_故障1topo_单链路lane,6840,15.9
 scale110,110,test10_dp_reduce_scatter,case03_故障2topo_单链路laport,6840,15.450771,40.287999
 scale110,110,test10_dp_reduce_scatter,case04_故障3topo_分布式多链路port,6840,15.495495,40.192642
 scale110,110,test10_dp_reduce_scatter,case05_故障4topo_分集中式多链路port,6840,16.532700,78.531465
+scale10,10,test08_dp_reduce_scatter,case01_标准topo,6840,171.745231,427.622813
+scale10,10,test08_dp_reduce_scatter,case02_故障1topo_单链路lane,6840,185.990472,932.174619
+scale10,10,test08_dp_reduce_scatter,case03_故障2topo_单链路laport,6840,173.789114,489.717944
+scale10,10,test08_dp_reduce_scatter,case04_故障3topo_分布式多链路port,6840,175.558311,486.456346
+scale10,10,test08_dp_reduce_scatter,case05_故障4topo_分集中式多链路port,6840,189.258545,983.367475
+scale10,10,test09_dp_all_gather,case01_标准topo,6840,146.046315,363.243012
+scale10,10,test09_dp_all_gather,case02_故障1topo_单链路lane,6840,158.206792,757.116281
+scale10,10,test09_dp_all_gather,case03_故障2topo_单链路laport,6840,148.419391,412.021977
+scale10,10,test09_dp_all_gather,case04_故障3topo_分布式多链路port,6840,150.014510,416.117032
+scale10,10,test09_dp_all_gather,case05_故障4topo_分集中式多链路port,6840,162.713202,799.305422
