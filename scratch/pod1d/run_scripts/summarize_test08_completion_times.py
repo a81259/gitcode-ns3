@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize average and maximum task completion times for test08 cases."""
+"""Summarize task FCT and operator completion time for test08 cases."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from statistics import fmean
 import sys
 
 
+START_COLUMN = "taskStartTime(us)"
 COMPLETION_COLUMN = "taskCompletesTime(us)"
 CASES = (
     "case01_标准topo",
@@ -24,8 +25,9 @@ OUTPUT_COLUMNS = (
     "case",
     "total_tasks",
     "completed_tasks",
-    "average_completion_time_us",
-    "max_completion_time_us",
+    "average_fct_us",
+    "max_fct_us",
+    "operator_completion_time_us",
     "statistics_file",
 )
 
@@ -35,8 +37,9 @@ class CaseSummary:
     case: str
     total_tasks: int
     completed_tasks: int
-    average_completion_time_us: float
-    max_completion_time_us: float
+    average_fct_us: float
+    max_fct_us: float
+    operator_completion_time_us: float
     statistics_file: Path
 
 
@@ -45,7 +48,30 @@ def default_test_root() -> Path:
 
 
 def default_output_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "result" / "test08_completion_time_summary.csv"
+    return Path(__file__).resolve().parents[1] / "result" / "test08_fct_summary.csv"
+
+
+def parse_time(
+    raw_value: str | None,
+    *,
+    column: str,
+    statistics_file: Path,
+    line_number: int,
+) -> float | None:
+    value_text = (raw_value or "").strip()
+    if not value_text:
+        return None
+    try:
+        value = float(value_text)
+    except ValueError as error:
+        raise ValueError(
+            f"{statistics_file}:{line_number} has invalid {column}: {value_text!r}"
+        ) from error
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(
+            f"{statistics_file}:{line_number} has invalid {column}: {value_text!r}"
+        )
+    return value
 
 
 def read_case_summary(case_dir: Path) -> CaseSummary:
@@ -57,43 +83,63 @@ def read_case_summary(case_dir: Path) -> CaseSummary:
         reader = csv.DictReader(stream)
         if reader.fieldnames is None:
             raise ValueError(f"CSV has no header: {statistics_file}")
-        if COMPLETION_COLUMN not in reader.fieldnames:
+        missing_columns = [
+            column
+            for column in (START_COLUMN, COMPLETION_COLUMN)
+            if column not in reader.fieldnames
+        ]
+        if missing_columns:
             raise ValueError(
-                f"{statistics_file} is missing required column {COMPLETION_COLUMN!r}"
+                f"{statistics_file} is missing required columns: "
+                f"{', '.join(missing_columns)}"
             )
 
         total_tasks = 0
-        completion_times: list[float] = []
+        task_times: list[tuple[float, float]] = []
         for line_number, row in enumerate(reader, start=2):
             total_tasks += 1
-            raw_value = (row.get(COMPLETION_COLUMN) or "").strip()
-            if not raw_value:
+            start_time = parse_time(
+                row.get(START_COLUMN),
+                column=START_COLUMN,
+                statistics_file=statistics_file,
+                line_number=line_number,
+            )
+            completion_time = parse_time(
+                row.get(COMPLETION_COLUMN),
+                column=COMPLETION_COLUMN,
+                statistics_file=statistics_file,
+                line_number=line_number,
+            )
+            if start_time is None and completion_time is None:
                 continue
-            try:
-                value = float(raw_value)
-            except ValueError as error:
+            if start_time is None or completion_time is None:
                 raise ValueError(
-                    f"{statistics_file}:{line_number} has invalid "
-                    f"{COMPLETION_COLUMN}: {raw_value!r}"
-                ) from error
-            if not math.isfinite(value) or value < 0:
-                raise ValueError(
-                    f"{statistics_file}:{line_number} has invalid "
-                    f"{COMPLETION_COLUMN}: {raw_value!r}"
+                    f"{statistics_file}:{line_number} has only one of "
+                    f"{START_COLUMN} and {COMPLETION_COLUMN}"
                 )
-            completion_times.append(value)
+            if completion_time < start_time:
+                raise ValueError(
+                    f"{statistics_file}:{line_number} completes before it starts: "
+                    f"{completion_time} < {start_time}"
+                )
+            task_times.append((start_time, completion_time))
 
     if total_tasks == 0:
         raise ValueError(f"statistics file has no task rows: {statistics_file}")
-    if not completion_times:
+    if not task_times:
         raise ValueError(f"statistics file has no completed tasks: {statistics_file}")
 
+    fcts = [completion_time - start_time for start_time, completion_time in task_times]
     return CaseSummary(
         case=case_dir.name,
         total_tasks=total_tasks,
-        completed_tasks=len(completion_times),
-        average_completion_time_us=fmean(completion_times),
-        max_completion_time_us=max(completion_times),
+        completed_tasks=len(task_times),
+        average_fct_us=fmean(fcts),
+        max_fct_us=max(fcts),
+        operator_completion_time_us=(
+            max(completion_time for _, completion_time in task_times)
+            - min(start_time for start_time, _ in task_times)
+        ),
         statistics_file=statistics_file,
     )
 
@@ -124,10 +170,11 @@ def write_summary(output_path: Path, summaries: list[CaseSummary]) -> None:
                     "case": summary.case,
                     "total_tasks": summary.total_tasks,
                     "completed_tasks": summary.completed_tasks,
-                    "average_completion_time_us": (
-                        f"{summary.average_completion_time_us:.6f}"
+                    "average_fct_us": f"{summary.average_fct_us:.6f}",
+                    "max_fct_us": f"{summary.max_fct_us:.6f}",
+                    "operator_completion_time_us": (
+                        f"{summary.operator_completion_time_us:.6f}"
                     ),
-                    "max_completion_time_us": f"{summary.max_completion_time_us:.6f}",
                     "statistics_file": summary.statistics_file,
                 }
             )
@@ -136,22 +183,24 @@ def write_summary(output_path: Path, summaries: list[CaseSummary]) -> None:
 def print_summary(summaries: list[CaseSummary]) -> None:
     print(
         f"{'case':<42} {'completed/total':>17} "
-        f"{'average(us)':>15} {'max(us)':>15}"
+        f"{'avg FCT(us)':>15} {'max FCT(us)':>15} {'operator(us)':>15}"
     )
     for summary in summaries:
         print(
             f"{summary.case:<42} "
             f"{summary.completed_tasks:>8}/{summary.total_tasks:<8} "
-            f"{summary.average_completion_time_us:>15.6f} "
-            f"{summary.max_completion_time_us:>15.6f}"
+            f"{summary.average_fct_us:>15.6f} "
+            f"{summary.max_fct_us:>15.6f} "
+            f"{summary.operator_completion_time_us:>15.6f}"
         )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Calculate average and maximum taskCompletesTime(us) for the five "
-            "test08 topology cases."
+            "Calculate average task FCT, maximum task FCT, and operator completion "
+            "time for the five test08 topology cases. Task FCT is completion minus "
+            "start; operator completion time is latest completion minus earliest start."
         )
     )
     parser.add_argument(
